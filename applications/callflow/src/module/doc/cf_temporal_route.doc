@@ -1,7 +1,0 @@
-#-------------------------------------------------------------------
-# "data":{
-#   "action": "menu" | "enable" | "disable" | "reset"
-#   ,"rules":[] // list of rules
-#   // optional after here
-#   ,"interdigit_timeout":2000
-# }

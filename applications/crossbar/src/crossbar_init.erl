@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
+%%% @author Jon Blanton
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%   Jon Blanton
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(crossbar_init).
 
 -export([start_link/0
@@ -32,42 +30,43 @@ api_path() ->
 
 -spec api_version_constraint() -> cowboy_router:constraint().
 api_version_constraint() ->
-    {'version', 'function', fun api_version_constraint/1}.
+    {'version', fun api_version_constraint/2}.
 
--spec api_version_constraint(ne_binary()) -> boolean().
-api_version_constraint(<<"v", ApiVersion/binary>>) ->
+-spec api_version_constraint('forward', kz_term:ne_binary()) ->
+                                    {'ok', kz_term:ne_binary()} |
+                                    {'error', 'not_a_version'}.
+api_version_constraint('forward', <<"v", ApiVersion/binary>>=Vsn) ->
     try kz_term:to_integer(ApiVersion) of
-        _Int -> lager:debug("routing to version ~b", [_Int]), 'true'
+        Int ->
+            lager:debug("routing to version ~b", [Int]),
+            {'ok', Vsn}
     catch
-        _:_ -> lager:debug("not routing to version ~s", [ApiVersion]), 'false'
+        _:_ ->
+            lager:debug("not routing to version ~s", [ApiVersion]),
+            {'error', 'not_a_version'}
     end;
-api_version_constraint(NotVersion) ->
-    lists:member(NotVersion, ?INBOUND_HOOKS).
+api_version_constraint('forward', NotVersion) ->
+    case lists:member(NotVersion, ?INBOUND_HOOKS) of
+        'true' -> {'ok', NotVersion};
+        'false' -> {'error', 'not_a_version'}
+    end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the app for inclusion in a supervisor tree
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the application for inclusion in a supervisor tree.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    kz_util:put_callid(?LOG_SYSTEM_ID),
-
-    _ = [
-         lager:warning("System config ~s validation error:~p", [Config, Error])
-         || {Config, Error} <- kapps_maintenance:validate_system_configs()
-        ],
-
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
     Dispatch = cowboy_router:compile(crossbar_routes()),
-
     maybe_start_plaintext(Dispatch),
     maybe_start_ssl(Dispatch),
     'ignore'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Load a crossbar module's bindings into the bindings server
-%%--------------------------------------------------------------------
-
+%%------------------------------------------------------------------------------
+%% @doc Load a crossbar module's bindings into the bindings server.
+%% @end
+%%------------------------------------------------------------------------------
 -spec is_versioned_module(binary()) -> boolean().
 is_versioned_module(Module) ->
     Mod = lists:reverse(binary_to_list(Module)),
@@ -94,18 +93,16 @@ start_mod(CBMod) when is_atom(CBMod) ->
 start_mod(CBMod) ->
     start_mod(kz_term:to_binary(CBMod)).
 
--spec maybe_start_mod_versions(ne_binaries(), ne_binary() | atom()) -> 'ok'.
+-spec maybe_start_mod_versions(kz_term:ne_binaries(), kz_term:ne_binary() | atom()) -> 'ok'.
 maybe_start_mod_versions(Versions, Mod) ->
     case lists:all(fun(Version) -> start_mod_version(Version, Mod) end, Versions) of
         'true' -> 'ok';
         'false' -> {'error', 'no_modules_started'}
     end.
 
--spec start_mod_version(ne_binary(), ne_binary() | atom()) -> boolean().
+-spec start_mod_version(kz_term:ne_binary(), kz_term:ne_binary() | atom()) -> boolean().
 start_mod_version(Version, Mod) ->
-    Module = <<(kz_term:to_binary(Mod))/binary
-               , "_", (kz_term:to_binary(Version))/binary
-             >>,
+    Module = list_to_binary([kz_term:to_binary(Mod), "_", kz_term:to_binary(Version)]),
     CBMod = kz_term:to_atom(Module, 'true'),
     try CBMod:init() of
         _ ->
@@ -116,10 +113,10 @@ start_mod_version(Version, Mod) ->
             lager:warning("failed to initialize module ~s version ~s: ~p", [Mod, Version, _R]),
             'false'
     end.
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Load a crossbar module's bindings into the bindings server
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Load a crossbar module's bindings into the bindings server.
+%% @end
+%%------------------------------------------------------------------------------
 -spec stop_mod(atom() | string() | binary()) -> 'ok'.
 stop_mod(CBMod) when not is_atom(CBMod) ->
     stop_mod(kz_term:to_atom(CBMod, 'true'));
@@ -142,15 +139,13 @@ do_stop_mod(CBMod) ->
             maybe_stop_mod_versions(?VERSION_SUPPORTED, CBMod)
     end.
 
--spec maybe_stop_mod_versions(ne_binaries(), ne_binary() | atom()) -> 'ok'.
+-spec maybe_stop_mod_versions(kz_term:ne_binaries(), kz_term:ne_binary() | atom()) -> 'ok'.
 maybe_stop_mod_versions(Versions, Mod) ->
     lists:foreach(fun(Version) -> stop_mod_version(Version, Mod) end, Versions).
 
--spec stop_mod_version(ne_binary(), ne_binary() | atom()) -> boolean().
+-spec stop_mod_version(kz_term:ne_binary(), kz_term:ne_binary() | atom()) -> boolean().
 stop_mod_version(Version, Mod) ->
-    Module = <<(kz_term:to_binary(Mod))/binary
-               , "_", (kz_term:to_binary(Version))/binary
-             >>,
+    Module = list_to_binary([kz_term:to_binary(Mod), "_", kz_term:to_binary(Version)]),
     CBMod = kz_term:to_atom(Module, 'true'),
     crossbar_bindings:flush_mod(CBMod),
     try CBMod:stop() of
@@ -163,26 +158,16 @@ stop_mod_version(Version, Mod) ->
             'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Functions for onrequest and onresponse callbacks
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Functions for `onrequest' and `onresponse' callbacks
+%% @end
+%%------------------------------------------------------------------------------
 -spec on_request(cowboy_req:req()) -> cowboy_req:req().
-on_request(Req0) ->
-    {Method, Req1} = cowboy_req:method(Req0),
-    case Method of
-        ?HTTP_OPTIONS -> Req1;
-        _ -> Req1
-    end.
+on_request(Req) -> Req.
 
--spec on_response(cowboy:http_status(), cowboy:http_headers(), text(), cowboy_req:req()) ->
+-spec on_response(cowboy:http_status(), cowboy:http_headers(), kz_term:text(), cowboy_req:req()) ->
                          cowboy_req:req().
-on_response(_Status, _Headers, _Body, Req0) ->
-    {Method, Req1} = cowboy_req:method(Req0),
-    case Method of
-        ?HTTP_OPTIONS -> Req1;
-        _ -> Req1
-    end.
+on_response(_Status, _Headers, _Body, Req) -> Req.
 
 -spec maybe_start_plaintext(cowboy_router:dispatch_rules()) -> 'ok'.
 maybe_start_plaintext(Dispatch) ->
@@ -197,18 +182,19 @@ maybe_start_plaintext(Dispatch) ->
             try
                 IP = get_binding_ip(),
                 lager:info("trying to bind to address ~s port ~b", [inet:ntoa(IP), Port]),
-                cowboy:start_http('api_resource', Workers
-                                 ,[{'ip', IP}
-                                  ,{'port', Port}
-                                  ]
-                                 ,[{'env', [{'dispatch', Dispatch}
-                                           ,{'timeout', ReqTimeout}
-                                           ]}
-                                  ,{'onrequest', fun on_request/1}
-                                  ,{'onresponse', fun on_response/4}
-                                  ,{'compress', ?USE_COMPRESSION}
-                                  ]
-                                 )
+                cowboy:start_clear('api_resource'
+                                  ,[{'ip', IP}
+                                   ,{'port', Port}
+                                   ,{'num_acceptors', Workers}
+                                   ]
+                                  ,#{'env' => #{'dispatch' => Dispatch
+                                               ,'timeout' => ReqTimeout
+                                               }
+                                    ,'onrequest' => fun on_request/1
+                                    ,'onresponse' => fun on_response/4
+                                    ,'compress' => ?USE_COMPRESSION
+                                    }
+                                  )
             of
                 {'ok', _} ->
                     lager:info("started plaintext API server");
@@ -268,7 +254,7 @@ maybe_start_ssl(Dispatch) ->
 
 -spec start_ssl(cowboy_router:dispatch_rules()) -> 'ok'.
 start_ssl(Dispatch) ->
-    try ssl_opts(code:lib_dir('crossbar')) of
+    try ssl_opts(code:lib_dir(?APP)) of
         SSLOpts ->
             lager:debug("trying to start SSL API server"),
             _SslStarted = ssl:start(),
@@ -283,16 +269,19 @@ start_ssl(Dispatch) ->
                            ,props:get_value('port', SSLOpts)
                            ]
                           ),
-                cowboy:start_https('api_resource_ssl', Workers
-                                  ,[{'ip', IP} | SSLOpts]
-                                  ,[{'env', [{'dispatch', Dispatch}
-                                            ,{'timeout', ReqTimeout}
-                                            ]}
-                                   ,{'onrequest', fun on_request/1}
-                                   ,{'onresponse', fun on_response/4}
-                                   ,{'compress', ?USE_COMPRESSION}
-                                   ]
-                                  )
+                cowboy:start_tls('api_resource_ssl'
+                                ,[{'ip', IP}
+                                 ,{'num_acceptors', Workers}
+                                  | SSLOpts
+                                 ]
+                                ,#{'env' => #{'dispatch' => Dispatch
+                                             ,'timeout' => ReqTimeout
+                                             }
+                                  ,'onrequest' => fun on_request/1
+                                  ,'onresponse' => fun on_response/4
+                                  ,'compress' => ?USE_COMPRESSION
+                                  }
+                                )
             of
                 {'ok', _} ->
                     lager:info("started SSL API server on port ~b", [props:get_value('port', SSLOpts)]);
@@ -311,7 +300,7 @@ start_ssl(Dispatch) ->
             lager:warning("failed to start SSL API server: ~p", [_E])
     end.
 
--spec ssl_opts(list()) -> kz_proplist().
+-spec ssl_opts(list()) -> kz_term:proplist().
 ssl_opts(RootDir) ->
     BaseOpts = base_ssl_opts(RootDir),
     case kapps_config:get_string(?CONFIG_CAT, <<"ssl_ca_cert">>) of
@@ -319,7 +308,7 @@ ssl_opts(RootDir) ->
         SSLCACert -> [{'cacertfile', SSLCACert} | BaseOpts]
     end.
 
--spec base_ssl_opts(list()) -> kz_proplist().
+-spec base_ssl_opts(list()) -> kz_term:proplist().
 base_ssl_opts(RootDir) ->
     [{'port', kapps_config:get_integer(?CONFIG_CAT, <<"ssl_port">>, 8443)}
     ,{'certfile', find_file(kapps_config:get_string(?CONFIG_CAT

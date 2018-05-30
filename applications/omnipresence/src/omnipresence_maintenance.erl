@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
-%%% @doc
-%%% Maintenance functions for all
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
+%%% @doc Maintenance functions for all
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(omnipresence_maintenance).
 
 -include("omnipresence.hrl").
@@ -32,20 +30,20 @@ count_current_subscriptions() ->
 -define(SUBSCRIPTION_FORMAT_STR, " ~50.s | ~50.s | ~10.s | ~20.s |~n").
 
 -spec current_subscriptions() -> 'ok'.
--spec current_subscriptions(ne_binary()) -> 'ok'.
--spec current_subscriptions(ne_binary(), ne_binary()) -> 'ok'.
 current_subscriptions() ->
     print_subscriptions(
       omnip_subscriptions:subscriptions_to_json(
         ets:tab2list(omnip_subscriptions:table_id())
        )).
 
+-spec current_subscriptions(kz_term:ne_binary()) -> 'ok'.
 current_subscriptions(Realm) ->
     print_subscriptions(
       omnip_subscriptions:subscriptions_to_json(
         omnip_subscriptions:search_for_subscriptions('_', kz_term:to_binary(Realm))
        )).
 
+-spec current_subscriptions(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 current_subscriptions(Realm, User) ->
     print_subscriptions(
       omnip_subscriptions:subscriptions_to_json(
@@ -56,7 +54,7 @@ current_subscriptions(Realm, User) ->
 print_subscriptions([]) ->
     io:format("No subscriptions have been found~n");
 print_subscriptions(Ss) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     io:format(?SUBSCRIPTION_FORMAT_STR
              ,[<<"Username@Realm">>, <<"From">>, <<"Expires">>, <<"Event">>]
              ),
@@ -74,7 +72,7 @@ print_subscription(JObj, Now) ->
               ,kz_json:get_value(<<"event">>, JObj)
               ]).
 
--spec subscribe(ne_binary(), ne_binary()) -> 'ok'.
+-spec subscribe(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 subscribe(Realm, User) ->
     Prop = [{<<"User">>, <<"sip:", User/binary, "@", Realm/binary>>}
            ,{<<"Expires">>, 1}
@@ -97,7 +95,7 @@ subscribe(Realm, User) ->
             io:format("Sent subscription for ~s@~s, recv'd error: ~p~n", [User, Realm, _E])
     end.
 
--spec send_mwi_update(ne_binary(), ne_binary() | integer(), ne_binary() | integer() ) -> 'ok'.
+-spec send_mwi_update(kz_term:ne_binary(), kz_term:ne_binary() | integer(), kz_term:ne_binary() | integer() ) -> 'ok'.
 send_mwi_update(User, New, Saved) when is_binary(New) ->
     send_mwi_update(User, kz_term:to_integer(New), Saved);
 send_mwi_update(User, New, Saved) when is_binary(Saved) ->
@@ -111,12 +109,12 @@ send_mwi_update(User, New, Saved) ->
               ],
     kz_amqp_worker:cast(Command, fun kapi_presence:publish_mwi_update/1).
 
--spec reset_subscription(ne_binary()) -> any().
+-spec reset_subscription(kz_term:ne_binary()) -> any().
 reset_subscription(User) ->
     [Username, Realm | _] = binary:split(User, <<"@">>, ['global']),
     reset_subscription(Username, Realm).
 
--spec reset_subscription(ne_binary(), ne_binary()) -> any().
+-spec reset_subscription(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 reset_subscription(User, Realm) ->
     API = [{<<"Realm">>, Realm}
           ,{<<"Username">>, User}
@@ -125,7 +123,7 @@ reset_subscription(User, Realm) ->
           ],
     kz_amqp_worker:cast(API, fun kapi_presence:publish_reset/1).
 
--spec reset_subscriber(ne_binary()) -> any().
+-spec reset_subscriber(kz_term:ne_binary()) -> any().
 reset_subscriber(User) ->
     case omnip_subscriptions:find_user_subscriptions(?OMNIPRESENCE_EVENT_ALL, User) of
         {'ok', Subs} ->
@@ -134,18 +132,18 @@ reset_subscriber(User) ->
         _ -> 'ok'
     end.
 
--spec reset_subscriber(ne_binary(), ne_binary()) -> any().
+-spec reset_subscriber(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 reset_subscriber(User, Realm) ->
     reset_subscriber(<<User/binary, "@", Realm/binary>>).
 
--spec reset_account(ne_binary()) -> any().
+-spec reset_account(kz_term:ne_binary()) -> any().
 reset_account(AccountId) ->
-    case kz_account:fetch(AccountId) of
-        {'ok', JObj} -> reset_realm(kz_account:realm(JObj));
+    case kzd_accounts:fetch(AccountId) of
+        {'ok', JObj} -> reset_realm(kzd_accounts:realm(JObj));
         {'error', _} = Error -> Error
     end.
 
--spec reset_realm(ne_binary()) -> any().
+-spec reset_realm(kz_term:ne_binary()) -> any().
 reset_realm(Realm) ->
     reset_subscription(<<"*">>, Realm).
 
@@ -153,11 +151,11 @@ reset_realm(Realm) ->
 reset_zone() ->
     reset_zone(kz_term:to_binary(kz_config:zone())).
 
--spec reset_zone(ne_binary()) -> any().
+-spec reset_zone(kz_term:ne_binary()) -> any().
 reset_zone(Zone) ->
     reset_subscription(Zone, <<"*">>).
 
--spec reset_server(ne_binary()) -> any().
+-spec reset_server(kz_term:ne_binary()) -> any().
 reset_server(Server) ->
     reset_subscription(Server, <<"*">>).
 

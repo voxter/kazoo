@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
+%%% @author Roman Galeev
 %%% @end
-%%% @contributors
-%%% Peter Defebvre
-%%% Roman Galeev
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(bh_object).
 
 -export([init/0
@@ -84,7 +82,7 @@ listeners(Type, Action, AccountDb, AccountMODB) ->
         'false' -> [{'amqp', 'conf', bind_options(Action, Type, AccountDb)}]
     end.
 
--spec bind_options(ne_binary(), ne_binary(), ne_binary()) -> kz_proplist().
+-spec bind_options(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 bind_options(Action, Type, Db) ->
     [{'action', Action}
     ,{'db', Db}

@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
 %%% @doc
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_voip_innovations_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -16,7 +15,11 @@ api_test_() ->
               ,{'query_id', <<"QID">>}
               ],
     {setup
-    ,fun () -> {'ok', Pid} = knm_search:start_link(), Pid end
+    ,fun () -> case knm_search:start_link() of
+                   {'ok', Pid} -> Pid;
+                   {'error', {'already_started', Pid}} -> Pid
+               end
+     end
     ,fun gen_server:stop/1
     ,fun (_ReturnOfSetup) ->
              [find_numbers(Options)

@@ -1,11 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ci_datastore).
 -behaviour(gen_server).
 
@@ -37,10 +34,10 @@
 -record(state, {}).
 -type state() :: #state{}.
 
--record(object, {call_id
-                ,timestamp
-                ,type
-                ,value
+-record(object, {call_id :: kz_term:ne_binary()
+                ,timestamp = kz_time:now_s() :: kz_time:gregorian_seconds()
+                ,type :: chunk | analysis
+                ,value :: ci_chunk:chunk() | ci_analysis:analysis()
                 }).
 -type object() :: #object{}.
 
@@ -52,14 +49,15 @@
 
 -define(CI_DIR, "/var/log/kazoo/call_inspector").
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
@@ -75,7 +73,7 @@ store_analysis(Analysis) ->
     CallId = ci_analysis:call_id(Analysis),
     gen_server:cast(?SERVER, {'store_analysis', CallId, Analysis}).
 
--spec callid_exists(ne_binary()) -> boolean().
+-spec callid_exists(kz_term:ne_binary()) -> boolean().
 callid_exists(CallId) ->
     File = make_name(CallId),
     Exists = filelib:is_file(File),
@@ -83,7 +81,7 @@ callid_exists(CallId) ->
         orelse lager:debug("~s not stored here", [CallId]),
     Exists.
 
--spec lookup_callid(ne_binary()) -> data().
+-spec lookup_callid(kz_term:ne_binary()) -> data().
 lookup_callid(CallId) ->
     Props = lists:foldl(fun lookup_callid_fold/2
                        ,[{'chunks', []}
@@ -105,58 +103,41 @@ lookup_callid_fold(#object{type='analysis', value=Analysis}, P) ->
 flush() ->
     gen_server:cast(?SERVER, 'flush').
 
--spec flush(ne_binary()) -> 'ok'.
+-spec flush(kz_term:ne_binary()) -> 'ok'.
 flush(CallId) ->
     gen_server:cast(?SERVER, {'flush', CallId}).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Initializes the server
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
+%% @end
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', #state{}}.
 init([]) ->
     lager:debug("ensuring directory ~s exists", [?CI_DIR]),
     mkdir(?CI_DIR),
     {'ok', #state{}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(atom(), any(), state()) -> handle_call_ret().
+%%------------------------------------------------------------------------------
+-spec handle_call(atom(), any(), state()) -> kz_types:handle_call_ret().
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled handle_call executed ~p~p", [_Request, _From]),
     Reply = 'ok',
     {'reply', Reply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'store_chunk', CallId, Chunk}, State) ->
     Object = #object{call_id=CallId
-                    ,timestamp=kz_time:current_tstamp()
                     ,type='chunk'
                     ,value=Chunk
                     },
@@ -165,7 +146,6 @@ handle_cast({'store_chunk', CallId, Chunk}, State) ->
     {'noreply', State};
 handle_cast({'store_analysis', CallId, Analysis}, State) ->
     Object = #object{call_id=CallId
-                    ,timestamp=kz_time:current_tstamp()
                     ,type='analysis'
                     ,value=Analysis
                     },
@@ -181,54 +161,45 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled handle_cast ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
 %% necessary cleaning up. When it returns, the gen_server terminate
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{}=_State) ->
     lager:debug("call inspector datastore terminated: ~p", [_Reason]),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
--spec make_name(ne_binary()) -> file:filename().
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec make_name(kz_term:ne_binary()) -> file:filename().
 make_name(CallId) ->
     <<D1:2/binary, D2:2/binary, Rest/binary>> = kz_binary:md5(CallId),
     filename:join([?CI_DIR, D1, D2, Rest]).
@@ -245,7 +216,7 @@ insert_object(#object{call_id = CallId} = Object) ->
     IoData = io_lib:fwrite("~p.\n", [Object]),
     kz_util:write_file(Path, IoData, ['append']).
 
--spec lookup_objects(ne_binary()) -> [object()].
+-spec lookup_objects(kz_term:ne_binary()) -> [object()].
 lookup_objects(CallId) ->
     Path = make_name(CallId),
     case filelib:is_file(Path) of

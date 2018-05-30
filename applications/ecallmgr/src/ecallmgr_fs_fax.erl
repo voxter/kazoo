@@ -1,19 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz INC
-%%% @doc
-%%% Dialplan API commands
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Dialplan API commands
+%%% @author James Aimonetti
+%%% @author Ben Wann
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Ben Wann
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_fax).
 
 -export([receive_fax/3]).
 
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
 
--spec receive_fax(atom(), ne_binary(), kz_json:object()) -> kz_proplist().
+-spec receive_fax(atom(), kz_term:ne_binary(), kz_json:object()) -> kz_term:proplist().
 receive_fax(Node, UUID, JObj) ->
     Sets = props:filter_undefined(
              lists:foldl(fun(Header, Acc) ->
@@ -28,7 +26,7 @@ receive_fax(Node, UUID, JObj) ->
                          ,<<"Enable-T38-Passthrough">>
                          ,<<"Enable-T38-Gateway">>
                          ])),
-    ecallmgr_fs_command:set(Node, UUID, Sets),
+    _ = ecallmgr_fs_command:set(Node, UUID, Sets),
     Filename = kz_term:to_list(kz_json:get_value(<<"Fax-Local-Filename">>, JObj, ecallmgr_util:fax_filename(UUID))),
     [{<<"playback">>, <<"silence_stream://2000">>}
     ,{<<"rxfax">>, Filename}

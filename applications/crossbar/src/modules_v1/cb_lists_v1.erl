@@ -1,15 +1,13 @@
-%%%----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Match list module
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Match list module
 %%% Handle client requests for match list documents
 %%%
+%%%
+%%% @author Kozlov Yakov
+%%% @author SIPLABS, LLC (Maksim Krzhemenevskiy, Ilya Ashchepkov)
 %%% @end
-%%% @contributors
-%%%   Kozlov Yakov
-%%%   SIPLABS, LLC (Maksim Krzhemenevskiy, Ilya Ashchepkov)
-%%%----------------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_lists_v1).
 
 -export([init/0
@@ -25,9 +23,14 @@
 
 -define(CB_LIST, <<"lists/crossbar_listing">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> any().
 init() ->
     [crossbar_bindings:bind(Binding, ?MODULE, F)
@@ -40,56 +43,58 @@ init() ->
                         ]
     ].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_ListId) ->
     [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_DELETE].
+
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_ListId, _EntryId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_ListId) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_ListId, _EntryId) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_lists(Context, cb_context:req_verb(Context)).
+
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ListId) ->
     validate_list(Context, ListId, cb_context:req_verb(Context)).
+
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context, ListId, EntryId) ->
     validate_list_entry(Context, ListId, EntryId, cb_context:req_verb(Context)).
 
@@ -117,7 +122,7 @@ validate_list_entry(Context, ListId, EntryId, ?HTTP_POST) ->
 validate_list_entry(Context, _ListId, EntryId, ?HTTP_DELETE) ->
     crossbar_doc:load(EntryId, Context, ?TYPE_CHECK_OPTION(<<"list_entry">>)).
 
--spec check_list_schema(api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_list_schema(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_list_schema(ListId, Context) ->
     case cb_context:req_value(Context, <<"entries">>) of
         'undefined' ->
@@ -131,7 +136,7 @@ check_list_schema(ListId, Context) ->
             crossbar_util:response('error', <<"API changed: entries not acceptable">>, 406, Context)
     end.
 
--spec filter_list_req_data({ne_binary(), any()}) -> boolean().
+-spec filter_list_req_data({kz_term:ne_binary(), any()}) -> boolean().
 filter_list_req_data({Key, _Val})
   when Key =:= <<"name">>;
        Key =:= <<"org">>;
@@ -139,7 +144,7 @@ filter_list_req_data({Key, _Val})
        -> 'true';
 filter_list_req_data(_) -> 'false'.
 
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+-spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Props = [{<<"pvt_type">>, <<"list">>}],
     cb_context:set_doc(Context
@@ -148,13 +153,13 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(ListId, Context) ->
     crossbar_doc:load_merge(ListId, Context, ?TYPE_CHECK_OPTION(<<"list">>)).
 
--spec check_list_entry_schema(path_token(), api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_list_entry_schema(path_token(), kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_list_entry_schema(ListId, EntryId, Context) ->
     OnSuccess = fun(C) -> entry_schema_success(C, ListId, EntryId) end,
     ReqData = kz_json:set_value(<<"list_id">>, ListId, cb_context:req_data(Context)),
     cb_context:validate_request_data(<<"list_entries">>, cb_context:set_req_data(Context, ReqData), OnSuccess).
 
--spec entry_schema_success(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
+-spec entry_schema_success(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 entry_schema_success(Context, ListId, EntryId) ->
     Pattern = kz_json:get_value(<<"pattern">>, cb_context:doc(Context)),
     case is_binary(Pattern)
@@ -193,22 +198,22 @@ on_entry_successful_validation(_ListId, EntryId, Context) ->
     crossbar_doc:load_merge(EntryId, Context, ?TYPE_CHECK_OPTION(<<"list_entry">>)).
 
 -spec post(cb_context:context()) -> cb_context:context().
--spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context) ->
     crossbar_doc:save(Context).
 
+-spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _ListId) ->
     crossbar_doc:save(Context).
 
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, _ListId, _EntryId) ->
     crossbar_doc:save(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
--spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context) ->
     crossbar_doc:save(Context).
 
+-spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context, _ListId) ->
     crossbar_doc:save(Context).
 
@@ -220,12 +225,10 @@ delete(Context, ListId) ->
 delete(Context, _ListId, _EntryId) ->
     crossbar_doc:delete(Context).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) ->
                                     kz_json:objects().
 normalize_view_results(JObj, Acc) ->
@@ -251,7 +254,7 @@ load_entries_and_normalize(AllEntries) ->
             [kz_json:set_value(<<"entries">>, entries_from_list(ListEntries), Val)|Acc]
     end.
 
--spec filter_entries_by_list_id(ne_binary()) -> fun((kz_json:object()) -> boolean()).
+-spec filter_entries_by_list_id(kz_term:ne_binary()) -> fun((kz_json:object()) -> boolean()).
 filter_entries_by_list_id(Id) ->
     fun(Entry) ->
             kz_json:get_value(<<"list_id">>, Entry) =:= Id
@@ -263,7 +266,7 @@ entries_from_list(Entries) ->
                        || X <- Entries
                       ]).
 
--spec load_list(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec load_list(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 load_list(Context, ListId) ->
     Entries = cb_context:doc(crossbar_doc:load_view(<<"lists/entries">>
                                                    ,[{'key', ListId}]

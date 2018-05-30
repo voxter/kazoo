@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Send config commands to FS
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Send config commands to FS
+%%% @author Edouard Swiac
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Edouard Swiac
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_config).
 -behaviour(gen_server).
 
@@ -26,34 +24,35 @@
 -include("ecallmgr.hrl").
 
 -record(state, {node :: atom()
-               ,options = [] :: kz_proplist()
+               ,options = [] :: kz_term:proplist()
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(atom()) -> startlink_ret().
--spec start_link(atom(), kz_proplist()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec start_link(atom()) -> kz_types:startlink_ret().
 start_link(Node) -> start_link(Node, []).
+
+-spec start_link(atom(), kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Node, Options) ->
     gen_server:start_link(?SERVER, [Node, Options], []).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
--spec init([atom() | kz_proplist()]) -> {'ok', state()}.
+%%------------------------------------------------------------------------------
+-spec init([atom() | kz_term:proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
     process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
@@ -61,35 +60,19 @@ init([Node, Options]) ->
     gen_server:cast(self(), 'bind_to_configuration'),
     {'ok', #state{node=Node, options=Options}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('bind_to_configuration', #state{node=Node}=State) ->
     case freeswitch:bind(Node, 'configuration') of
         'ok' -> {'noreply', State};
@@ -100,17 +83,11 @@ handle_cast('bind_to_configuration', #state{node=Node}=State) ->
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'fetch', 'configuration', <<"configuration">>, <<"name">>, Conf, ID, []}, #state{node=Node}=State) ->
     lager:debug("fetch configuration request from ~s: ~s", [Node, ID]),
     _ = kz_util:spawn(fun handle_config_req/4, [Node, ID, Conf, 'undefined']),
@@ -142,100 +119,84 @@ handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{node=Node}) ->
     lager:info("config listener for ~s terminating: ~p", [Node, _Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec handle_config_req(atom(), ne_binary(), ne_binary(), kz_proplist() | 'undefined') -> fs_sendmsg_ret().
-handle_config_req(Node, Id, <<"acl.conf">>, _Props) ->
-    kz_util:put_callid(Id),
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_config_req(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist() | 'undefined') -> fs_sendmsg_ret().
+handle_config_req(Node, FetchId, ConfFile, FSData) ->
+    kz_util:put_callid(FetchId),
+    try process_config_req(Node, FetchId, ConfFile, FSData)
+    catch
+        _E:_R ->
+            ST = erlang:get_stacktrace(),
+            lager:info("failed to process config request for ~s: ~s: ~p", [ConfFile, _E, _R]),
+            kz_util:log_stacktrace(ST),
+            config_req_not_handled(Node, FetchId, ConfFile)
+    end.
+
+-spec process_config_req(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist() | 'undefined') -> fs_sendmsg_ret().
+process_config_req(Node, FetchId, <<"acl.conf">>, _Props) ->
     SysconfResp = ecallmgr_config:fetch(<<"acls">>, kz_json:new(), ecallmgr_fs_node:fetch_timeout(Node)),
 
-    try generate_acl_xml(SysconfResp) of
+    case generate_acl_xml(SysconfResp) of
         'undefined' ->
             lager:warning("failed to query for ACLs; is sysconf running?"),
             {'ok', Resp} = ecallmgr_fs_xml:not_found(),
-            freeswitch:fetch_reply(Node, Id, 'configuration', Resp);
+            freeswitch:fetch_reply(Node, FetchId, 'configuration', Resp);
         ConfigXml ->
             lager:debug("sending acl XML to ~s: ~s", [Node, ConfigXml]),
-            freeswitch:fetch_reply(Node, Id, 'configuration', ConfigXml)
-    catch
-        _E:_R ->
-            lager:info("acl resp failed to convert to XML (~s): ~p", [_E, _R]),
-            {'ok', Resp} = ecallmgr_fs_xml:not_found(),
-            freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(Resp))
+            freeswitch:fetch_reply(Node, FetchId, 'configuration', ConfigXml)
     end;
-
-handle_config_req(Node, Id, <<"sofia.conf">>, _Props) ->
-    kz_util:put_callid(Id),
-    case ecallmgr_config:is_true(<<"sofia_conf">>) of
-        'false' ->
-            lager:info("sofia conf disabled"),
-            {'ok', Resp} = ecallmgr_fs_xml:not_found(),
-            freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(Resp));
-        'true' ->
-            Profiles = ecallmgr_config:fetch(<<"fs_profiles">>, kz_json:new()),
-            DefaultProfiles = default_sip_profiles(Node),
-            try ecallmgr_fs_xml:sip_profiles_xml(kz_json:merge(DefaultProfiles, Profiles)) of
-                {'ok', ConfigXml} ->
-                    lager:debug("sending sofia XML to ~s: ~s", [Node, ConfigXml]),
-                    freeswitch:fetch_reply(Node, Id, 'configuration', erlang:iolist_to_binary(ConfigXml))
-            catch
-                _E:_R ->
-                    lager:info("sofia profile resp failed to convert to XML (~s): ~p", [_E, _R]),
-                    {'ok', Resp} = ecallmgr_fs_xml:not_found(),
-                    freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(Resp))
-            end
-    end;
-
-handle_config_req(Node, Id, <<"conference.conf">>, Data) ->
-    kz_util:put_callid(Id),
+process_config_req(Node, Id, <<"sofia.conf">>, _Props) ->
+    'true' = ecallmgr_config:is_true(<<"sofia_conf">>),
+    Profiles = ecallmgr_config:fetch(<<"fs_profiles">>, kz_json:new()),
+    DefaultProfiles = default_sip_profiles(Node),
+    {'ok', ConfigXml} = ecallmgr_fs_xml:sip_profiles_xml(kz_json:merge(DefaultProfiles, Profiles)),
+    lager:debug("sending sofia XML to ~s: ~s", [Node, ConfigXml]),
+    freeswitch:fetch_reply(Node, Id, 'configuration', erlang:iolist_to_binary(ConfigXml));
+process_config_req(Node, Id, <<"conference.conf">>, Data) ->
     fetch_conference_config(Node, Id, kzd_freeswitch:event_name(Data), Data);
-handle_config_req(Node, Id, <<"kazoo.conf">>, Data) ->
-    kz_util:put_callid(Id),
+process_config_req(Node, Id, <<"kazoo.conf">>, Data) ->
     lager:debug("received configuration request for kazoo configuration ~p , ~p", [Node, Id]),
     fetch_mod_kazoo_config(Node, Id, kzd_freeswitch:event_name(Data), Data);
-handle_config_req(Node, Id, Conf, Data) ->
-    kz_util:put_callid(Id),
+process_config_req(Node, Id, Conf, Data) ->
     case kazoo_bindings:map(<<"freeswitch.config.", Conf/binary>>, [Node, Id, Conf, Data]) of
         [] -> config_req_not_handled(Node, Id, Conf);
         _  -> 'ok'
     end.
 
--spec config_req_not_handled(atom(), ne_binary(), ne_binary()) -> fs_sendmsg_ret().
+-spec config_req_not_handled(atom(), kz_term:ne_binary(), kz_term:ne_binary()) -> fs_sendmsg_ret().
 config_req_not_handled(Node, Id, Conf) ->
     {'ok', NotHandled} = ecallmgr_fs_xml:not_found(),
     lager:debug("ignoring conf ~s: ~s", [Conf, Id]),
     freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(NotHandled)).
 
--spec generate_acl_xml(api_object()) -> api_binary().
+-spec generate_acl_xml(kz_term:api_object()) -> kz_term:api_ne_binary().
 generate_acl_xml('undefined') ->
     'undefined';
 generate_acl_xml(SysconfResp) ->
@@ -260,13 +221,13 @@ default_sip_profiles(Node) ->
                      ,JObj
                      ).
 
--spec default_sip_profile() -> kz_proplist().
+-spec default_sip_profile() -> kz_term:proplist().
 default_sip_profile() ->
     [{<<"Settings">>, kz_json:from_list(default_sip_settings())}
     ,{<<"Gateways">>, kz_json:from_list(default_sip_gateways())}
     ].
 
--spec default_sip_settings() -> kz_proplist().
+-spec default_sip_settings() -> kz_term:proplist().
 default_sip_settings() ->
     [{<<"message-threads">>, <<"10">>}
     ,{<<"auth-calls">>, <<"true">>}
@@ -396,12 +357,12 @@ fix_conference_profile(Resp) ->
 
 -spec fix_conference_profile(kz_json:path(), kz_json:object()) -> {kz_json:path(), kz_json:object()}.
 fix_conference_profile(Name, Profile) ->
-    [AccountId | _] = binary:split(Name, <<"_">>),
+    lager:debug("fixing up conference profile ~s", [Name]),
     Routines = [fun maybe_fix_profile_tts/1
                ,fun conference_sounds/1
                ,fun set_verbose_events/1
-               ,{fun kz_json:set_value/3, <<"caller-controls">>, <<AccountId/binary, "_caller-controls">>}
-               ,{fun kz_json:set_value/3, <<"moderator-controls">>, <<AccountId/binary, "_moderator-controls">>}
+               ,{fun kz_json:set_value/3, <<"caller-controls">>, <<"caller-controls?profile=", Name/binary>>}
+               ,{fun kz_json:set_value/3, <<"moderator-controls">>, <<"moderator-controls?profile=", Name/binary>>}
                ],
     {Name, kz_json:exec(Routines, Profile)}.
 
@@ -430,37 +391,61 @@ conference_sound(Key, Value, Profile) ->
     maybe_convert_sound(kz_binary:reverse(Key), Key, Value, Profile).
 
 maybe_convert_sound(<<"dnuos-", _/binary>>, Key, Value, Profile) ->
-    MediaName = ecallmgr_util:media_path(Value),
+    MediaName = ecallmgr_util:media_path(Value, 'new', kz_util:get_callid(), kz_json:new()),
+    lager:debug("fixed up ~s from ~s to ~s", [Key, Value, MediaName]),
     kz_json:set_value(Key, MediaName, Profile);
-maybe_convert_sound(_, _, _, Profile) -> Profile.
+maybe_convert_sound(_, _Key, _Value, Profile) ->
+    Profile.
 
-
--spec fetch_conference_config(atom(), ne_binary(), ne_binary(), kz_proplist()) -> fs_sendmsg_ret().
-fetch_conference_config(Node, Id, <<"COMMAND">>, Data) ->
-    maybe_fetch_conference_profile(Node, Id, props:get_value(<<"profile_name">>, Data));
-fetch_conference_config(Node, Id, <<"REQUEST_PARAMS">>, Data) ->
+-spec fetch_conference_config(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> fs_sendmsg_ret().
+fetch_conference_config(Node, FetchId, <<"COMMAND">>, Data) ->
+    maybe_fetch_conference_profile(Node, FetchId, Data, props:get_value(<<"profile_name">>, Data));
+fetch_conference_config(Node, FetchId, <<"REQUEST_PARAMS">>, Data) ->
     Action = props:get_value(<<"Action">>, Data),
     ConfName = props:get_value(<<"Conf-Name">>, Data),
-    lager:debug("request conference:~p params:~p", [ConfName, Action]),
-    fetch_conference_params(Node, Id, Action, ConfName, Data).
+    lager:debug("request conference:~s params:~s", [ConfName, Action]),
+    fetch_conference_params(Node, FetchId, Action, ConfName, Data).
 
-fetch_conference_params(Node, Id, <<"request-controls">>, ConfName, Data) ->
-    Controls = props:get_value(<<"Controls">>, Data),
-    lager:debug("request controls:~p for conference:~p", [Controls, ConfName]),
+fetch_conference_params(Node, Id, <<"request-controls">>, _ConfName, Data) ->
+    FSName = props:get_value(<<"Controls">>, Data),
+
+    {KZName, Profile} = case binary:split(FSName, <<"?profile=">>) of
+                            [N, P] -> {N, P};
+                            [N] -> {N, props:get_value(<<"profile_name">>, Data)}
+                        end,
+    lager:debug("request controls:~s for profile: ~s", [KZName, Profile]),
+
     Cmd = [{<<"Request">>, <<"Controls">>}
-          ,{<<"Profile">>, ConfName}
-          ,{<<"Controls">>, Controls} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
+          ,{<<"Profile">>, Profile}
+          ,{<<"Controls">>, KZName}
+          ,{<<"Conference-ID">>, conference_id(Data, Profile)}
+          ,{<<"Call-ID">>, kzd_freeswitch:call_id(Data)}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
     Resp = kz_amqp_worker:call(Cmd
                               ,fun kapi_conference:publish_config_req/1
                               ,fun kapi_conference:config_resp_v/1
                               ,ecallmgr_fs_node:fetch_timeout(Node)
                               ),
-    {'ok', Xml} = handle_conference_params_response(Resp),
+    FixedResp = maybe_fix_conference_controls(Resp, KZName, FSName),
+    {'ok', Xml} = handle_conference_params_response(FixedResp),
     send_conference_profile_xml(Node, Id, Xml);
 fetch_conference_params(Node, Id, Action, ConfName, _Data) ->
     lager:debug("undefined request_params action:~p conference:~p", [Action, ConfName]),
     {'ok', XmlResp} = ecallmgr_fs_xml:not_found(),
     send_conference_profile_xml(Node, Id, XmlResp).
+
+maybe_fix_conference_controls({'ok', JObj}, KZName, FSName) ->
+    {'ok', fix_conference_controls(JObj, KZName, FSName)};
+maybe_fix_conference_controls(Resp, _, _) -> Resp.
+
+-spec fix_conference_controls(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().
+fix_conference_controls(JObj, KZName, FSName) ->
+    case kz_json:get_value([<<"Caller-Controls">>, KZName], JObj) of
+        'undefined' -> JObj;
+        Controls ->
+            kz_json:set_value([<<"Caller-Controls">>, FSName], Controls, JObj)
+    end.
 
 handle_conference_params_response({'ok', Resp}) ->
     lager:debug("replying with xml response for conference params request"),
@@ -472,18 +457,19 @@ handle_conference_params_response(_Error) ->
     lager:debug("failed to lookup conference params, error:~p", [_Error]),
     ecallmgr_fs_xml:not_found().
 
--spec maybe_fetch_conference_profile(atom(), ne_binary(), api_binary()) -> fs_sendmsg_ret().
-maybe_fetch_conference_profile(Node, Id, 'undefined') ->
+-spec maybe_fetch_conference_profile(atom(), kz_term:ne_binary(), kzd_freeswitch:doc(), kz_term:api_binary()) -> fs_sendmsg_ret().
+maybe_fetch_conference_profile(Node, FetchId, _Data, 'undefined') ->
     lager:debug("failed to lookup undefined conference profile"),
     {'ok', XmlResp} = ecallmgr_fs_xml:not_found(),
-    send_conference_profile_xml(Node, Id, XmlResp);
-
-maybe_fetch_conference_profile(Node, Id, Profile) ->
+    send_conference_profile_xml(Node, FetchId, XmlResp);
+maybe_fetch_conference_profile(Node, FetchId, Data, Profile) ->
     Cmd = [{<<"Request">>, <<"Conference">>}
           ,{<<"Profile">>, Profile}
+          ,{<<"Conference-ID">>, conference_id(Data, Profile)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("fetching profile '~s'", [Profile]),
+
     XmlResp = case kz_amqp_worker:call(Cmd
                                       ,fun kapi_conference:publish_config_req/1
                                       ,fun kapi_conference:config_resp_v/1
@@ -504,15 +490,27 @@ maybe_fetch_conference_profile(Node, Id, Profile) ->
                       {'ok', Resp} = ecallmgr_fs_xml:not_found(),
                       Resp
               end,
-    send_conference_profile_xml(Node, Id, XmlResp).
+    send_conference_profile_xml(Node, FetchId, XmlResp).
 
--spec send_conference_profile_xml(atom(), ne_binary(), iolist()) -> fs_sendmsg_ret().
+-spec conference_id(kzd_freeswitch:doc(), kz_term:ne_binary()) -> kz_term:api_ne_binary().
+conference_id(Data, Profile) ->
+    case props:get_first_defined([<<"Conf-Name">>, <<"conference_name">>], Data) of
+        'undefined' -> conference_id_from_profile(Profile);
+        Id -> Id
+    end.
+
+conference_id_from_profile(Profile) ->
+    case binary:split(Profile, <<"_">>) of
+        [ConferenceId, _AccountId] -> ConferenceId;
+        _ -> 'undefined'
+    end.
+
+-spec send_conference_profile_xml(atom(), kz_term:ne_binary(), iolist()) -> fs_sendmsg_ret().
 send_conference_profile_xml(Node, Id, XmlResp) ->
     lager:debug("sending conference profile XML to ~s: ~s", [Node, XmlResp]),
     freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(XmlResp)).
 
-
--spec fetch_mod_kazoo_config(atom(), ne_binary(), ne_binary(), kz_proplist()) -> fs_sendmsg_ret().
+-spec fetch_mod_kazoo_config(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> fs_sendmsg_ret().
 fetch_mod_kazoo_config(Node, Id, <<"COMMAND">>, _Data) ->
     config_req_not_handled(Node, Id, <<"kazoo.conf">>);
 fetch_mod_kazoo_config(Node, Id, <<"REQUEST_PARAMS">>, Data) ->
@@ -522,7 +520,7 @@ fetch_mod_kazoo_config(Node, Id, Event, _Data) ->
     lager:debug("unhandled mod kazoo config event : ~p : ~p", [Node, Event]),
     config_req_not_handled(Node, Id, <<"kazoo.conf">>).
 
--spec fetch_mod_kazoo_config_action(atom(), ne_binary(), api_ne_binary(), kz_proplist()) -> fs_sendmsg_ret().
+-spec fetch_mod_kazoo_config_action(atom(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:proplist()) -> fs_sendmsg_ret().
 fetch_mod_kazoo_config_action(Node, Id, <<"request-filter">>, _Data) ->
     {'ok', Xml} = ecallmgr_fs_xml:event_filters_resp_xml(?FS_EVENT_FILTERS),
     lager:debug("replying with xml response for request-filter params request"),

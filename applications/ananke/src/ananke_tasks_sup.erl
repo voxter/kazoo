@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%     Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ananke_tasks_sup).
 -behaviour(supervisor).
 
@@ -25,19 +23,19 @@
 -define(TASK_WORKER_SPEC(N, I, Args)
        ,{N, {I, 'start_link', Args}, 'transient', 'brutal_kill', 'worker', [I]}).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec start_task(any(), atom(), list()) -> ok | sup_startchild_ret().
+-spec start_task(any(), atom(), list()) -> ok | kz_types:sup_startchild_ret().
 start_task(Id, Module, Args) ->
     case supervisor:start_child(?SERVER, ?TASK_WORKER_SPEC(Id, Module, Args)) of
         {'error', 'already_present'} ->
@@ -67,20 +65,18 @@ delete_child(Id, Timeout) ->
     _ = kz_util:spawn(delete_child_after_timeout(Id, Timeout)),
     'ok'.
 
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 3,
@@ -90,10 +86,14 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%% ===================================================================
+%%==============================================================================
 %% Internal functions
-%% ===================================================================
+%%==============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec delete_child_after_timeout(any(), non_neg_integer()) ->
                                         fun(() -> 'ok' | {'error', any()}).
 delete_child_after_timeout(Id, Timeout) ->

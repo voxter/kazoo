@@ -1,10 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz INC
-%%% @doc
-%%% Store routing keys/pid bindings. When a binding is fired,
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Store routing keys/pid bindings. When a binding is fired,
 %%% pass the payload to the pid for evaluation, accumulating
 %%% the results for the response to the running process.
 %%%
+%%% ```
 %%% foo.erl -> bind("module.init").
 %%% *** Later ***
 %%% module.erl
@@ -13,12 +13,13 @@
 %%%                receive -> Resp
 %%%   init() <- [Resp]
 %%%   init() -> Decides what to do with responses
+%%% '''
+%%%
+%%% @author James Aimonetti
+%%% @author Karl Anderson
+%%% @author Ben Wann
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%   Ben Wann
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(blackhole_bindings).
 
 %% API
@@ -44,45 +45,42 @@
 
 -include("blackhole.hrl").
 
--type payload_el() :: bh_context:context() | ne_binary() | map() | kz_json:object().
+-type payload_el() :: bh_context:context() | kz_term:ne_binary() | map() | kz_json:object().
 -type payload() :: [payload_el()] | payload_el().
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% return [ {Result, Payload1} ], a list of tuples, the first element
+%%%=============================================================================
+
+-type map_results() :: list().
+%% return `[{Result, Payload1}]', a list of tuples, the first element
 %% of which is the result of the bound handler, and the second element
 %% is the payload, possibly modified
-%% @end
-%%--------------------------------------------------------------------
--type map_results() :: list().
--type kz_bindings() :: list().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% return the modified Payload after it has been threaded through
+-type kz_bindings() :: list().
+%% return `[{Result, Payload1}]', a list of tuples, the first element
+%% of which is the result of the bound handler, and the second element
+%% is the payload, possibly modified
+
+%%------------------------------------------------------------------------------
+%% @doc return the modified Payload after it has been threaded through
 %% all matching bindings
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type fold_results() :: payload().
--spec fold(ne_binary(), payload()) -> fold_results().
+-spec fold(kz_term:ne_binary(), payload()) -> fold_results().
 fold(Routing, Payload) ->
     kazoo_bindings:fold(Routing, Payload).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Helper functions for working on a result set of bindings
+%%------------------------------------------------------------------------------
+%% @doc Helper functions for working on a result set of bindings
 %% @end
-%%-------------------------------------------------------------------
--spec any(kz_proplist()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec any(kz_term:proplist()) -> boolean().
 any(Res) when is_list(Res) ->
     kazoo_bindings:any(Res, fun check_bool/1).
 
--spec all(kz_proplist()) -> boolean().
+-spec all(kz_term:proplist()) -> boolean().
 all(Res) when is_list(Res) ->
     kazoo_bindings:all(Res, fun check_bool/1).
 
@@ -96,21 +94,19 @@ succeeded(Res) when is_list(Res) ->
     kazoo_bindings:succeeded(Res, fun filter_out_failed/1);
 succeeded(Res)-> succeeded([Res]).
 
-%%-------------------------------------------------------------------------
-%% @doc
-%% Helpers for the result set helpers
+%%------------------------------------------------------------------------------
+%% @doc Helpers for the result set helpers
 %% @end
-%%-------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec check_bool({boolean(), any()} | boolean()) -> boolean().
 check_bool({'true', _}) -> 'true';
 check_bool('true') -> 'true';
 check_bool(_) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec filter_out_failed({boolean() | 'halt', any()} | boolean() | any()) -> boolean().
 filter_out_failed({'true', _}) -> 'true';
 filter_out_failed('true') -> 'true';
@@ -124,11 +120,10 @@ filter_out_failed([#bh_context{}=Ctx]) ->
     not bh_context:success(Ctx);
 filter_out_failed(Term) -> not kz_term:is_empty(Term).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec filter_out_succeeded({boolean() | 'halt', any()} | boolean() | any()) -> boolean().
 filter_out_succeeded({'true', _}) -> 'false';
 filter_out_succeeded('true') -> 'false';
@@ -145,23 +140,23 @@ filter_out_succeeded(Term) -> kz_term:is_empty(Term).
 -type bind_result() :: 'ok' |
                        {'error', 'exists'}.
 -type bind_results() :: [bind_result()].
--spec bind(ne_binary() | ne_binaries(), atom(), atom()) ->
+-spec bind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom()) ->
                   bind_result() | bind_results().
 bind(Bindings, Module, Fun) ->
     bind(Bindings, Module, Fun, 'undefined').
 
--spec bind(ne_binary() | ne_binaries(), atom(), atom(), any()) ->
+-spec bind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom(), any()) ->
                   bind_result() | bind_results().
 bind([_|_]=Bindings, Module, Fun, Payload) ->
     [bind(Binding, Module, Fun, Payload) || Binding <- Bindings];
 bind(Binding, Module, Fun, Payload) when is_binary(Binding) ->
     kazoo_bindings:bind(Binding, Module, Fun, Payload).
 
--spec unbind(ne_binary() | ne_binaries(), atom(), atom()) -> 'ok'.
+-spec unbind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom()) -> 'ok'.
 unbind(Bindings, Module, Fun) ->
     unbind(Bindings, Module, Fun, 'undefined').
 
--spec unbind(ne_binary() | ne_binaries(), atom(), atom(), any()) -> 'ok'.
+-spec unbind(kz_term:ne_binary() | kz_term:ne_binaries(), atom(), atom(), any()) -> 'ok'.
 unbind([_|_]=Bindings, Module, Fun, Payload) ->
     _ = [unbind(Binding, Module, Fun, Payload) || Binding <- Bindings],
     'ok';
@@ -177,23 +172,23 @@ filter(Predicate) ->
 flush() ->
     lists:foreach(fun kazoo_bindings:flush_mod/1, modules_loaded()).
 
--spec flush(ne_binary()) -> 'ok'.
+-spec flush(kz_term:ne_binary()) -> 'ok'.
 flush(Binding) -> kazoo_bindings:flush(Binding).
 
--spec flush_mod(ne_binary() | atom()) -> 'ok'.
+-spec flush_mod(kz_term:ne_binary() | atom()) -> 'ok'.
 flush_mod(BHMod)
   when is_binary(BHMod) ->
     flush_mod(kz_term:to_atom(BHMod, 'true'));
 flush_mod(BHMod) -> kazoo_bindings:flush_mod(BHMod).
 
--spec modules_loaded() -> atoms().
+-spec modules_loaded() -> kz_term:atoms().
 modules_loaded() ->
     lists:usort(
       [Mod || Mod <- kazoo_bindings:modules_loaded(),
               is_bh_module(Mod)
       ]).
 
--spec is_bh_module(ne_binary() | atom()) -> boolean().
+-spec is_bh_module(kz_term:ne_binary() | atom()) -> boolean().
 is_bh_module(<<"bh_", _/binary>>) -> 'true';
 is_bh_module(<<"blackhole_", _/binary>>) -> 'true';
 is_bh_module(<<_/binary>>) -> 'false';
@@ -202,18 +197,18 @@ is_bh_module(Mod) -> is_bh_module(kz_term:to_binary(Mod)).
 -spec init() -> 'ok'.
 init() ->
     lager:debug("initializing blackhole bindings"),
-    kz_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
     Mods = lists:usort(blackhole_config:autoload_modules() ++ ?COMMAND_MODULES),
     lists:foreach(fun init_mod/1, Mods).
 
--spec init_mod(ne_binary() | atom()) ->
+-spec init_mod(kz_term:ne_binary() | atom()) ->
                       'ok' |
                       {'error', 'undefined' | 'unknown'}.
 init_mod(ModuleName) ->
     lager:debug("initializing module: ~p", [ModuleName]),
     maybe_init_mod(ModuleName).
 
--spec maybe_init_mod(ne_binary() | atom()) ->
+-spec maybe_init_mod(kz_term:ne_binary() | atom()) ->
                             'ok' |
                             {'error', 'undefined' | 'unknown'}.
 maybe_init_mod(ModuleName) ->
@@ -233,25 +228,23 @@ maybe_init_mod(ModuleName) ->
 bindings() ->
     bindings(<<"blackhole.#">>).
 
--spec bindings(ne_binary()) -> kazoo_bindings:kz_bindings().
+-spec bindings(kz_term:ne_binary()) -> kazoo_bindings:kz_bindings().
 bindings(Routing) ->
     RTOptions = [{'matches', fun bh_match/2}],
     kazoo_bindings:bindings(Routing, RTOptions).
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Match routing patterns. * matches 1 slot, # 0 or more.
-%% Note: matching only accepts wilcards on first argument (asymetric).
+%%------------------------------------------------------------------------------
+%% @doc Match routing patterns. `*' matches one slot, `#' matches zero or more.
+%% For example pattern `<<"#.6.*.1.4.*">>'  can match `<<"6.a.a.6.a.1.4.a">>'.
+%%
+%% <div class="notice">Matching only accepts wilcards on first argument (asymetric).</div>
+%%
+%% This is a copy from {@link kazoo_bindings} with extra
+%% checks for `bh_matches([_ | Bs], [<<"*">>|Rs]) ->'
 %% @end
-%%
-%% <<"#.6.*.1.4.*">>,<<"6.a.a.6.a.1.4.a">>
-%%
-%% this is a copy from kazoo_bindings with extra
-%% check for bh_matches([_ | Bs], [<<"*">>|Rs]) ->
-%%--------------------------------------------------------------------
--spec bh_matches(ne_binaries(), ne_binaries()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec bh_matches(kz_term:ne_binaries(), kz_term:ne_binaries()) -> boolean().
 
 %% if both are empty, we made it!
 bh_matches([], []) -> 'true';
@@ -303,12 +296,12 @@ bh_matches([B | Bs], [B | Rs]) ->
 bh_matches(_, _) -> 'false'.
 
 
--spec map(ne_binary(), payload()) -> map_results().
+-spec map(kz_term:ne_binary(), payload()) -> map_results().
 map(Routing, Payload) ->
     RTOptions = [{'matches', fun bh_match/2}],
     kazoo_bindings:map(Routing, Payload, RTOptions).
 
--spec map(ne_binary(), payload(), kz_bindings()) -> map_results().
+-spec map(kz_term:ne_binary(), payload(), kz_bindings()) -> map_results().
 map(Routing, Payload, Bindings) ->
     RTOptions = [{'matches', fun bh_match/2}
                 ,{'candidates', fun(_) -> Bindings end}

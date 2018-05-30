@@ -1,14 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Renders a custom account email template, or the system default,
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Renders a custom account email template, or the system default,
 %%% and sends the email with port request information to configured email address
-%%% @end
 %%%
-%%% @contributors
-%%%   Karl Anderson <karl@2600hz.org>
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%
+%%% @author Karl Anderson <karl@2600hz.org>
+%%% @author James Aimonetti
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(notify_port_cancel).
 
 -export([init/0, handle_req/2]).
@@ -21,12 +20,10 @@
 
 -define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".port_cancel">>).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% initialize the module
+%%------------------------------------------------------------------------------
+%% @doc initialize the module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     %% ensure the vm template can compile, otherwise crash the processes
@@ -35,18 +32,16 @@ init() ->
     {'ok', _} = notify_util:compile_default_subject_template(?DEFAULT_SUBJ_TMPL, ?MOD_CONFIG_CAT),
     lager:debug("init done for ~s", [?MODULE]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% process the AMQP requests
+%%------------------------------------------------------------------------------
+%% @doc process the AMQP requests
 %% @end
-%%--------------------------------------------------------------------
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
     'true' = kapi_notifications:port_cancel_v(JObj),
     kz_util:put_callid(JObj),
 
-    lager:debug("an in-progress port has been cancelled, sending email notification"),
+    lager:debug("an in-progress port has been canceled, sending email notification"),
 
     RespQ = kz_api:server_id(JObj),
     MsgId = kz_api:msg_id(JObj),
@@ -55,7 +50,7 @@ handle_req(JObj, _Props) ->
     {'ok', AccountDoc} = notify_util:get_account_doc(JObj),
     AccountJObj = kz_doc:public_fields(AccountDoc),
 
-    lager:debug("creating port cancel notice for ~s(~s)", [kz_account:name(AccountJObj)
+    lager:debug("creating port cancel notice for ~s(~s)", [kzd_accounts:name(AccountJObj)
                                                           ,kz_doc:account_id(AccountDoc)
                                                           ]),
 
@@ -83,13 +78,11 @@ handle_req(JObj, _Props) ->
         end,
     notify_util:maybe_send_update(Result, RespQ, MsgId).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% create the props used by the template render function
+%%------------------------------------------------------------------------------
+%% @doc create the props used by the template render function
 %% @end
-%%--------------------------------------------------------------------
--spec create_template_props(kz_json:object(), kz_json:object()) -> kz_proplist().
+%%------------------------------------------------------------------------------
+-spec create_template_props(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 create_template_props(NotifyJObj, AccountJObj) ->
     Admin = notify_util:find_admin(kz_json:get_value(<<"Authorized-By">>, NotifyJObj)),
 
@@ -108,7 +101,7 @@ create_template_props(NotifyJObj, AccountJObj) ->
     ,{<<"send_from">>, get_send_from(PortDoc, Admin)}
     ].
 
--spec get_send_from(kz_json:object(), kz_json:object()) -> ne_binary().
+-spec get_send_from(kz_json:object(), kz_json:object()) -> kz_term:ne_binary().
 get_send_from(PortDoc, Admin) ->
     case kz_json:get_first_defined([<<"email">>
                                    ,[<<"Port">>, <<"email">>]
@@ -118,52 +111,50 @@ get_send_from(PortDoc, Admin) ->
         Email -> Email
     end.
 
--spec get_admin_send_from(kz_json:object()) -> ne_binary().
+-spec get_admin_send_from(kz_json:object()) -> kz_term:ne_binary().
 get_admin_send_from(Admin) ->
     case kz_json:get_ne_value(<<"email">>, Admin) of
         'undefined' -> get_default_from();
         Email -> Email
     end.
 
--spec get_default_from() -> ne_binary().
+-spec get_default_from() -> kz_term:ne_binary().
 get_default_from() ->
     DefaultFrom = kz_term:to_binary(node()),
     kapps_config:get_binary(?MOD_CONFIG_CAT, <<"default_from">>, DefaultFrom).
 
--spec find_numbers(kz_proplist(), kz_json:object()) -> ne_binaries().
+-spec find_numbers(kz_term:proplist(), kz_json:object()) -> kz_term:ne_binaries().
 find_numbers(PortData, NotifyJObj) ->
     case props:get_value(<<"numbers">>, PortData) of
         'undefined' -> find_numbers(NotifyJObj);
         Ns -> Ns
     end.
 
--spec find_numbers(kz_json:object()) -> ne_binaries().
+-spec find_numbers(kz_json:object()) -> kz_term:ne_binaries().
 find_numbers(NotifyJObj) ->
     [kz_json:get_value(<<"Number">>, NotifyJObj)].
 
 -spec find_port_info(kz_json:object()) -> kz_json:object().
 find_port_info(NotifyJObj) ->
-    case kz_json:get_ne_value(<<"Port-Request-ID">>, NotifyJObj) of
+    case kz_json:get_first_defined([<<"Port-Request-ID">>, [<<"Port">>, <<"port_id">>]], NotifyJObj) of
         'undefined' -> NotifyJObj;
         PortRequestId ->
             Doc = find_port_doc(PortRequestId),
             kz_json:set_value(<<"port_id">>, PortRequestId, Doc)
     end.
 
--spec find_port_doc(ne_binary()) -> kz_json:object().
+-spec find_port_doc(kz_term:ne_binary()) -> kz_json:object().
 find_port_doc(PortRequestId) ->
     case kz_datamgr:open_cache_doc(?KZ_PORT_REQUESTS_DB, PortRequestId) of
         {'ok', PortDoc} -> PortDoc;
         {'error', _} -> kz_json:new()
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% process the AMQP requests
+%%------------------------------------------------------------------------------
+%% @doc process the AMQP requests
 %% @end
-%%--------------------------------------------------------------------
--spec build_and_send_email(iolist(), iolist(), iolist(), ne_binary() | ne_binaries(), kz_proplist()) -> send_email_return().
+%%------------------------------------------------------------------------------
+-spec build_and_send_email(iolist(), iolist(), iolist(), kz_term:ne_binary() | kz_term:ne_binaries(), kz_term:proplist()) -> send_email_return().
 build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) when is_list(To)->
     [build_and_send_email(TxtBody, HTMLBody, Subject, T, Props) || T <- To];
 build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) ->

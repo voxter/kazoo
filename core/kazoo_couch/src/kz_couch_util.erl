@@ -1,10 +1,8 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% Util functions used by kazoo_couch
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Util functions used by kazoo_couch.
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
 %%%-----------------------------------------------------------------------------
 -module(kz_couch_util).
 
@@ -26,31 +24,30 @@
 -include_lib("kazoo_amqp/include/kapi_conf.hrl").
 
 %%------------------------------------------------------------------------------
-%% @private
-%% @doc
-%% Send the query function in an anon fun with arity 0; if it returns 504, retry
+%% @doc Send the query function in an anon fun with arity 0; if it returns 504, retry
 %% until 3 failed retries occur.
 %% @end
 %%------------------------------------------------------------------------------
 -type retry504_ret() :: any().
-%% 'ok' | ne_binary() |
+%% 'ok' | kz_term:ne_binary() |
 %% {'ok', kz_json:object() | kz_json:objects() |
-%%  binary() | ne_binaries() | boolean() | integer()
+%%  binary() | kz_term:ne_binaries() | boolean() | integer()
 %% } |
 %% couchbeam_error() |
 %% {'error', 'timeout'}.
 
 -spec retry504s(fun(() -> retry504_ret())) -> retry504_ret().
--spec retry504s(fun(() -> retry504_ret()), 0..3) -> retry504_ret().
 retry504s(Fun) when is_function(Fun, 0) ->
     retry504s(Fun, 0).
+
+-spec retry504s(fun(() -> retry504_ret()), 0..3) -> retry504_ret().
 retry504s(_Fun, 3) ->
     lager:debug("504 retry failed"),
     kazoo_stats:increment_counter(<<"bigcouch-504-error">>),
     {'error', 'timeout'};
 retry504s(Fun, Cnt) ->
     kazoo_stats:increment_counter(<<"bigcouch-request">>),
-    case catch Fun() of
+    try Fun() of
         {'error', {'ok', 504, _, _}} ->
             kazoo_stats:increment_counter(<<"bigcouch-504-error">>),
             timer:sleep(100 * (Cnt+1)),
@@ -58,7 +55,7 @@ retry504s(Fun, Cnt) ->
         {'error', {'ok', ErrCode, _Hdrs, _Body}} ->
             kazoo_stats:increment_counter(<<"bigcouch-other-error">>),
             {'error', kz_term:to_integer(ErrCode)};
-%%% couchbeam doesn't pass 202 as acceptable
+        %% couchbeam doesn't pass 202 as acceptable
         {'error', {'bad_response',{202, _Headers, Body}}} ->
             {'ok', kz_json:decode(Body)};
         {'error', {'bad_response',{204, _Headers, _Body}}} ->
@@ -73,18 +70,16 @@ retry504s(Fun, Cnt) ->
         {'error', Other} ->
             kazoo_stats:increment_counter(<<"bigcouch-other-error">>),
             {'error', format_error(Other)};
-        {'ok', _Other}=OK -> OK;
-        {'EXIT', _E} ->
+        OK -> OK
+    catch _E:_R ->
             ST = erlang:get_stacktrace(),
-            lager:debug("exception running fun: ~p", [_E]),
+            lager:debug("exception running fun: ~p:~p", [_E, _R]),
             kz_util:log_stacktrace(ST),
             kazoo_stats:increment_counter(<<"bigcouch-other-error">>),
-            retry504s(Fun, Cnt+1);
-        OK -> OK
+            retry504s(Fun, Cnt+1)
     end.
 
 %%------------------------------------------------------------------------------
-%% @public
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
@@ -94,7 +89,7 @@ retry504s(Fun, Cnt) ->
 new_connection(#{}=Map) ->
     connect(maps:fold(fun connection_parse/3, #kz_couch_connection{}, Map)).
 
--spec maybe_add_auth(string(), string(), kz_proplist()) -> kz_proplist().
+-spec maybe_add_auth(string(), string(), kz_term:proplist()) -> kz_term:proplist().
 maybe_add_auth("", _Pass, Options) -> Options;
 maybe_add_auth(User, Pass, Options) ->
     [{'basic_auth', {User, Pass}} | Options].
@@ -106,7 +101,7 @@ check_options(Options) ->
                ],
     lists:foldl(fun(Fun, Opts) -> Fun(Opts) end, Options, Routines).
 
--spec maybe_default_recv_timeout(kz_proplist()) -> kz_proplist().
+-spec maybe_default_recv_timeout(kz_term:proplist()) -> kz_term:proplist().
 maybe_default_recv_timeout(Options) ->
     case props:get_value('recv_timeout', Options) of
         'undefined' -> [{'recv_timeout', 20000} | Options];
@@ -183,25 +178,23 @@ add_couch_version(_, _, #server{options=Options}=Conn) ->
                                {'error', any()}.
 server_info(#server{}=Conn) -> couchbeam:server_info(Conn).
 
--spec server_url(server()) -> ne_binary().
+-spec server_url(server()) -> kz_term:ne_binary().
 server_url(#server{url=Url}) -> Url.
 
--spec db_url(server(), ne_binary()) -> ne_binary().
+-spec db_url(server(), kz_term:ne_binary()) -> kz_term:ne_binary().
 db_url(#server{}=Conn, DbName) ->
     Server = server_url(Conn),
     list_to_binary([Server, "/", DbName]).
 
 %%------------------------------------------------------------------------------
-%% @private
-%% @doc
-%% returns the #db{} record
+%% @doc returns the #db{} record
 %% @end
 %%------------------------------------------------------------------------------
--spec get_db(kz_data:connection(), ne_binary()) -> db().
--spec get_db(kz_data:connection(), ne_binary(), couch_version()) -> db().
+-spec get_db(kz_data:connection(), kz_term:ne_binary()) -> db().
 get_db(Conn, DbName) ->
     get_db(Conn, DbName, kazoo_couch:server_version(Conn)).
 
+-spec get_db(kz_data:connection(), kz_term:ne_binary(), couch_version()) -> db().
 get_db(Conn, DbName, Driver) ->
     ConnToUse =
         case is_admin_db(DbName, Driver) of
@@ -211,7 +204,7 @@ get_db(Conn, DbName, Driver) ->
     {'ok', Db} = couchbeam:open_db(ConnToUse, DbName),
     Db.
 
--spec is_admin_db(ne_binary(), couch_version()) -> boolean().
+-spec is_admin_db(kz_term:ne_binary(), couch_version()) -> boolean().
 is_admin_db(<<"_dbs">>, 'couchdb_2') -> 'true';
 is_admin_db(<<"_users">>, 'couchdb_2') -> 'true';
 is_admin_db(<<"_nodes">>, 'couchdb_2') -> 'true';
@@ -295,7 +288,7 @@ format_error(E) ->
     lager:warning("unformatted error: ~p", [E]),
     E.
 
--spec maybe_add_rev(couchbeam_db(), ne_binary(), kz_proplist()) -> kz_proplist().
+-spec maybe_add_rev(couchbeam_db(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 maybe_add_rev(#db{name=_Name}=Db, DocId, Options) ->
     case props:get_value('rev', Options) =:= 'undefined'
         andalso do_fetch_rev(Db, DocId)
@@ -317,8 +310,8 @@ maybe_add_rev(#db{name=_Name}=Db, DocId, Options) ->
             Options
     end.
 
--spec do_fetch_rev(couchbeam_db(), ne_binary()) ->
-                          ne_binary() |
+-spec do_fetch_rev(couchbeam_db(), kz_term:ne_binary()) ->
+                          kz_term:ne_binary() |
                           couchbeam_error().
 do_fetch_rev(#db{}=Db, DocId) ->
     case kz_term:is_empty(DocId) of
@@ -332,7 +325,7 @@ connection_info(#server{url=Url}=Conn) ->
         {'ok', ConnData} ->
             CouchVersion = kz_json:get_ne_binary_value(<<"version">>, ConnData),
             BigCouchVersion = kz_json:get_ne_binary_value(<<"bigcouch">>, ConnData),
-            lager:info("connected successfully to ~s", [Url]),
+            lager:debug("connected successfully to ~s", [Url]),
             lager:debug("responding CouchDB version: ~p", [CouchVersion]),
             lager:debug("responding BigCouch version: ~p", [BigCouchVersion]),
             {'ok', add_couch_version(CouchVersion, BigCouchVersion, Conn)};

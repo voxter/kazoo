@@ -1,30 +1,37 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%% Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_ledgers).
 
 -include("kzl.hrl").
 
--export([get/1, get/3]).
+-export([get/1, get/3
+        ,available_ledgers/1
+        ]).
 
-%%--------------------------------------------------------------------
-%% @public
+-define(DEFAULT_AVIALABLE_LEDGERS,
+        [kz_json:from_list([{<<"name">>, <<"per-minute-voip">>}
+                           ,{<<"friendly_name">>, <<"Per Minute VoIP">>}
+                           ,{<<"markup_type">>, [<<"percentage">>]}
+                           ])
+        ]
+       ).
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec get(ne_binary()) -> {'ok', kz_json:object()} |
-                          {'error', atom()}.
--spec get(ne_binary(), api_seconds(), api_seconds()) -> {'ok', kz_json:object()} |
-                                                        {'error', atom()}.
+%%------------------------------------------------------------------------------
+
+-spec get(kz_term:ne_binary()) -> {'ok', kz_json:object()} |
+                                  {'error', atom()}.
 get(Account) ->
     get(Account, undefined, undefined).
 
+-spec get(kz_term:ne_binary(), kz_time:api_seconds(), kz_time:api_seconds()) -> {'ok', kz_json:object()} |
+                                                                                {'error', atom()}.
 get(Account, undefined, undefined) ->
     case kazoo_modb:get_results(Account, ?TOTAL_BY_SERVICE_LEGACY, [group]) of
         {'error', _R}=Error -> Error;
@@ -59,3 +66,7 @@ get(Account, CreatedFrom, CreatedTo)
     catch
         throw:_R -> {error, _R}
     end.
+
+-spec available_ledgers(kz_term:api_binary()) -> kz_json:objects().
+available_ledgers(AccountId) ->
+    kapps_account_config:get_global(AccountId, <<"ledgers">>, <<"registered_ledgers">>, ?DEFAULT_AVIALABLE_LEDGERS).

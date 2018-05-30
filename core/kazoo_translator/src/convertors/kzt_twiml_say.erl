@@ -1,18 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Execute the 'Say' verb
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Execute the 'Say' verb
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kzt_twiml_say).
 
 -export([exec/3]).
 
 -include("kzt.hrl").
 
--spec exec(kapps_call:call(), xml_els() | xml_texts(), xml_attribs()) ->
+-spec exec(kapps_call:call(), kz_types:xml_els() | kz_types:xml_texts(), kz_types:xml_attribs()) ->
                   {'ok', kapps_call:call()} |
                   {'error', _, kapps_call:call()}.
 exec(Call, XmlText, Attrs) ->

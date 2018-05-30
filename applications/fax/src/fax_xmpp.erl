@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(fax_xmpp).
 -behaviour(gen_server).
 
@@ -41,14 +39,14 @@
 
 -type xmpp_client() :: #client{}. %% escalus
 
--record(state, {faxbox_id :: api_ne_binary()
-               ,printer_id :: api_ne_binary()
-               ,oauth_app_id :: api_ne_binary()
+-record(state, {faxbox_id :: kz_term:api_ne_binary()
+               ,printer_id :: kz_term:api_ne_binary()
+               ,oauth_app_id :: kz_term:api_ne_binary()
                ,refresh_token :: oauth_refresh_token() | 'undefined'
                ,connected = 'false' :: boolean()
                ,session :: xmpp_client() | 'undefined'
-               ,jid :: api_ne_binary()
-               ,monitor :: api_reference()
+               ,jid :: kz_term:api_ne_binary()
+               ,monitor :: kz_term:api_reference()
                }).
 -type state() :: #state{}.
 
@@ -57,7 +55,7 @@
 %%-define(SERVER(P), {{'via', 'kz_globals', {'xmpp', P}}).
 -define(SERVER(P), {'via', 'kz_globals', ?NAME(P)}).
 
--spec start_link(ne_binary()) -> startlink_ret().
+-spec start_link(kz_term:ne_binary()) -> kz_types:startlink_ret().
 start_link(PrinterId) ->
     lager:debug("starting new xmpp process for ~s", [PrinterId]),
     case gen_server:start_link(?SERVER(PrinterId), ?MODULE, [PrinterId], []) of
@@ -67,24 +65,24 @@ start_link(PrinterId) ->
         Other -> Other
     end.
 
--spec stop(ne_binary()) -> 'ok'.
+-spec stop(kz_term:ne_binary()) -> 'ok'.
 stop(PrinterId) ->
     case kz_globals:whereis_name(?NAME(PrinterId)) of
         'undefined' -> 'ok';
         Pid -> gen_server:cast(Pid, 'stop')
     end.
 
--spec init(ne_binaries()) -> {'ok', state(), pos_integer()}.
+-spec init(kz_term:ne_binaries()) -> {'ok', state(), pos_integer()}.
 init([PrinterId]) ->
     process_flag('trap_exit', 'true'),
     gen_server:cast(self(), 'start'),
     {'ok', #state{faxbox_id=PrinterId}, ?POLLING_INTERVAL}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('start', #state{faxbox_id=FaxBoxId} = State) ->
     case kz_datamgr:open_doc(?KZ_FAXES_DB, FaxBoxId) of
         {'ok', JObj} ->
@@ -127,7 +125,7 @@ handle_cast('subscribe', #state{jid=MyJID
 handle_cast('stop', State) -> {'stop', 'normal', State};
 handle_cast(_Msg, State) -> {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'stanza', _Client, #xmlel{}=Packet}, State) ->
     process_received_packet(Packet, State),
     {'noreply', State, ?POLLING_INTERVAL};
@@ -158,16 +156,15 @@ terminate(_Reason, _State) ->
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) -> {'ok', State}.
 
--spec get_sub_msg(ne_binary()) -> ne_binary().
+-spec get_sub_msg(kz_term:ne_binary()) -> kz_term:ne_binary().
 get_sub_msg(JID) ->
     BareJID = kapi_xmpp:jid_short(JID),
-    Document = <<"<iq type='set' from='", JID/binary, "' to='",BareJID/binary,"'>"
-                 ,   "<subscribe xmlns='google:push'>"
-                 ,      "<item channel='cloudprint.google.com' from='cloudprint.google.com'/>"
-                 ,   "</subscribe>"
-                 ,"</iq>"
-               >>,
-    Document.
+    list_to_binary(["<iq type='set' from='", JID, "' to='", BareJID, "'>"
+                   ,   "<subscribe xmlns='google:push'>"
+                   ,      "<item channel='cloudprint.google.com' from='cloudprint.google.com'/>"
+                   ,   "</subscribe>"
+                   ,"</iq>"
+                   ]).
 
 -define(NS_PUSH, 'google:push').
 -define(XML_CTX_OPTIONS,[{'namespace', [{"g", "google:push"}]}]).
@@ -189,7 +186,7 @@ process_received_packet(#xmlel{name = <<"message">>}=Xml
 process_received_packet(#xmlel{name=Type}=Xml, _State) ->
     lager:debug("received xml element ~s : ~s", [Type, exml:to_pretty_iolist(Xml)]).
 
--spec send_notify(ne_binary(), ne_binary()) -> any().
+-spec send_notify(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 send_notify(PrinterId, JID) ->
     Payload = props:filter_undefined(
                 [{<<"Event-Name">>, <<"push">>}
@@ -202,7 +199,7 @@ send_notify(PrinterId, JID) ->
     lager:debug("received xmpp push for printer ~s", [PrinterId]),
     kz_amqp_worker:cast(Payload, fun kapi_xmpp:publish_event/1).
 
--spec connect(ne_binary(), ne_binary()) ->
+-spec connect(kz_term:ne_binary(), kz_term:ne_binary()) ->
                      {'ok', xmpp_client()} |
                      {'error', any()}.
 connect(JID, Password) ->
@@ -246,7 +243,7 @@ handle_start(JObj, State) ->
                ,refresh_token=RefreshToken
                }.
 
--spec auth_xoauth2(escalus_connection:client(), kz_proplist()) -> 'ok'.
+-spec auth_xoauth2(escalus_connection:client(), kz_term:proplist()) -> 'ok'.
 auth_xoauth2(Conn, Props) ->
     Username = get_property(username, Props),
     Password = get_property(password, Props),
@@ -277,14 +274,12 @@ wait_for_success(Username, Conn) ->
 start_all_printers() ->
     {'ok', Results} = kz_datamgr:get_results(?KZ_FAXES_DB, <<"faxbox/cloud">>),
     List = kz_term:shuffle_list(
-             [ {crypto:rand_uniform(2000, 6000), Id, Jid}
-               || {Id, Jid, <<"claimed">>}
-                      <- [{kz_doc:id(Result)
-                          ,kz_json:get_value([<<"value">>,<<"xmpp_jid">>], Result)
-                          ,kz_json:get_value([<<"value">>,<<"state">>], Result)
-                          }
-                          || Result <- Results
-                         ]
+             [{2000 + rand:uniform(4000)
+              ,kz_doc:id(Result)
+              ,kz_json:get_value([<<"value">>,<<"xmpp_jid">>], Result)
+              }
+              || Result <- Results,
+                 <<"claimed">> =:= kz_json:get_ne_binary_value([<<"value">>,<<"state">>], Result)
              ]),
     [begin
          send_start_printer(Id, Jid),
@@ -294,7 +289,7 @@ start_all_printers() ->
     'ok'.
 
 
--spec send_start_printer(ne_binary(), ne_binary()) -> any().
+-spec send_start_printer(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 send_start_printer(PrinterId, JID) ->
     Payload = props:filter_undefined(
                 [{<<"Event-Name">>, <<"start">>}
@@ -306,13 +301,13 @@ send_start_printer(PrinterId, JID) ->
                 ]),
     kz_amqp_worker:cast(Payload, fun kapi_xmpp:publish_event/1).
 
--spec handle_printer_start(kz_json:object(), kz_proplist()) -> sup_startchild_ret().
+-spec handle_printer_start(kz_json:object(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
 handle_printer_start(JObj, _Props) ->
     'true' = kapi_xmpp:event_v(JObj),
     PrinterId = kz_json:get_value(<<"Application-Data">>, JObj),
     fax_xmpp_sup:start_printer(PrinterId).
 
--spec handle_printer_stop(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_printer_stop(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_printer_stop(JObj, _Props) ->
     'true' = kapi_xmpp:event_v(JObj),
     PrinterId = kz_json:get_value(<<"Application-Data">>, JObj),

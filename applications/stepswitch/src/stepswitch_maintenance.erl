@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz INC
-%%% @doc
-%%% Preforms maintenance operations against the stepswitch dbs
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Preforms maintenance operations against the stepswitch dbs
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stepswitch_maintenance).
 
 -export([resources/0]).
@@ -25,13 +23,11 @@
 
 -include("stepswitch.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec reverse_lookup(text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec reverse_lookup(kz_term:text()) -> 'ok'.
 reverse_lookup(Thing) when not is_binary(Thing) ->
     reverse_lookup(kz_term:to_binary(Thing));
 reverse_lookup(Thing) ->
@@ -43,19 +39,17 @@ reverse_lookup(Thing) ->
         {'error', 'not_found'} -> io:format("resource not found~n")
     end.
 
--spec pretty_print_lookup(kz_proplist()) -> 'ok'.
+-spec pretty_print_lookup(kz_term:proplist()) -> 'ok'.
 pretty_print_lookup([]) -> 'ok';
 pretty_print_lookup([{Key, Value}|Props]) ->
     io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
     pretty_print_lookup(Props).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Displays account tree when given a DID
+%%------------------------------------------------------------------------------
+%% @doc Displays account tree when given a DID
 %% @end
-%%--------------------------------------------------------------------
--spec number_tree(ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec number_tree(kz_term:ne_binary()) -> 'ok'.
 number_tree(DID) ->
     case knm_number:lookup_account(DID) of
         {'error', _} -> io:format("DID ~s was not found~n", [DID]);
@@ -66,25 +60,22 @@ number_tree(DID) ->
             end
     end.
 
--spec number_tree(ne_binary(), kz_json:object()) -> 'ok'.
+-spec number_tree(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 number_tree(DID, AccountDoc) ->
     io:format("~s tree ", [DID]),
-    print_tree(kz_account:tree(AccountDoc)),
-    io:format(" ~s(~s)~n", [kz_account:name(AccountDoc), kz_doc:id(AccountDoc)]).
+    print_tree(kzd_accounts:tree(AccountDoc)),
+    io:format(" ~s(~s)~n", [kzd_accounts:name(AccountDoc), kz_doc:id(AccountDoc)]).
 
--spec print_tree(ne_binaries()) -> 'ok'.
+-spec print_tree(kz_term:ne_binaries()) -> 'ok'.
 print_tree([]) -> 'ok';
 print_tree([AccountId|Tree]) ->
-    {'ok', AccountDoc} = kz_account:fetch(AccountId),
-    io:format(" ~s(~s) ->", [kz_account:name(AccountDoc), kz_doc:id(AccountDoc)]),
+    io:format(" ~s(~s) ->", [kzd_accounts:fetch_name(AccountId), AccountId]),
     print_tree(Tree).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resources() -> 'ok'.
 resources() ->
     Props = stepswitch_resources:get_props(),
@@ -97,7 +88,7 @@ pretty_print_resources([Resource|Resources]) ->
     io:format("~n"),
     pretty_print_resources(Resources).
 
--spec pretty_print_resource(list()) -> 'ok'.
+-spec pretty_print_resource(kz_term:proplist()) -> 'ok'.
 pretty_print_resource([]) -> 'ok';
 pretty_print_resource([{_, []}|Props]) ->
     pretty_print_resource(Props);
@@ -106,15 +97,16 @@ pretty_print_resource([{Key, Values}|Props]) when is_list(Values) ->
     io:format("~s~n", [Key]),
     print_condensed_list(Values);
 pretty_print_resource([{Key, Value}|Props]) ->
-    io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
+    case kz_json:is_json_object(Value) of
+        'false' -> io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]);
+        'true' -> io:format("~-19s: ~s~n", [Key, kz_json:encode(Value)])
+    end,
     pretty_print_resource(Props).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Flush the stepswitch local cache
+%%------------------------------------------------------------------------------
+%% @doc Flush the stepswitch local cache
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec flush() -> 'ok'.
 flush() -> kz_cache:flush_local(?CACHE_NAME).
 
@@ -122,43 +114,21 @@ flush() -> kz_cache:flush_local(?CACHE_NAME).
 cnam_flush() ->
     io:format("flushed ~p entries from cnam cache~n", [stepswitch_cnam:flush()]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Lookup a number in the route db and return the account ID if known
+%%------------------------------------------------------------------------------
+%% @doc Lookup a number in the route db and return the account ID if known
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec refresh() -> 'ok'.
 refresh() ->
-    lager:debug("ensuring database ~s exists", [?RESOURCES_DB]),
-    kz_datamgr:db_create(?RESOURCES_DB), % RESOURCES_DB = KZ_OFFNET_DB
-    Views = [kapps_util:get_view_json('crossbar', <<"views/resources.json">>)
-             | kapps_util:get_views_json('stepswitch', "views")
-            ],
-    kapps_util:update_views(?RESOURCES_DB, Views, 'true'),
-    case catch kz_datamgr:all_docs(?RESOURCES_DB, ['include_docs']) of
-        {'error', _} -> 'ok';
-        {'EXIT', _E} ->
-            lager:debug("failure looking up all docs in ~s: ~p", [?RESOURCES_DB, _E]);
-        {'ok', JObjs} ->
-            _ = kz_datamgr:del_docs(?RESOURCES_DB
-                                   ,[Doc
-                                     || JObj <- JObjs,
-                                        begin
-                                            Doc = kz_json:get_value(<<"doc">>, JObj),
-                                            kz_doc:type(Doc) =:= <<"route">>
-                                        end
-                                    ]),
-            'ok'
-    end.
+    Views = kapps_util:get_views_json('stepswitch', "views"),
+    kapps_util:update_views(?RESOURCES_DB, Views, 'false'),
+    'ok'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Lookup a number in the route db and return the account ID if known
+%%------------------------------------------------------------------------------
+%% @doc Lookup a number in the route db and return the account ID if known
 %% @end
-%%--------------------------------------------------------------------
--spec lookup_number(text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec lookup_number(kz_term:text()) -> 'ok'.
 lookup_number(Number) ->
     case knm_number:lookup_account(Number) of
         {'ok', AccountId, Props} ->
@@ -171,40 +141,36 @@ lookup_number(Number) ->
             io:format("number not found~n")
     end.
 
--spec pretty_print_number_props(kz_proplist()) -> 'ok'.
+-spec pretty_print_number_props(kz_term:proplist()) -> 'ok'.
 pretty_print_number_props([]) -> 'ok';
 pretty_print_number_props([{Key, Value}|Props]) ->
     io:format("~-19s: ~s~n", [kz_term:to_binary(Key), kz_term:to_binary(Value)]),
     pretty_print_number_props(Props).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Instructs stepswitch_outbound to re-scan the resource db and
+%%------------------------------------------------------------------------------
+%% @doc Instructs stepswitch_outbound to re-scan the resource db and
 %% refresh the cache.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reload_resources() -> 'ok'.
 reload_resources() ->
-    stepswitch_resources:fetch_global_resources(),
+    _ = stepswitch_resources:fetch_global_resources(),
     'ok'.
 
--spec reload_resources(ne_binary()) -> 'ok'.
+-spec reload_resources(kz_term:ne_binary()) -> 'ok'.
 reload_resources(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
-    stepswitch_resources:fetch_local_resources(AccountId),
+    _ = stepswitch_resources:fetch_local_resources(AccountId),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_number(text()) -> any().
+%%------------------------------------------------------------------------------
+-spec process_number(kz_term:text()) -> any().
 process_number(Number) -> process_number(Number, 'undefined').
 
--spec process_number(text(), text() | 'undefined') -> any().
+-spec process_number(kz_term:text(), kz_term:text() | 'undefined') -> any().
 process_number(Number, 'undefined') ->
     process_number(Number, 'undefined', []);
 process_number(Number, "undefined") ->
@@ -212,21 +178,21 @@ process_number(Number, "undefined") ->
 process_number(Number, AccountId) ->
     process_number(Number, AccountId, []).
 
--spec process_number(text(), text() | 'undefined', text()) -> any().
+-spec process_number(kz_term:text(), kz_term:text() | 'undefined', kz_term:text()) -> any().
 process_number(Number, "undefined", Flags) ->
     process_number(Number, 'undefined', Flags);
 process_number(Number, AccountId, Flags) ->
     Flags1 = parse_flags(Flags),
     do_process_number(Number, AccountId, Flags1).
 
--spec do_process_number(text(), text() | 'undefined', api_list()) -> any().
+-spec do_process_number(kz_term:text(), kz_term:text() | 'undefined', kz_term:api_list()) -> any().
 do_process_number(Number, 'undefined', Flags) ->
     JObj = kz_json:from_list(
              props:filter_undefined([{<<"Flags">>, Flags}])
             ),
     Endpoints = stepswitch_resources:endpoints(
                   kz_term:to_binary(Number)
-                                              ,kapi_offnet_resource:jobj_to_req(JObj)
+                 ,kapi_offnet_resource:jobj_to_req(JObj)
                  ),
     pretty_print_endpoints(Endpoints);
 do_process_number(Number, AccountId, Flags) ->
@@ -241,7 +207,7 @@ do_process_number(Number, AccountId, Flags) ->
                                               ),
     pretty_print_endpoints(Endpoints).
 
--spec parse_flags(text()) -> api_list().
+-spec parse_flags(kz_term:text()) -> kz_term:api_list().
 parse_flags(Flags) ->
     Flags1 = [kz_term:to_binary(string:strip(Flag)) || Flag <- string:tokens(kz_term:to_list(Flags), ",")],
     case Flags1 of
@@ -256,7 +222,7 @@ pretty_print_endpoints([Endpoint|Endpoints]) ->
     io:format("~n"),
     pretty_print_endpoints(Endpoints).
 
--spec pretty_print_endpoint(kz_proplist()) -> any().
+-spec pretty_print_endpoint(kz_term:proplist()) -> any().
 pretty_print_endpoint([]) -> 'ok';
 pretty_print_endpoint([{_, []}|Props]) ->
     pretty_print_endpoint(Props);
@@ -276,12 +242,10 @@ pretty_print_endpoint([{Key, Value}|Props]) ->
     io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
     pretty_print_endpoint(Props).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec print_condensed_list(list()) -> 'ok'.
 print_condensed_list([E1, E2, E3]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"

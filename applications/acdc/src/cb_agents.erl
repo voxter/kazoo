@@ -1,8 +1,6 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% CRUD for call queues
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc CRUD for call queues
 %%% /agents
 %%%   GET: list all known agents and their queues
 %%%
@@ -23,12 +21,11 @@
 %%% /agents/AID/status
 %%%   GET: last 10 status updates
 %%%
+%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_agents).
 
 -export([init/0
@@ -55,16 +52,14 @@
 -define(QUEUE_STATUS_PATH_TOKEN, <<"queue_status">>).
 -define(RESTART_PATH_TOKEN, <<"restart">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = kapi_acdc_agent:declare_exchanges(),
@@ -77,13 +72,11 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.validate.agents">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"*.authorize.agents">>, ?MODULE, 'authorize').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Authorizes the incoming request, returning true if the requestor is
+%%------------------------------------------------------------------------------
+%% @doc Authorizes the incoming request, returning true if the requestor is
 %% allowed to access the resource, or false if not.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authorize(cb_context:context(), path_token(), path_token()) -> boolean().
 authorize(Context, _, ?RESTART_PATH_TOKEN) ->
     case cb_context:is_superduper_admin(Context) of
@@ -93,58 +86,59 @@ authorize(Context, _, ?RESTART_PATH_TOKEN) ->
             {'halt', Context1}
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() -> [?HTTP_GET].
 
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?STATUS_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(?STATS_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(?STATS_SUMMARY_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(_UserId) -> [?HTTP_GET].
 
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(?STATUS_PATH_TOKEN, _UserId) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?QUEUE_STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?RESTART_PATH_TOKEN) -> [?HTTP_POST].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /agents => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%% ```
+%%    /agents => []
 %%    /agents/foo => [<<"foo">>]
 %%    /agents/foo/bar => [<<"foo">>, <<"bar">>]
+%%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
 resource_exists(?STATUS_PATH_TOKEN, _) -> 'true';
 resource_exists(_, ?QUEUE_STATUS_PATH_TOKEN) -> 'true';
 resource_exists(_, ?RESTART_PATH_TOKEN) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add content types accepted and provided by this module
-%%
+%%------------------------------------------------------------------------------
+%% @doc Add content types accepted and provided by this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec content_types_provided(cb_context:context()) -> cb_context:context().
--spec content_types_provided(cb_context:context(), path_token()) -> cb_context:context().
--spec content_types_provided(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 content_types_provided(Context) -> Context.
+
+-spec content_types_provided(cb_context:context(), path_token()) -> cb_context:context().
 content_types_provided(Context, ?STATUS_PATH_TOKEN) -> Context;
 content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     case cb_context:req_value(Context, <<"format">>, ?FORMAT_COMPRESSED) of
@@ -158,30 +152,29 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
                                                  ,[{'to_json', ?JSON_CONTENT_TYPES}]
                                                  )
     end.
+
+-spec content_types_provided(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 content_types_provided(Context, ?STATUS_PATH_TOKEN, _) -> Context;
 content_types_provided(Context, _, ?STATUS_PATH_TOKEN) -> Context;
 content_types_provided(Context, _, ?QUEUE_STATUS_PATH_TOKEN) -> Context;
 content_types_provided(Context, _, ?RESTART_PATH_TOKEN) -> Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /agents mights load a list of agent objects
 %% /agents/123 might load the agent object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) ->
-                      cb_context:context().
--spec validate(cb_context:context(), path_token()) ->
-                      cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) ->
                       cb_context:context().
 validate(Context) ->
     summary(Context).
 
+-spec validate(cb_context:context(), path_token()) ->
+                      cb_context:context().
 validate(Context, PathToken) ->
     validate_agent(Context, PathToken, cb_context:req_verb(Context)).
 
@@ -194,6 +187,8 @@ validate_agent(Context, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
 validate_agent(Context, Id, ?HTTP_GET) ->
     read(Id, Context).
 
+-spec validate(cb_context:context(), path_token(), path_token()) ->
+                      cb_context:context().
 validate(Context, AgentId, PathToken) ->
     validate_agent_action(Context, AgentId, PathToken, cb_context:req_verb(Context)).
 
@@ -262,7 +257,7 @@ post(Context, AgentId, ?RESTART_PATH_TOKEN) ->
     publish_restart(Context, AgentId),
     crossbar_util:response(kz_json:new(), Context).
 
--spec publish_action(cb_context:context(), ne_binary()) -> 'ok'.
+-spec publish_action(cb_context:context(), kz_term:ne_binary()) -> 'ok'.
 publish_action(Context, AgentId) ->
     Publisher = case cb_context:req_value(Context, <<"action">>) of
                     <<"logout">> -> fun kapi_acdc_agent:publish_logout_queue/1;
@@ -278,7 +273,7 @@ publish_action(Context, AgentId) ->
 
     kz_amqp_worker:cast(Props, Publisher).
 
--spec publish_update(cb_context:context(), api_binary(), function()) -> 'ok'.
+-spec publish_update(cb_context:context(), kz_term:api_binary(), function()) -> 'ok'.
 publish_update(Context, AgentId, PubFun) ->
     Update = props:filter_undefined(
                [{<<"Account-ID">>, cb_context:account_id(Context)}
@@ -291,7 +286,7 @@ publish_update(Context, AgentId, PubFun) ->
                ]),
     kz_amqp_worker:cast(Update, PubFun).
 
--spec publish_restart(cb_context:context(), ne_binary()) -> 'ok'.
+-spec publish_restart(cb_context:context(), kz_term:ne_binary()) -> 'ok'.
 publish_restart(Context, AgentId) ->
     Payload = [{<<"Account-ID">>, cb_context:account_id(Context)}
               ,{<<"Agent-ID">>, AgentId}
@@ -299,12 +294,10 @@ publish_restart(Context, AgentId) ->
               ],
     kz_amqp_worker:cast(Payload, fun kapi_acdc_agent:publish_restart/1).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load an instance from the database
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec read(path_token(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(kzd_user:type())).
@@ -322,7 +315,7 @@ fetch_all_agent_statuses(Context) ->
                                       )
     end.
 
--spec fetch_agent_status(api_binary(), cb_context:context()) -> cb_context:context().
+-spec fetch_agent_status(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 fetch_agent_status(AgentId, Context) ->
     case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
@@ -367,9 +360,9 @@ fetch_all_current_agent_stats(Context) ->
                            ,cb_context:req_value(Context, <<"agent_id">>)
                            ).
 
--spec fetch_all_current_stats(cb_context:context(), api_binary()) -> cb_context:context().
+-spec fetch_all_current_stats(cb_context:context(), kz_term:api_binary()) -> cb_context:context().
 fetch_all_current_stats(Context, AgentId) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     Yday = Now - ?SECONDS_IN_DAY,
 
     Req = props:filter_undefined(
@@ -381,7 +374,7 @@ fetch_all_current_stats(Context, AgentId) ->
             ]),
     fetch_stats_from_amqp(Context, Req).
 
--spec fetch_current_status(cb_context:context(), api_binary()) -> cb_context:context().
+-spec fetch_current_status(cb_context:context(), kz_term:api_binary()) -> cb_context:context().
 fetch_current_status(Context, AgentId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
@@ -405,10 +398,10 @@ fetch_current_status(Context, AgentId) ->
             crossbar_util:response(Agents, Context)
     end.
 
--spec fetch_all_current_statuses(cb_context:context(), api_binary(), api_binary()) ->
+-spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
                                         cb_context:context().
 fetch_all_current_statuses(Context, AgentId, Status) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     Yday = Now - ?SECONDS_IN_DAY,
 
     Recent = cb_context:req_value(Context, <<"recent">>, 'false'),
@@ -429,7 +422,7 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
 fetch_ranged_agent_stats(Context, StartRange) ->
     MaxRange = ?ACDC_ARCHIVE_WINDOW,
 
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     Past = Now - MaxRange,
 
     To = kz_term:to_integer(cb_context:req_value(Context, <<"end_range">>, Now)),
@@ -455,7 +448,7 @@ fetch_ranged_agent_stats(Context, StartRange) ->
 -spec fetch_ranged_agent_stats(cb_context:context(), pos_integer(), pos_integer(), boolean()) ->
                                       cb_context:context().
 fetch_ranged_agent_stats(Context, From, To, 'true') ->
-    lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:current_tstamp()]),
+    lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:now_s()]),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
@@ -469,7 +462,7 @@ fetch_ranged_agent_stats(Context, From, To, 'false') ->
     lager:debug("ranged query from ~b to ~b of archived stats", [From, To]),
     Context.
 
--spec fetch_stats_from_amqp(cb_context:context(), kz_proplist()) -> cb_context:context().
+-spec fetch_stats_from_amqp(cb_context:context(), kz_term:proplist()) -> cb_context:context().
 fetch_stats_from_amqp(Context, Req) ->
     case kz_amqp_worker:call(Req
                             ,fun kapi_acdc_stats:publish_current_calls_req/1
@@ -492,13 +485,11 @@ format_stats(Context, Resp) ->
         ++ kz_json:get_value(<<"Waiting">>, Resp, [])
         ++ kz_json:get_value(<<"Processed">>, Resp, []),
 
-    crossbar_util:response(
-      lists:foldl(fun format_stats_fold/2
-                 ,kz_json:new()
-                 ,Stats
-                 )
-                          ,Context
-     ).
+    FormattedStats = lists:foldl(fun format_stats_fold/2
+                                ,kz_json:new()
+                                ,Stats
+                                ),
+    crossbar_util:response(FormattedStats, Context).
 
 -spec format_stats_fold(kz_json:object(), kz_json:object()) ->
                                kz_json:object().
@@ -529,10 +520,11 @@ format_stats_fold(Stat, Acc) ->
 
 -spec maybe_add_answered(kz_json:object(), kz_json:object()) ->
                                 [{kz_json:path(), non_neg_integer()}].
--spec maybe_add_answered(kz_json:object(), kz_json:object(), api_binary()) ->
-                                [{kz_json:path(), non_neg_integer()}].
 maybe_add_answered(Stat, Acc) ->
     maybe_add_answered(Stat, Acc, kz_json:get_value(<<"status">>, Stat)).
+
+-spec maybe_add_answered(kz_json:object(), kz_json:object(), kz_term:api_binary()) ->
+                                [{kz_json:path(), non_neg_integer()}].
 maybe_add_answered(Stat, Acc, <<"handled">>) ->
     add_answered(Stat, Acc);
 maybe_add_answered(Stat, Acc, <<"processed">>) ->
@@ -557,7 +549,7 @@ add_answered(Stat, Acc) ->
     ,{QAnsweredK, QAnswered + 1}
     ].
 
--spec maybe_add_misses(kz_json:object(), kz_json:object(), ne_binary()) ->
+-spec maybe_add_misses(kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
                               kz_json:object().
 maybe_add_misses(Stat, Acc, QueueId) ->
     case kz_json:get_value(<<"misses">>, Stat, []) of
@@ -571,7 +563,7 @@ maybe_add_misses(Stat, Acc, QueueId) ->
                        )
     end.
 
--spec add_miss(kz_json:object(), kz_json:object(), ne_binary()) -> kz_json:object().
+-spec add_miss(kz_json:object(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
 add_miss(Miss, Acc, QueueId) ->
     AgentId = kz_json:get_value(<<"agent_id">>, Miss),
     MissesK = [AgentId, <<"missed_calls">>],
@@ -594,23 +586,19 @@ add_miss(Miss, Acc, QueueId) ->
                       ,Acc
                       ).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the resuts of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the resuts of a view
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) ->
                                     kz_json:objects().
 normalize_view_results(JObj, Acc) ->
@@ -633,43 +621,41 @@ validate_status_change(Context) ->
     end.
 
 -define(STATUS_CHANGES, [<<"login">>, <<"logout">>, <<"pause">>, <<"resume">>, <<"end_wrapup">>]).
--spec validate_status_change(cb_context:context(), api_binary()) ->
+-spec validate_status_change(cb_context:context(), kz_term:api_binary()) ->
                                     cb_context:context().
 validate_status_change(Context, S) ->
     case lists:member(S, ?STATUS_CHANGES) of
         'true' -> validate_status_change_params(Context, S);
         'false' ->
             lager:debug("status ~s not valid", [S]),
-            cb_context:add_validation_error(
-              <<"status">>
+            cb_context:add_validation_error(<<"status">>
                                            ,<<"enum">>
                                            ,kz_json:from_list(
                                               [{<<"message">>, <<"value is not a valid status">>}
                                               ,{<<"cause">>, S}
                                               ])
                                            ,Context
-             )
+                                           )
     end.
 
--spec check_for_status_error(cb_context:context(), api_binary()) ->
+-spec check_for_status_error(cb_context:context(), kz_term:api_binary()) ->
                                     cb_context:context().
 check_for_status_error(Context, S) ->
     case lists:member(S, ?STATUS_CHANGES) of
         'true' -> Context;
         'false' ->
             lager:debug("status ~s not found", [S]),
-            cb_context:add_validation_error(
-              <<"status">>
+            cb_context:add_validation_error(<<"status">>
                                            ,<<"enum">>
                                            ,kz_json:from_list(
                                               [{<<"message">>, <<"value is not a valid status">>}
                                               ,{<<"cause">>, S}
                                               ])
                                            ,Context
-             )
+                                           )
     end.
 
--spec validate_status_change_params(cb_context:context(), ne_binary()) ->
+-spec validate_status_change_params(cb_context:context(), kz_term:ne_binary()) ->
                                            cb_context:context().
 validate_status_change_params(Context, <<"pause">>) ->
     Value = cb_context:req_value(Context, <<"timeout">>),
@@ -677,15 +663,14 @@ validate_status_change_params(Context, <<"pause">>) ->
         N when N >= 0 -> cb_context:set_resp_status(Context, 'success');
         N ->
             lager:debug("bad int for pause: ~p", [N]),
-            cb_context:add_validation_error(
-              <<"timeout">>
+            cb_context:add_validation_error(<<"timeout">>
                                            ,<<"minimum">>
                                            ,kz_json:from_list(
                                               [{<<"message">>, <<"value must be at least greater than or equal to 0">>}
                                               ,{<<"cause">>, N}
                                               ])
                                            ,Context
-             )
+                                           )
     catch
         _E:_R -> cb_context:set_resp_status(Context, 'success')
     end;

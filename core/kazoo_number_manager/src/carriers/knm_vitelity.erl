@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle client requests for phone_number documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
+%%% @doc Handle client requests for phone_number documents
+%%% @author James Aimonetti
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_vitelity).
 -behaviour(knm_gen_carrier).
 
@@ -25,44 +21,38 @@
 -include("knm_vitelity.hrl").
 
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec info() -> map().
 info() ->
     #{?CARRIER_INFO_MAX_PREFIX => 3
      }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check with carrier if these numbers are registered with it.
+%%------------------------------------------------------------------------------
+%% @doc Check with carrier if these numbers are registered with it.
 %% @end
-%%--------------------------------------------------------------------
--spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
-                                      {error, any()}.
+%%------------------------------------------------------------------------------
+-spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
+                                              {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the Vitelity system for a quanity of available numbers
+%%------------------------------------------------------------------------------
+%% @doc Query the Vitelity system for a quantity of available numbers
 %% in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_carriers:options()) ->
                           {'ok', knm_number:knm_numbers()} |
                           {'error', any()}.
 find_numbers(<<"+1",Prefix/binary>>, Quantity, Options) ->
@@ -75,12 +65,10 @@ find_numbers(Prefix, Quantity, Options) ->
             find(Prefix, Quantity, Options, TFOpts)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) ->
                             knm_number:knm_number().
 acquire_number(Number) ->
@@ -95,12 +83,10 @@ acquire_number(Number) ->
             query_vitelity(Number, purchase_local_options(DID))
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) ->
                                knm_number:knm_number().
 disconnect_number(Number) ->
@@ -109,35 +95,29 @@ disconnect_number(Number) ->
     lager:debug("attempting to disconnect ~s", [DID]),
     query_vitelity(Number, release_did_options(DID)).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(_) -> 'true'.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec classify_and_find(ne_binary(), pos_integer(), knm_carriers:options()) ->
+%%------------------------------------------------------------------------------
+-spec classify_and_find(kz_term:ne_binary(), pos_integer(), knm_carriers:options()) ->
                                {'ok', knm_number:knm_numbers()} |
                                {'error', any()}.
 classify_and_find(Prefix, Quantity, Options) ->
@@ -150,12 +130,10 @@ classify_and_find(Prefix, Quantity, Options) ->
             find(Prefix, Quantity, Options, local_options(Prefix, Options))
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec tollfree_options(pos_integer(), knm_carriers:options()) ->
                               knm_vitelity_util:query_options().
 tollfree_options(Quantity, Options) ->
@@ -169,13 +147,11 @@ tollfree_options(Quantity, Options) ->
     F = fun knm_vitelity_util:add_options_fold/2,
     lists:foldl(F, [], TollFreeOptions).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec local_options(ne_binary(), knm_carriers:options()) ->
+%%------------------------------------------------------------------------------
+-spec local_options(kz_term:ne_binary(), knm_carriers:options()) ->
                            knm_vitelity_util:query_options().
 local_options(Prefix, Options) when byte_size(Prefix) =< 3 ->
     LocalOptions = [{'qs', [{'npa', Prefix}
@@ -207,13 +183,11 @@ local_options(Prefix, Options) ->
     F = fun knm_vitelity_util:add_options_fold/2,
     lists:foldl(F, [], LocalOptions).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec find(ne_binary(), pos_integer(), knm_carriers:options(), knm_vitelity_util:query_options()) ->
+%%------------------------------------------------------------------------------
+-spec find(kz_term:ne_binary(), pos_integer(), knm_carriers:options(), knm_vitelity_util:query_options()) ->
                   {'ok', knm_number:knm_numbers()} |
                   {'error', any()}.
 find(Prefix, Quantity, Options, VitelityOptions) ->
@@ -233,13 +207,11 @@ to_number(DID, CarrierData, QID) ->
     {QID, {DID, ?MODULE, ?NUMBER_STATE_DISCOVERY, CarrierData}}.
 
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec query_vitelity(ne_binary(), pos_integer(), knm_vitelity_util:query_options()) ->
+%%------------------------------------------------------------------------------
+-spec query_vitelity(kz_term:ne_binary(), pos_integer(), knm_vitelity_util:query_options()) ->
                             {'ok', kz_json:object()} |
                             {'error', any()}.
 -ifdef(TEST).
@@ -271,13 +243,11 @@ query_vitelity(Prefix, Quantity, QOptions) ->
     end.
 -endif.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_xml_resp(ne_binary(), pos_integer(), text()) ->
+%%------------------------------------------------------------------------------
+-spec process_xml_resp(kz_term:ne_binary(), pos_integer(), kz_term:text()) ->
                               {'ok', kz_json:object()} |
                               {'error', any()}.
 process_xml_resp(Prefix, Quantity, XML_binary) ->
@@ -290,13 +260,11 @@ process_xml_resp(Prefix, Quantity, XML_binary) ->
             {'error', 'xml_decode_failed'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_xml_content_tag(ne_binary(), pos_integer(), xml_el()) ->
+%%------------------------------------------------------------------------------
+-spec process_xml_content_tag(kz_term:ne_binary(), pos_integer(), kz_types:xml_el()) ->
                                      {'ok', kz_json:object()} |
                                      {'error', any()}.
 process_xml_content_tag(Prefix, Quantity, #xmlElement{name='content'
@@ -311,16 +279,12 @@ process_xml_content_tag(Prefix, Quantity, #xmlElement{name='content'
             process_xml_numbers(Prefix, Quantity, knm_vitelity_util:xml_resp_numbers(Els))
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_xml_numbers(ne_binary(), pos_integer(), 'undefined' | xml_el()) ->
-                                 {'ok', kz_json:object()} |
-                                 {'error', any()}.
--spec process_xml_numbers(ne_binary(), pos_integer(), 'undefined' | xml_els(), kz_proplist()) ->
+%%------------------------------------------------------------------------------
+
+-spec process_xml_numbers(kz_term:ne_binary(), pos_integer(), 'undefined' | kz_types:xml_el()) ->
                                  {'ok', kz_json:object()} |
                                  {'error', any()}.
 process_xml_numbers(_Prefix, _Quantity, 'undefined') ->
@@ -330,6 +294,9 @@ process_xml_numbers(Prefix, Quantity, #xmlElement{name='numbers'
                                                  }) ->
     process_xml_numbers(Prefix, Quantity, kz_xml:elements(Content), []).
 
+-spec process_xml_numbers(kz_term:ne_binary(), pos_integer(), 'undefined' | kz_types:xml_els(), kz_term:proplist()) ->
+                                 {'ok', kz_json:object()} |
+                                 {'error', any()}.
 process_xml_numbers(_Prefix, 0, _Els, Acc) ->
     {'ok', kz_json:from_list(Acc)};
 process_xml_numbers(_Prefix, _Quantity, [#xmlElement{name='response'
@@ -350,13 +317,11 @@ process_xml_numbers(Prefix, Quantity, [El|Els], Acc) ->
             process_xml_numbers(Prefix, Quantity, Els, Acc)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec number_matches_prefix(kz_json:object(), ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec number_matches_prefix(kz_json:object(), kz_term:ne_binary()) -> boolean().
 number_matches_prefix(JObj, Prefix) ->
     PrefixLen = byte_size(Prefix),
     CountryCode = kz_json:get_value(<<"country_code">>, JObj, <<"+1">>),
@@ -367,13 +332,11 @@ number_matches_prefix(JObj, Prefix) ->
         _N -> 'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec xml_did_to_json(xml_el()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec xml_did_to_json(kz_types:xml_el()) -> kz_json:object().
 xml_did_to_json(#xmlElement{name='did'
                            ,content=[#xmlText{}]=DID
                            }) ->
@@ -398,13 +361,11 @@ xml_did_to_json(#xmlElement{name='number'
         kz_xml:elements(DIDInfo)
        )).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec purchase_local_options(ne_binary()) -> knm_vitelity_util:query_options().
+%%------------------------------------------------------------------------------
+-spec purchase_local_options(kz_term:ne_binary()) -> knm_vitelity_util:query_options().
 purchase_local_options(DID) ->
     [{'qs', [{'did', knm_converters:to_npan(DID)}
             ,{'cmd', <<"getlocaldid">>}
@@ -415,13 +376,11 @@ purchase_local_options(DID) ->
     ,{'uri', knm_vitelity_util:api_uri()}
     ].
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec purchase_tollfree_options(ne_binary()) -> knm_vitelity_util:query_options().
+%%------------------------------------------------------------------------------
+-spec purchase_tollfree_options(kz_term:ne_binary()) -> knm_vitelity_util:query_options().
 purchase_tollfree_options(DID) ->
     [{'qs', [{'did', knm_converters:to_npan(DID)}
             ,{'cmd', <<"gettollfree">>}
@@ -432,12 +391,10 @@ purchase_tollfree_options(DID) ->
     ,{'uri', knm_vitelity_util:api_uri()}
     ].
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec query_vitelity(knm_number:knm_number(), knm_vitelity_util:query_options()) ->
                             knm_number:knm_number().
 query_vitelity(Number, QOptions) ->
@@ -452,13 +409,11 @@ query_vitelity(Number, QOptions) ->
             knm_errors:by_carrier(?MODULE, Error, Number)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_xml_resp(knm_number:knm_number(), text()) ->
+%%------------------------------------------------------------------------------
+-spec process_xml_resp(knm_number:knm_number(), kz_term:text()) ->
                               knm_number:knm_number().
 process_xml_resp(Number, XML_binary) ->
     XML = unicode:characters_to_list(XML_binary),
@@ -470,13 +425,11 @@ process_xml_resp(Number, XML_binary) ->
             knm_errors:by_carrier(?MODULE, 'failed_decode_resp', Number)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec process_xml_content_tag(knm_number:knm_number(), xml_el()) ->
+%%------------------------------------------------------------------------------
+-spec process_xml_content_tag(knm_number:knm_number(), kz_types:xml_el()) ->
                                      knm_number:knm_number().
 process_xml_content_tag(Number, #xmlElement{name='content'
                                            ,content=Children
@@ -492,13 +445,11 @@ process_xml_content_tag(Number, #xmlElement{name='content'
             Number
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec release_did_options(ne_binary()) -> knm_vitelity_util:query_options().
+%%------------------------------------------------------------------------------
+-spec release_did_options(kz_term:ne_binary()) -> knm_vitelity_util:query_options().
 release_did_options(DID) ->
     [{'qs', [{'did', knm_converters:to_npan(DID)}
             ,{'cmd', <<"removedid">>}

@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% Call-related messages, like switch events, status requests, etc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Call-related messages, like switch events, status requests, etc AMQP API.
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kapi_call).
 
 -export([optional_call_event_headers/0]).
@@ -60,16 +58,16 @@
 -include_lib("kazoo_amqp/src/amqp_util.hrl").
 -include("kapi_call.hrl").
 
--spec optional_call_event_headers() -> ne_binaries().
+-spec optional_call_event_headers() -> kz_term:ne_binaries().
 optional_call_event_headers() ->
     ?OPTIONAL_CALL_EVENT_HEADERS.
 
-%%--------------------------------------------------------------------
-%% @doc Format a call event from the switch for the listener
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Format a call event from the switch for the listener.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec event(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec event(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 event(Prop) when is_list(Prop) ->
     case event_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CALL_EVENT_HEADERS, ?OPTIONAL_CALL_EVENT_HEADERS);
@@ -77,17 +75,17 @@ event(Prop) when is_list(Prop) ->
     end;
 event(JObj) -> event(kz_json:to_proplist(JObj)).
 
--spec event_v(api_terms()) -> boolean().
+-spec event_v(kz_term:api_terms()) -> boolean().
 event_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CALL_EVENT_HEADERS, ?CALL_EVENT_VALUES, ?CALL_EVENT_TYPES);
 event_v(JObj) -> event_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a channel
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a channel.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec channel_status_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec channel_status_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 channel_status_req(Prop) when is_list(Prop) ->
     case channel_status_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CHANNEL_STATUS_REQ_HEADERS, ?OPTIONAL_CHANNEL_STATUS_REQ_HEADERS);
@@ -95,17 +93,17 @@ channel_status_req(Prop) when is_list(Prop) ->
     end;
 channel_status_req(JObj) -> channel_status_req(kz_json:to_proplist(JObj)).
 
--spec channel_status_req_v(api_terms()) -> boolean().
+-spec channel_status_req_v(kz_term:api_terms()) -> boolean().
 channel_status_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CHANNEL_STATUS_REQ_HEADERS, ?CHANNEL_STATUS_REQ_VALUES, ?CHANNEL_STATUS_REQ_TYPES);
 channel_status_req_v(JObj) -> channel_status_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Respond with status of a channel, either active or non-existant
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Respond with status of a channel, either active or nonexistent.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec channel_status_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec channel_status_resp(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 channel_status_resp(Prop) when is_list(Prop) ->
     case channel_status_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CHANNEL_STATUS_RESP_HEADERS, ?OPTIONAL_CHANNEL_STATUS_RESP_HEADERS);
@@ -113,17 +111,17 @@ channel_status_resp(Prop) when is_list(Prop) ->
     end;
 channel_status_resp(JObj) -> channel_status_resp(kz_json:to_proplist(JObj)).
 
--spec channel_status_resp_v(api_terms()) -> boolean().
+-spec channel_status_resp_v(kz_term:api_terms()) -> boolean().
 channel_status_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CHANNEL_STATUS_RESP_HEADERS, ?CHANNEL_STATUS_RESP_VALUES, ?CHANNEL_STATUS_RESP_TYPES);
 channel_status_resp_v(JObj) -> channel_status_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_auth_id_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_auth_id_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_auth_id_req(Prop) when is_list(Prop) ->
     case query_auth_id_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_AUTH_ID_REQ_HEADERS, ?OPTIONAL_QUERY_AUTH_ID_REQ_HEADERS);
@@ -131,17 +129,17 @@ query_auth_id_req(Prop) when is_list(Prop) ->
     end;
 query_auth_id_req(JObj) -> query_auth_id_req(kz_json:to_proplist(JObj)).
 
--spec query_auth_id_req_v(api_terms()) -> boolean().
+-spec query_auth_id_req_v(kz_term:api_terms()) -> boolean().
 query_auth_id_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_AUTH_ID_REQ_HEADERS, ?QUERY_AUTH_ID_REQ_VALUES, ?QUERY_AUTH_ID_REQ_TYPES);
 query_auth_id_req_v(JObj) -> query_auth_id_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_auth_id_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_auth_id_resp(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_auth_id_resp(Prop) when is_list(Prop) ->
     case query_auth_id_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_AUTH_ID_RESP_HEADERS, ?OPTIONAL_QUERY_AUTH_ID_RESP_HEADERS);
@@ -149,17 +147,17 @@ query_auth_id_resp(Prop) when is_list(Prop) ->
     end;
 query_auth_id_resp(JObj) -> query_auth_id_resp(kz_json:to_proplist(JObj)).
 
--spec query_auth_id_resp_v(api_terms()) -> boolean().
+-spec query_auth_id_resp_v(kz_term:api_terms()) -> boolean().
 query_auth_id_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_AUTH_ID_RESP_HEADERS, ?QUERY_AUTH_ID_RESP_VALUES, ?QUERY_AUTH_ID_RESP_TYPES);
 query_auth_id_resp_v(JObj) -> query_auth_id_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_user_channels_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_user_channels_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_user_channels_req(Prop) when is_list(Prop) ->
     case query_user_channels_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_USER_CHANNELS_REQ_HEADERS, ?OPTIONAL_QUERY_USER_CHANNELS_REQ_HEADERS);
@@ -167,17 +165,17 @@ query_user_channels_req(Prop) when is_list(Prop) ->
     end;
 query_user_channels_req(JObj) -> query_user_channels_req(kz_json:to_proplist(JObj)).
 
--spec query_user_channels_req_v(api_terms()) -> boolean().
+-spec query_user_channels_req_v(kz_term:api_terms()) -> boolean().
 query_user_channels_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_USER_CHANNELS_REQ_HEADERS, ?QUERY_USER_CHANNELS_REQ_VALUES, ?QUERY_USER_CHANNELS_REQ_TYPES);
 query_user_channels_req_v(JObj) -> query_user_channels_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_user_channels_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_user_channels_resp(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_user_channels_resp(Prop) when is_list(Prop) ->
     case query_user_channels_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_USER_CHANNELS_RESP_HEADERS, ?OPTIONAL_QUERY_USER_CHANNELS_RESP_HEADERS);
@@ -185,17 +183,17 @@ query_user_channels_resp(Prop) when is_list(Prop) ->
     end;
 query_user_channels_resp(JObj) -> query_user_channels_resp(kz_json:to_proplist(JObj)).
 
--spec query_user_channels_resp_v(api_terms()) -> boolean().
+-spec query_user_channels_resp_v(kz_term:api_terms()) -> boolean().
 query_user_channels_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_USER_CHANNELS_RESP_HEADERS, ?QUERY_USER_CHANNELS_RESP_VALUES, ?QUERY_USER_CHANNELS_RESP_TYPES);
 query_user_channels_resp_v(JObj) -> query_user_channels_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_account_channels_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_account_channels_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_account_channels_req(Prop) when is_list(Prop) ->
     case query_account_channels_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_ACCOUNT_CHANNELS_REQ_HEADERS, ?OPTIONAL_QUERY_ACCOUNT_CHANNELS_REQ_HEADERS);
@@ -203,17 +201,17 @@ query_account_channels_req(Prop) when is_list(Prop) ->
     end;
 query_account_channels_req(JObj) -> query_account_channels_req(kz_json:to_proplist(JObj)).
 
--spec query_account_channels_req_v(api_terms()) -> boolean().
+-spec query_account_channels_req_v(kz_term:api_terms()) -> boolean().
 query_account_channels_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_ACCOUNT_CHANNELS_REQ_HEADERS, ?QUERY_ACCOUNT_CHANNELS_REQ_VALUES, ?QUERY_ACCOUNT_CHANNELS_REQ_TYPES);
 query_account_channels_req_v(JObj) -> query_account_channels_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_account_channels_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_account_channels_resp(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_account_channels_resp(Prop) when is_list(Prop) ->
     case query_account_channels_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_ACCOUNT_CHANNELS_RESP_HEADERS, ?OPTIONAL_QUERY_ACCOUNT_CHANNELS_RESP_HEADERS);
@@ -221,17 +219,17 @@ query_account_channels_resp(Prop) when is_list(Prop) ->
     end;
 query_account_channels_resp(JObj) -> query_account_channels_resp(kz_json:to_proplist(JObj)).
 
--spec query_account_channels_resp_v(api_terms()) -> boolean().
+-spec query_account_channels_resp_v(kz_term:api_terms()) -> boolean().
 query_account_channels_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_ACCOUNT_CHANNELS_RESP_HEADERS, ?QUERY_ACCOUNT_CHANNELS_RESP_VALUES, ?QUERY_ACCOUNT_CHANNELS_RESP_TYPES);
 query_account_channels_resp_v(JObj) -> query_account_channels_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_channels_req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_channels_req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_channels_req(Prop) when is_list(Prop) ->
     case query_channels_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_CHANNELS_REQ_HEADERS, ?OPTIONAL_QUERY_CHANNELS_REQ_HEADERS);
@@ -239,17 +237,17 @@ query_channels_req(Prop) when is_list(Prop) ->
     end;
 query_channels_req(JObj) -> query_channels_req(kz_json:to_proplist(JObj)).
 
--spec query_channels_req_v(api_terms()) -> boolean().
+-spec query_channels_req_v(kz_term:api_terms()) -> boolean().
 query_channels_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_CHANNELS_REQ_HEADERS, ?QUERY_CHANNELS_REQ_VALUES, ?QUERY_CHANNELS_REQ_TYPES);
 query_channels_req_v(JObj) -> query_channels_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Inquire into the status of a call
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Inquire into the status of a call.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec query_channels_resp(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec query_channels_resp(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 query_channels_resp(Prop) when is_list(Prop) ->
     case query_channels_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_CHANNELS_RESP_HEADERS, ?OPTIONAL_QUERY_CHANNELS_RESP_HEADERS);
@@ -257,17 +255,17 @@ query_channels_resp(Prop) when is_list(Prop) ->
     end;
 query_channels_resp(JObj) -> query_channels_resp(kz_json:to_proplist(JObj)).
 
--spec query_channels_resp_v(api_terms()) -> boolean().
+-spec query_channels_resp_v(kz_term:api_terms()) -> boolean().
 query_channels_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUERY_CHANNELS_RESP_HEADERS, ?QUERY_CHANNELS_RESP_VALUES, ?QUERY_CHANNELS_RESP_TYPES);
 query_channels_resp_v(JObj) -> query_channels_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Format a call id update from the switch for the listener
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Format a call id update from the switch for the listener.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec usurp_control(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec usurp_control(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 usurp_control(Prop) when is_list(Prop) ->
     case usurp_control_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CALL_USURP_CONTROL_HEADERS, ?OPTIONAL_CALL_USURP_CONTROL_HEADERS);
@@ -275,17 +273,17 @@ usurp_control(Prop) when is_list(Prop) ->
     end;
 usurp_control(JObj) -> usurp_control(kz_json:to_proplist(JObj)).
 
--spec usurp_control_v(api_terms()) -> boolean().
+-spec usurp_control_v(kz_term:api_terms()) -> boolean().
 usurp_control_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CALL_USURP_CONTROL_HEADERS, ?CALL_USURP_CONTROL_VALUES, ?CALL_USURP_CONTROL_TYPES);
 usurp_control_v(JObj) -> usurp_control_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc Format a call id update from the switch for the listener
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc Format a call id update from the switch for the listener.
+%% Takes {@link lz_term:proplist()}, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec usurp_publisher(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec usurp_publisher(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 usurp_publisher(Prop) when is_list(Prop) ->
     case usurp_publisher_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PUBLISHER_USURP_CONTROL_HEADERS, ?OPTIONAL_PUBLISHER_USURP_CONTROL_HEADERS);
@@ -293,12 +291,12 @@ usurp_publisher(Prop) when is_list(Prop) ->
     end;
 usurp_publisher(JObj) -> usurp_publisher(kz_json:to_proplist(JObj)).
 
--spec usurp_publisher_v(api_terms()) -> boolean().
+-spec usurp_publisher_v(kz_term:api_terms()) -> boolean().
 usurp_publisher_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?PUBLISHER_USURP_CONTROL_HEADERS, ?PUBLISHER_USURP_CONTROL_VALUES, ?PUBLISHER_USURP_CONTROL_TYPES);
 usurp_publisher_v(JObj) -> usurp_publisher_v(kz_json:to_proplist(JObj)).
 
--spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
+-spec bind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props, <<"*">>),
     Events = props:get_value('restrict_to', Props, [<<"*">>]),
@@ -309,7 +307,7 @@ bind_q(Q, [Event|T], CallId) ->
     bind_q(Q, T, CallId);
 bind_q(_Q, [], _CallId) -> 'ok'.
 
--spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
+-spec unbind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props, <<"*">>),
     Events = props:get_value('restrict_to', Props, [<<"*">>]),
@@ -320,19 +318,19 @@ unbind_q(Q, [Event|T], CallId) ->
     unbind_q(Q, T, CallId);
 unbind_q(_Q, [], _CallId) -> 'ok'.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% declare the exchanges used by this API
+%%------------------------------------------------------------------------------
+%% @doc Declare the exchanges used by this API.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
     amqp_util:callevt_exchange(),
     amqp_util:callmgr_exchange().
 
--spec publish_event(api_terms()) -> 'ok'.
--spec publish_event(api_terms(), ne_binary()) -> 'ok'.
+-spec publish_event(kz_term:api_terms()) -> 'ok'.
 publish_event(Event) -> publish_event(Event, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_event(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_event(Event, ContentType) when is_list(Event) ->
     CallId = props:get_first_defined([<<"Origination-Call-ID">>, <<"Call-ID">>, <<"Unique-ID">>], Event),
     EventName = props:get_value(<<"Event-Name">>, Event),
@@ -341,51 +339,57 @@ publish_event(Event, ContentType) when is_list(Event) ->
 publish_event(Event, ContentType) ->
     publish_event(kz_json:to_proplist(Event), ContentType).
 
--spec publish_channel_status_req(api_terms()) -> 'ok'.
--spec publish_channel_status_req(ne_binary(), api_terms()) -> 'ok'.
--spec publish_channel_status_req(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_channel_status_req(kz_term:api_terms()) -> 'ok'.
 publish_channel_status_req(API) ->
     case is_list(API) of
         'true' -> publish_channel_status_req(props:get_value(<<"Call-ID">>, API), API);
         'false' -> publish_channel_status_req(kz_json:get_value(<<"Call-ID">>, API), API)
     end.
+
+-spec publish_channel_status_req(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_channel_status_req(CallId, JObj) ->
     publish_channel_status_req(CallId, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_channel_status_req(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_channel_status_req(CallId, Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CHANNEL_STATUS_REQ_VALUES, fun channel_status_req/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', CallId), Payload, ContentType).
 
--spec publish_channel_status_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_channel_status_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_channel_status_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_channel_status_resp(RespQ, JObj) ->
     publish_channel_status_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_channel_status_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_channel_status_resp(RespQ, Resp, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?CHANNEL_STATUS_RESP_VALUES, fun channel_status_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
--spec publish_query_auth_id_req(api_terms()) -> 'ok'.
--spec publish_query_auth_id_req(ne_binary(), api_terms()) -> 'ok'.
--spec publish_query_auth_id_req(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_auth_id_req(kz_term:api_terms()) -> 'ok'.
 publish_query_auth_id_req(API) ->
     case is_list(API) of
         'true' -> publish_query_auth_id_req(props:get_value(<<"Auth-ID">>, API), API);
         'false' -> publish_query_auth_id_req(kz_json:get_value(<<"Auth-ID">>, API), API)
     end.
+
+-spec publish_query_auth_id_req(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_query_auth_id_req(AuthId, JObj) ->
     publish_query_auth_id_req(AuthId, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_auth_id_req(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_auth_id_req(AuthId, Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?QUERY_AUTH_ID_REQ_VALUES, fun query_auth_id_req/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', AuthId), Payload, ContentType).
 
--spec publish_query_auth_id_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_query_auth_id_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_auth_id_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_query_auth_id_resp(RespQ, JObj) ->
     publish_query_auth_id_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_auth_id_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_auth_id_resp(RespQ, Resp, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?QUERY_AUTH_ID_RESP_VALUES, fun query_auth_id_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
--spec publish_query_user_channels_req(api_terms()) -> 'ok'.
+-spec publish_query_user_channels_req(kz_term:api_terms()) -> 'ok'.
 publish_query_user_channels_req(Props) when is_list(Props) ->
     publish_query_user_channels_req(Props
                                    ,props:get_value(<<"Username">>, Props)
@@ -399,7 +403,7 @@ publish_query_user_channels_req(JObj) ->
                                    ,?DEFAULT_CONTENT_TYPE
                                    ).
 
--spec publish_query_user_channels_req(api_terms(), api_binary(), api_binary(), ne_binary()) -> 'ok'.
+-spec publish_query_user_channels_req(kz_term:api_terms(), kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> 'ok'.
 publish_query_user_channels_req(Req, 'undefined', 'undefined', ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?QUERY_USER_CHANNELS_REQ_VALUES, fun query_user_channels_req/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', <<>>), Payload, ContentType);
@@ -411,16 +415,16 @@ publish_query_user_channels_req(Req, Username, Realm, ContentType) ->
     User = <<Username/binary, ":", Realm/binary>>,
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', User), Payload, ContentType).
 
--spec publish_query_user_channels_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_query_user_channels_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_user_channels_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_query_user_channels_resp(RespQ, JObj) ->
     publish_query_user_channels_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_user_channels_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_user_channels_resp(RespQ, Resp, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?QUERY_USER_CHANNELS_RESP_VALUES, fun query_user_channels_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
--spec publish_query_account_channels_req(api_terms()) -> 'ok'.
--spec publish_query_account_channels_req(api_terms(), ne_binary(), ne_binary()) -> 'ok'.
+-spec publish_query_account_channels_req(kz_term:api_terms()) -> 'ok'.
 publish_query_account_channels_req(Props) when is_list(Props) ->
     publish_query_account_channels_req(Props
                                       ,props:get_value(<<"Account-ID">>, Props)
@@ -432,57 +436,63 @@ publish_query_account_channels_req(JObj) ->
                                       ,?DEFAULT_CONTENT_TYPE
                                       ).
 
+-spec publish_query_account_channels_req(kz_term:api_terms(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 publish_query_account_channels_req(Req, AccountId, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?QUERY_ACCOUNT_CHANNELS_REQ_VALUES, fun query_account_channels_req/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', AccountId), Payload, ContentType).
 
--spec publish_query_account_channels_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_query_account_channels_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_account_channels_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_query_account_channels_resp(RespQ, JObj) ->
     publish_query_account_channels_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_account_channels_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_account_channels_resp(RespQ, Resp, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?QUERY_ACCOUNT_CHANNELS_RESP_VALUES, fun query_account_channels_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
--spec publish_query_channels_req(api_terms()) -> 'ok'.
--spec publish_query_channels_req(api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_channels_req(kz_term:api_terms()) -> 'ok'.
 publish_query_channels_req(ApiProps) -> publish_query_channels_req(ApiProps, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_channels_req(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_channels_req(ApiProps, ContentType) when is_list(ApiProps) ->
     {'ok', Payload} = kz_api:prepare_api_payload(ApiProps, ?QUERY_CHANNELS_REQ_VALUES, fun query_channels_req/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('status_req', <<"channels">>), Payload, ContentType);
 publish_query_channels_req(JObj, ContentType) ->
     publish_query_channels_req(kz_json:to_proplist(JObj), ContentType).
 
--spec publish_query_channels_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_query_channels_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_query_channels_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_query_channels_resp(RespQ, ApiProps) -> publish_query_channels_resp(RespQ, ApiProps, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_query_channels_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_query_channels_resp(RespQ, ApiProps, ContentType) when is_list(ApiProps) ->
     {'ok', Payload} = kz_api:prepare_api_payload(ApiProps, ?QUERY_CHANNELS_RESP_VALUES, fun query_channels_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType);
 publish_query_channels_resp(RespQ, JObj, ContentType) ->
     publish_query_channels_resp(RespQ, kz_json:to_proplist(JObj), ContentType).
 
--spec publish_usurp_control(ne_binary(), api_terms()) -> 'ok'.
--spec publish_usurp_control(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_usurp_control(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_usurp_control(CallId, JObj) ->
     publish_usurp_control(CallId, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_usurp_control(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_usurp_control(CallId, JObj, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?CALL_USURP_CONTROL_VALUES, fun usurp_control/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('usurp_control', CallId), Payload, ContentType).
 
--spec publish_usurp_publisher(ne_binary(), api_terms()) -> 'ok'.
--spec publish_usurp_publisher(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_usurp_publisher(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_usurp_publisher(CallId, JObj) ->
     publish_usurp_publisher(CallId, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_usurp_publisher(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_usurp_publisher(CallId, JObj, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PUBLISHER_USURP_CONTROL_VALUES, fun usurp_publisher/1),
     amqp_util:callevt_publish(?CALL_EVENT_ROUTING_KEY('publisher_usurp', CallId), Payload, ContentType).
 
--spec get_status(api_terms()) -> ne_binary().
+-spec get_status(kz_term:api_terms()) -> kz_term:ne_binary().
 get_status(API) when is_list(API) -> props:get_value(<<"Status">>, API);
 get_status(API) -> kz_json:get_value(<<"Status">>, API).
 
--spec first_username(api_terms()) -> ne_binary().
+-spec first_username(kz_term:api_terms()) -> kz_term:ne_binary().
 first_username(Props) when is_list(Props) ->
     [U|_] = props:get_value(<<"Usernames">>, Props),
     U;
@@ -490,6 +500,6 @@ first_username(JObj) ->
     [U|_] = kz_json:get_value(<<"Usernames">>, JObj),
     U.
 
--spec event_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+-spec event_routing_key(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 event_routing_key(EventName, CallId) ->
     ?CALL_EVENT_ROUTING_KEY(EventName, CallId).

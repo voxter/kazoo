@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications Inc
-%%% @doc
-%%% Asterisk queue_log translator for Kazoo
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Asterisk queue_log translator for Kazoo
+%%%
+%%% @author Lucas Bussey
 %%% @end
-%%% @contributors
-%%%   Lucas Bussey
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(quilt_listener).
 -behaviour(gen_listener).
 
@@ -36,35 +35,35 @@
                   ]).
 
 -define(RESPONDERS, [{
-                       {?MODULE, 'handle_quilt_event'}, [
-                                                         {<<"acdc_call_stat">>, <<"waiting">>}
-                                                        ,{<<"acdc_call_stat">>, <<"abandoned">>}
-                                                        ,{<<"acdc_call_stat">>, <<"missed">>}
-                                                        ,{<<"acdc_call_stat">>, <<"handled">>}
-                                                        ,{<<"acdc_call_stat">>, <<"exited-position">>}
-                                                        ,{<<"acdc_call_stat">>, <<"processed">>}
+                      {?MODULE, 'handle_quilt_event'}, [
+                                                        {<<"acdc_call_stat">>, <<"waiting">>}
+                                                       ,{<<"acdc_call_stat">>, <<"abandoned">>}
+                                                       ,{<<"acdc_call_stat">>, <<"missed">>}
+                                                       ,{<<"acdc_call_stat">>, <<"handled">>}
+                                                       ,{<<"acdc_call_stat">>, <<"exited-position">>}
+                                                       ,{<<"acdc_call_stat">>, <<"processed">>}
                                                 %,{<<"acdc_status_stat">>, <<"wrapup">>}
-                                                        ,{<<"acdc_status_stat">>, <<"logged_in">>}
-                                                        ,{<<"acdc_status_stat">>, <<"logged_out">>}
-                                                        ,{<<"acdc_status_stat">>, <<"paused">>}
-                                                        ,{<<"acdc_status_stat">>, <<"resume">>}
-                                                        ,{<<"agent">>, <<"login_queue">>}
-                                                        ,{<<"agent">>, <<"logout_queue">>}
+                                                       ,{<<"acdc_status_stat">>, <<"logged_in">>}
+                                                       ,{<<"acdc_status_stat">>, <<"logged_out">>}
+                                                       ,{<<"acdc_status_stat">>, <<"paused">>}
+                                                       ,{<<"acdc_status_stat">>, <<"resume">>}
+                                                       ,{<<"agent">>, <<"login_queue">>}
+                                                       ,{<<"agent">>, <<"logout_queue">>}
                                                 %,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
-                                                        ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
-                                                        ]
+                                                       ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
+                                                       ]
                      }]).
 
 -type state() :: [].
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_listener:start_link(?MODULE, [
                                       {'bindings', ?BINDINGS},
                                       {'responders', ?RESPONDERS}
                                      ], []).
 
--spec handle_quilt_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_quilt_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_quilt_event(JObj, _Props) ->
     handle_specific_event(kz_json:get_value(<<"Event-Name">>, JObj), JObj).
 
@@ -72,17 +71,17 @@ handle_quilt_event(JObj, _Props) ->
 init([]) ->
     {'ok', []}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call: ~p", [Request]),
     {'reply', {'error', 'not_implemented'}, State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast(Msg, State) ->
     lager:debug("unhandled cast: ~p", [Msg]),
     {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(Info, State) ->
     case Info of
         {'EXIT', Pid, 'shutdown'} ->
@@ -110,7 +109,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% event-specific handlers
 %%
 
--spec handle_specific_event(ne_binary(), kz_json:object()) -> 'ok'.
+-spec handle_specific_event(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 handle_specific_event(<<"waiting">>, JObj) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of

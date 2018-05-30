@@ -1,42 +1,51 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz INC
-%%% @doc
-%%% Sends request to start the call to recepient when he's available
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
+%%% @doc Sends request to start the call to recipient when they available.
 %%%
-%%% data: {
-%%%   "timeout": "_minutes_timeout"
-%%%   ,"tries": "_count"
-%%%   ,"try_interval": "_minutes_interval"
-%%%   ,"stop_after": "_minutes_timeout"
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`timeout'</dt>
+%%%   <dd>Timeout in minutes.</dd>
 %%%
-%%% uses cf_capture_group to extract extension number
+%%%   <dt>`tries'</dt>
+%%%   <dd>Number of retries.</dd>
 %%%
-%%% `timeout`, `tries`, `try_interval` & `stop_after` will correct system
-%%% defaults if present
+%%%   <dt>`try_interval'</dt>
+%%%   <dd>Intervals in minutes between each retries.</dd>
 %%%
-%%% usage example
+%%%   <dt>`stop_after'</dt>
+%%%   <dd>Timeout to stop retries in minutes</dd>
+%%% </dl>
 %%%
-%%% 1) create a "pattern callflow" with "patterns": ["^\\*7([0-9]*)$"]
-%%% 2) create simple callflow with number = 401
-%%% 3) dial 401 to start ringing the phones in group, in another phone dial *7401 to make call camping
+%%% `cf_capture_group' is used to extract extension number.
+%%% `timeout', `tries', `try_interval' and `stop_after' will correct system
+%%% defaults if present.
 %%%
+%%% <strong>Usage example:</strong>
+%%% <ol>
+%%%   <li>Create a "pattern callflow" with `"patterns": ["^\\*7([0-9]*)$"]'</li>
+%%%   <li>Create simple callflow with `number = 401'</li>
+%%%   <li>Dial 401 to start ringing the phones in group, in another phone dial *7401 to make call camping</li>
+%%% </ol>
+%%%
+%%%
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_camping_feature).
 
--include("callflow.hrl").
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 
+-include("callflow.hrl").
+
 -record(state, {callflow :: kz_json:object()
                ,is_no_match :: boolean()
-               ,id :: api_ne_binary()
-               ,type :: api_ne_binary()
-               ,number :: ne_binary()
-               ,channels :: kz_json:objects()
+               ,id :: kz_term:api_ne_binary()
+               ,type :: kz_term:api_ne_binary()
+               ,number :: kz_term:ne_binary()
+               ,channels = [] :: kz_json:objects()
                ,config :: kz_json:object()
                }).
 -type state() :: #state{}.
@@ -93,7 +102,7 @@ check_target_type(#state{type = TargetType} = S) ->
 
 -spec get_channels(state(), kapps_call:call()) -> maybe_m(state()).
 get_channels(#state{type = TargetType, id = TargetId} = S, Call) ->
-    lager:debug("Exlpoing channels"),
+    lager:debug("exploring channels"),
     Usernames = case TargetType of
                     <<"device">> -> cf_util:sip_users_from_device_ids([TargetId], Call);
                     <<"user">> ->
@@ -125,34 +134,33 @@ send_request(#state{channels = Channels} = S, Call) ->
 do(Monad, Actions) ->
     lists:foldl(fun(Action, Acc) -> '>>='(Acc, Action) end, Monad, Actions).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, creates the parameters and branches
-%% to cf_group_pickup.
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, creates the parameters and branches
+%% to {@link cf_group_pickup}.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    Ok = do(just([Data, Call]),[fun init/1
-                               ,fun get_target/1
-                               ,fun check_target_type/1
-                               ,fun (State) -> check_self(State, Call) end
-                               ,fun (State) -> get_channels(State, Call) end
-                               ,fun (State) -> send_request(State, Call) end
-                               ]),
+    Ok = do(just([Data, Call])
+           ,[fun init/1
+            ,fun get_target/1
+            ,fun check_target_type/1
+            ,fun (State) -> check_self(State, Call) end
+            ,fun (State) -> get_channels(State, Call) end
+            ,fun (State) -> send_request(State, Call) end
+            ]),
     case Ok of
         {'Just', 'accepted'} ->
-            kapps_call_command:b_prompt(<<"camper-queue">>, Call),
+            _ = kapps_call_command:b_prompt(<<"camper-queue">>, Call),
             cf_exe:stop(Call);
         {'Just', 'connected'} -> 'ok';
         'Nothing' ->
-            kapps_call_command:b_prompt(<<"camper-deny">>, Call),
+            _ = kapps_call_command:b_prompt(<<"camper-deny">>, Call),
             cf_exe:stop(Call)
     end.
 
--spec get_sip_usernames_for_target(ne_binary(), ne_binary(), kapps_call:call()) ->
-                                          ne_binaries().
+-spec get_sip_usernames_for_target(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) ->
+                                          kz_term:ne_binaries().
 get_sip_usernames_for_target(TargetId, TargetType, Call) ->
     Targets = case TargetType of
                   <<"user">> -> kz_attributes:owned_by(TargetId, <<"device">>, Call);
@@ -162,15 +170,16 @@ get_sip_usernames_for_target(TargetId, TargetType, Call) ->
                       []
               end,
     AccountDb = kapps_call:account_db(Call),
-    props:filter_undefined(
-      [get_device_sip_username(AccountDb, DeviceId)
-       || DeviceId <- Targets
-      ]).
+    [SIPUsername
+     || DeviceId <- Targets,
+        SIPUsername <- [get_device_sip_username(AccountDb, DeviceId)],
+        'undefined' =/= SIPUsername
+    ].
 
--spec get_device_sip_username(ne_binary(), ne_binary()) -> api_binary().
+-spec get_device_sip_username(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_ne_binary().
 get_device_sip_username(AccountDb, DeviceId) ->
     {'ok', JObj} = kz_datamgr:open_cache_doc(AccountDb, DeviceId),
-    kz_device:sip_username(JObj).
+    kzd_devices:sip_username(JObj).
 
 -spec no_channels(state(), kapps_call:call()) -> maybe_m('accepted') |
                                                  maybe_m('connected').

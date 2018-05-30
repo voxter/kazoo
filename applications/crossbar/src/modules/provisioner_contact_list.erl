@@ -1,28 +1,24 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%%
-%%% Common functions for the provisioner modules
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Common functions for the provisioner modules
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(provisioner_contact_list).
 
 -export([build/1]).
 
 -include("crossbar.hrl").
 
--record(contact, {id
-                 ,callflow
-                 ,name
-                 ,first_module
-                 ,external_numbers = []
-                 ,internal_numbers = []
+-record(contact, {id :: kz_term:api_ne_binary()
+                 ,callflow :: kz_term:api_ne_binary()
+                 ,name :: kz_term:api_ne_binary()
+                 ,first_module :: kz_term:api_ne_binary()
+                 ,external_numbers = [] :: kz_term:ne_binaries()
+                 ,internal_numbers = [] :: kz_term:ne_binaries()
                  }).
 
--spec build(ne_binary()) -> kz_json:objects().
+-spec build(kz_term:ne_binary()) -> kz_json:objects().
 build(AccountDb) ->
     [contact_to_json(Contact)
      || Contact <- build_contacts(AccountDb)
@@ -71,7 +67,7 @@ get_extension_contacts(AccountDb) ->
 
 get_contact_list_includes(AccountDb) ->
     Default = kapps_config:get_jsons(<<"crossbar.contact_list">>, <<"default_includes">>, []),
-    case kz_account:fetch(AccountDb) of
+    case kzd_accounts:fetch(AccountDb) of
         {'ok', JObj} ->
             kz_json:get_value([<<"contact_list">>, <<"includes">>], JObj, Default);
         {'error', _} ->

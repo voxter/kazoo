@@ -1,9 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017 2600Hz
-%%% @doc
-%%% FS passthrough API
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc FreeSwitch `passthrough' API.
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kapi_fs).
 
 -export([req/1, req_v/1]).
@@ -24,13 +23,12 @@
                                                    (App) -> lists:member(App, ?FS_COMMAND_WHITELIST)
                                                 end}]).
 
-%%--------------------------------------------------------------------
-%% @doc FS Request
-%%     Pass-through of FS dialplan commands
-%% Takes proplist, creates JSON string or error
+%%------------------------------------------------------------------------------
+%% @doc FreeSwitch Request, Pass-through of FreeSwitch dialplan commands.
+%% Takes proplist, creates JSON string or error.
 %% @end
-%%--------------------------------------------------------------------
--spec req(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+%%------------------------------------------------------------------------------
+-spec req(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 req(Prop) when is_list(Prop) ->
     case req_v(Prop) of
         true -> kz_api:build_message(Prop, ?FS_REQ_HEADERS, ?OPTIONAL_FS_REQ_HEADERS);
@@ -39,25 +37,25 @@ req(Prop) when is_list(Prop) ->
 req(JObj) ->
     req(kz_json:to_proplist(JObj)).
 
--spec req_v(api_terms()) -> boolean().
+-spec req_v(kz_term:api_terms()) -> boolean().
 req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?FS_REQ_HEADERS, ?FS_REQ_VALUES, ?FS_REQ_TYPES);
 req_v(JObj) ->
     req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% declare the exchanges used by this API
+%%------------------------------------------------------------------------------
+%% @doc Declare the exchanges used by this API.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
     amqp_util:callctl_exchange().
 
--spec publish_req(ne_binary(), api_terms()) -> 'ok'.
--spec publish_req(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_req(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_req(Queue, JObj) ->
     publish_req(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_req(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_req(Queue, Req, ContentType) ->
     {ok, Payload} = kz_api:prepare_api_payload(Req, ?FS_REQ_VALUES, fun req/1),
     amqp_util:callctl_publish(Queue, Payload, ContentType).

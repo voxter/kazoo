@@ -13,11 +13,6 @@
             "description": "callflow.park default callback timeout",
             "type": "integer"
         },
-        "default_ringback_time": {
-            "default": 120000,
-            "description": "callflow.park default ringback time",
-            "type": "integer"
-        },
         "default_ringback_timeout": {
             "default": 120000,
             "description": "callflow.park default ringback timeout",

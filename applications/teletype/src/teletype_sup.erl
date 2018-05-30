@@ -1,15 +1,12 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_sup).
 -behaviour(supervisor).
 
 -export([start_link/0
-        ,render_farm_name/0
         ]).
 -export([init/1]).
 
@@ -17,54 +14,36 @@
 
 -define(SERVER, ?MODULE).
 
--define(POOL_NAME, 'teletype_render_farm').
--define(POOL_SIZE, kapps_config:get_integer(?APP_NAME, <<"render_farm_workers">>, 50)).
--define(POOL_OVERFLOW, 50).
-
--define(POOL_ARGS, [[{'worker_module', 'teletype_renderer'}
-                    ,{'name', {'local', ?POOL_NAME}}
-                    ,{'size', ?POOL_SIZE}
-                    ,{'max_overflow', ?POOL_OVERFLOW}
-                    ]]).
-
 %% Helper macro for declaring children of supervisor
--define(CHILDREN, [?CACHE(?CACHE_NAME)
-                  ,?WORKER_NAME_ARGS('poolboy', ?POOL_NAME, ?POOL_ARGS)
-                  ,?WORKER('teletype_listener')
+-define(CHILDREN, [?WORKER('teletype_listener')
                   ,?WORKER('teletype_shared_listener')
-                  ,?WORKER('teletype_bindings')
+                  ,?SUPER('teletype_farms_sup')
                   ]).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec render_farm_name() -> ?POOL_NAME.
-render_farm_name() ->
-    ?POOL_NAME.
-
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     kz_util:set_startup(),
     RestartStrategy = 'one_for_one',

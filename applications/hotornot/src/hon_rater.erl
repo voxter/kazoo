@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Given a rate_req, find appropriate rate for the call
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Given a rate_req, find appropriate rate for the call
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(hon_rater).
 
 -export([init/0, handle_req/2]).
@@ -19,7 +17,7 @@ init() ->
         ],
     'ok'.
 
--spec handle_req(kapi_rate:req(), kz_proplist()) -> 'ok'.
+-spec handle_req(kapi_rate:req(), kz_term:proplist()) -> 'ok'.
 handle_req(RateReq, _Props) ->
     'true' = kapi_rate:req_v(RateReq),
     _ = kz_util:put_callid(RateReq),
@@ -58,8 +56,8 @@ maybe_empty_mobile_log(RateReq) ->
         _ -> ""
     end.
 
--spec get_rate_data(kapi_rate:req(), api_ne_binary()) ->
-                           {'ok', api_terms()} |
+-spec get_rate_data(kapi_rate:req(), kz_term:api_ne_binary()) ->
+                           {'ok', kz_term:api_terms()} |
                            {'error', 'no_rate_found'}.
 get_rate_data(RateReq, <<"mobile">>) ->
     ToDID = kz_json:get_value(<<"To-DID">>, RateReq),
@@ -93,8 +91,8 @@ get_rate_data(RateReq, _AuthType) ->
             get_rate_data(RateReq, ToDID, FromDID, Rates)
     end.
 
--spec get_rate_data(kapi_rate:req(), ne_binary(), api_binary(), kz_json:objects()) ->
-                           {'ok', api_terms()} |
+-spec get_rate_data(kapi_rate:req(), kz_term:ne_binary(), kz_term:api_binary(), kz_json:objects()) ->
+                           {'ok', kz_term:api_terms()} |
                            {'error', 'no_rate_found'}.
 get_rate_data(RateReq, ToDID, FromDID, Rates) ->
     lager:debug("candidate rates found, filtering"),
@@ -119,11 +117,11 @@ get_rate_data_from_sorted(RateReq, _ToDID, _FromDID, [Rate|_]) ->
                ),
     {'ok', rate_resp(Rate, RateReq)}.
 
--spec maybe_get_rate_discount(kapi_rate:req()) -> api_binary().
--spec maybe_get_rate_discount(kapi_rate:req(), api_binary()) -> api_binary().
+-spec maybe_get_rate_discount(kapi_rate:req()) -> kz_term:api_binary().
 maybe_get_rate_discount(RateReq) ->
     maybe_get_rate_discount(RateReq, kz_json:get_value(<<"Account-ID">>, RateReq)).
 
+-spec maybe_get_rate_discount(kapi_rate:req(), kz_term:api_binary()) -> kz_term:api_binary().
 maybe_get_rate_discount(_RateReq, 'undefined') -> 'undefined';
 maybe_get_rate_discount(RateReq, AccountId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -138,39 +136,39 @@ maybe_get_rate_discount(RateReq, AccountId) ->
             kz_json:get_value([<<"pvt_discounts">>, Classification, <<"percentage">>], Def)
     end.
 
--spec rate_resp(kz_json:object(), kapi_rate:req()) -> kz_proplist().
+-spec rate_resp(kz_json:object(), kapi_rate:req()) -> kz_term:proplist().
 rate_resp(Rate, RateReq) ->
-    RateCost = kzd_rate:rate_cost(Rate),
-    RateSurcharge = kzd_rate:surcharge(Rate),
-    RateMinimum = kzd_rate:minimum(Rate, hotornot_config:default_minimum()),
+    RateCost = wht_util:dollars_to_units(kzd_rates:rate_cost(Rate, 0.0)),
+    RateSurcharge = wht_util:dollars_to_units(kzd_rates:rate_surcharge(Rate, 0.0)),
+    RateMinimum = kzd_rates:rate_minimum(Rate, hotornot_config:default_minimum()),
     BaseCost = wht_util:base_call_cost(RateCost, RateMinimum, RateSurcharge),
-    PrivateCost = kzd_rate:private_cost(Rate),
-    lager:debug("base cost for a minute call: ~p", [BaseCost]),
+    PrivateCost = kzd_rates:private_cost(Rate),
+    lager:debug("base cost for a call: ~p", [BaseCost]),
     ShouldUpdateCalleeId = should_update_callee_id(RateReq),
 
     [{<<"Rate">>, kz_term:to_binary(RateCost)}
-    ,{<<"Rate-Increment">>, kzd_rate:increment(Rate, hotornot_config:default_increment())}
+    ,{<<"Rate-Increment">>, kzd_rates:rate_increment(Rate, hotornot_config:default_increment())}
     ,{<<"Rate-Minimum">>, kz_term:to_binary(RateMinimum)}
     ,{<<"Discount-Percentage">>, maybe_get_rate_discount(RateReq)}
     ,{<<"Surcharge">>, kz_term:to_binary(RateSurcharge)}
-    ,{<<"Prefix">>, kzd_rate:prefix(Rate)}
-    ,{<<"Rate-Name">>, kzd_rate:name(Rate)}
-    ,{<<"Rate-Description">>, kzd_rate:description(Rate)}
+    ,{<<"Prefix">>, kzd_rates:prefix(Rate)}
+    ,{<<"Rate-Name">>, kzd_rates:rate_name(Rate)}
+    ,{<<"Rate-Description">>, kzd_rates:description(Rate)}
     ,{<<"Rate-ID">>, kz_doc:id(Rate)}
     ,{<<"Base-Cost">>, kz_term:to_binary(BaseCost)}
     ,{<<"Pvt-Cost">>, kz_term:to_binary(PrivateCost)}
-    ,{<<"Rate-NoCharge-Time">>, kzd_rate:no_charge(Rate, hotornot_config:default_nocharge())}
+    ,{<<"Rate-NoCharge-Time">>, kzd_rates:rate_nocharge_time(Rate, hotornot_config:default_nocharge())}
     ,{<<"Msg-ID">>, kz_api:msg_id(RateReq)}
     ,{<<"Call-ID">>, kz_api:call_id(RateReq)}
     ,{<<"Update-Callee-ID">>, ShouldUpdateCalleeId}
-    ,{<<"Rate-Version">>, kzd_rate:version(Rate)}
-    ,{<<"Ratedeck-ID">>, kzd_rate:ratedeck(Rate)}
+    ,{<<"Rate-Version">>, kzd_rates:rate_version(Rate)}
+    ,{<<"Ratedeck-ID">>, kzd_rates:ratedeck_id(Rate)}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec should_update_callee_id(ne_binary() | kapi_rate:req()) -> boolean().
+-spec should_update_callee_id(kz_term:ne_binary() | kapi_rate:req()) -> boolean().
 should_update_callee_id(?NE_BINARY = AccountId) ->
-    case kz_account:fetch(AccountId) of
+    case kzd_accounts:fetch(AccountId) of
         {'ok', AccountDoc} ->
             kz_json:is_true([<<"caller_id_options">>, <<"show_rate">>], AccountDoc, 'false');
         {'error', _R} ->

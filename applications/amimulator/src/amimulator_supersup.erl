@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_supersup).
 -behaviour(supervisor).
 
@@ -5,7 +10,7 @@
 
 -include("amimulator.hrl").
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
@@ -23,7 +28,7 @@ before_stop() ->
 %% supervisor callbacks
 %%
 
--spec init([]) -> sup_init_ret().
+-spec init([]) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 1,

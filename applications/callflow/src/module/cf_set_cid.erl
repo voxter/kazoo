@@ -1,16 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Set Caller ID.
 %%%
-%%% params:
-%%% caller_id_name & caller_id_number
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`caller_id_name'</dt>
+%%%   <dd>Caller ID Name.</dd>
 %%%
-%%% if one of them is empty then module will restore original values
+%%%   <dt>`caller_id_number'</dt>
+%%%   <dd>Caller ID Number.</dd>
+%%% </dl>
 %%%
+%%% If one of them is empty then module will restore original values.
+%%%
+%%%
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_set_cid).
 
 -behaviour(gen_cf_action).
@@ -34,13 +40,13 @@ handle(Data, Call) ->
     cf_exe:continue(Call1).
 
 
--spec set_cid_name(api_binary(), kapps_call:call()) -> kapps_call:call().
+-spec set_cid_name(kz_term:api_binary(), kapps_call:call()) -> kapps_call:call().
 set_cid_name(<<>>, Call) ->
     kapps_call:kvs_erase('rewrite_cid_name', Call);
 set_cid_name(Name, Call) ->
     kapps_call:kvs_store('rewrite_cid_name', Name, Call).
 
--spec set_cid_number(api_binary(), kapps_call:call()) -> kapps_call:call().
+-spec set_cid_number(kz_term:api_binary(), kapps_call:call()) -> kapps_call:call().
 set_cid_number(<<>>, Call) ->
     kapps_call:kvs_erase('rewrite_cid_number', Call);
 set_cid_number(Number, Call) ->

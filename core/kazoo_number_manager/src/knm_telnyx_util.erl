@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
 %%% @doc
-%%%
-%%%
-%%%
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_telnyx_util).
 
 -export([did/1]).
@@ -19,6 +15,11 @@
 
 -define(CARRIER, 'knm_telnyx').
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-define(DEBUG_WRITE(Format, Args), ?debugFmt(Format, Args)).
+-define(DEBUG_APPEND(Format, Args), ?debugFmt(Format, Args)).
+-else.
 -define(DEBUG, kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"debug">>, 'false')).
 -define(DEBUG_FILE, "/tmp/telnyx.json").
 -define(DEBUG_WRITE(Format, Args),
@@ -29,6 +30,15 @@
         _ = ?DEBUG
         andalso file:write_file(?DEBUG_FILE, io_lib:format(Format, Args), ['append'])
        ).
+-endif.
+
+-define(SHOULD_KEEP_BEST_EFFORT
+       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_keep_best_effort">>, 'false')
+       ).
+
+-define(SHOULD_FILTER_RATES
+       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_filter_rates">>, 'false')
+       ).
 
 -define(USER, kapps_config:get_ne_binary(?MOD_CONFIG_CAT, <<"user">>)).
 -define(TOKEN, kapps_config:get_ne_binary(?MOD_CONFIG_CAT, <<"token">>)).
@@ -36,19 +46,10 @@
 -define(DOMAIN, "api.telnyx.com").
 -define(URL(Path), "https://" ?DOMAIN "/origination/" ++ filename:join(Path)).
 
--define(SHOULD_KEEP_BEST_EFFORT,
-        kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_keep_best_effort">>, 'false')).
-
--define(SHOULD_FILTER_RATES,
-        kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_filter_rates">>, 'false')).
-
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Turns +13129677542 into %2B13129677542.
+%%------------------------------------------------------------------------------
+%% @doc Turns +13129677542 into %2B13129677542.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec did(knm_number:knm_number()) -> nonempty_string().
 did(Number) ->
     binary_to_list(
@@ -58,11 +59,12 @@ did(Number) ->
 
 
 -spec req(atom(), [nonempty_string()]) -> kz_json:object().
--spec req(atom(), [nonempty_string()], kz_json:object()) -> kz_json:object().
 req(Method, Path) ->
     req(Method, Path, kz_json:new()).
 
 -ifdef(TEST).
+
+-spec req(atom(), [nonempty_string()], kz_json:object()) -> kz_json:object().
 req('post', ["number_searches"], JObj) ->
     case kz_json:get_value([<<"search_descriptor">>, <<"prefix">>], JObj) of
         <<"800">> -> rep_fixture("telnyx_tollfree_search.json");
@@ -96,6 +98,8 @@ rep_fixture(Fixture) ->
     rep({'ok', 200, [], list_to_binary(knm_util:fixture(Fixture))}).
 
 -else.
+
+-spec req(atom(), [nonempty_string()], kz_json:object()) -> kz_json:object().
 req('delete'=_Method, Path, EmptyJObj) ->
     Url = ?URL(Path),
     Headers = http_headers(EmptyJObj),
@@ -189,12 +193,12 @@ maybe_filter_rates('true', JObj) ->
     kz_json:set_value(<<"result">>, Results, JObj).
 
 -spec maybe_apply_limit(kz_json:object()) -> kz_json:object().
--spec maybe_apply_limit(kz_json:object(), ne_binary()) -> kz_json:object().
 maybe_apply_limit(JObj) ->
     maybe_apply_limit(maybe_apply_limit(JObj, <<"result">>)
                      ,<<"inexplicit_result">>
                      ).
 
+-spec maybe_apply_limit(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
 maybe_apply_limit(JObj, ResultField) ->
     Limit = kz_json:get_integer_value(<<"limit">>, JObj, 100),
     Result = take(Limit, kz_json:get_value(ResultField, JObj, [])),

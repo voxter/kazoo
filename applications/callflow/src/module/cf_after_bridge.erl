@@ -1,17 +1,20 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
-%%% @doc
-%%% set [park|transfer|hangup]_after_bridge variable
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Sets `[park|transfer|hangup]_after_bridge' variable.
 %%%
-%%% "data":{
-%%%   "action": "park" | "transfer" | "hangup",
-%%%   "data":"some_extension_number" // number to transfer to or bool
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`action'</dt>
+%%%   <dd> Possible values: `park', `transfer', `hangup'</dd>
+%%%
+%%%   <dt>`data'</dt>
+%%%   <dd>Some extension number, the number to transfer to, if the `action'
+%%%   is `transfer', otherwise a boolean indicating should do the action.</dd>
+%%% </dl>
+%%%
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
-
+%%%-----------------------------------------------------------------------------
 -module(cf_after_bridge).
 
 -behaviour(gen_cf_action).
@@ -20,11 +23,10 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     PostBridgeAction = kz_json:get_value(<<"action">>, Data),
@@ -34,7 +36,7 @@ handle(Data, Call) ->
     kapps_call_command:set(Action, kz_json:new(), Call),
     cf_exe:continue(Call).
 
--spec build_action(ne_binary(), ne_binary()) -> kz_json:object().
+-spec build_action(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().
 build_action(<<"park">>, ShouldPark) ->
     kz_json:from_list([{<<"Park-After-Pickup">>, kz_term:is_true(ShouldPark)}]);
 build_action(<<"hangup">>, ShouldHangup) ->

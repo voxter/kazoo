@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% A Number Manager module for carrier: VoIPInnovations.com
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc A Number Manager module for carrier: VoIPInnovations.com
+%%% @author Pierre Fenoll, Joe Black
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_voip_innovations).
 -behaviour(knm_gen_carrier).
 
@@ -27,7 +23,19 @@
 -include("knm.hrl").
 
 -define(KNM_VI_CONFIG_CAT, <<(?KNM_CONFIG_CAT)/binary, ".voip_innovations">>).
+-define(VI_DEFAULT_NAMESPACE, "http://tempuri.org/").
 
+%% (XML POST)
+-define(VI_URL_V2, "https://backoffice.voipinnovations.com/api2.pl").
+%% (Web Service)
+-define(VI_URL_V3, "https://backoffice.voipinnovations.com/Services/APIService.asmx").
+-define(VI_URL_V3_SANDBOX, "http://dev.voipinnovations.com/VOIP/Services/APIService.asmx").
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-define(DEBUG_WRITE(Format, Args), ?debugFmt(Format, Args)).
+-define(DEBUG_APPEND(Format, Args), ?debugFmt(Format, Args)).
+-else.
 -define(VI_DEBUG, kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"debug">>, 'false')).
 -define(VI_DEBUG_FILE, "/tmp/voipinnovations.xml").
 -define(DEBUG_WRITE(Format, Args),
@@ -38,77 +46,70 @@
         _ = ?VI_DEBUG
         andalso file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args), ['append'])
        ).
+-endif.
 
--define(VI_DEFAULT_NAMESPACE, "http://tempuri.org/").
 
--define(IS_SANDBOX_PROVISIONING_TRUE,
-        kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')).
--define(IS_PROVISIONING_ENABLED,
-        kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"enable_provisioning">>, 'true')).
-
--define(VI_URL_V2, %% (XML POST)
-        "https://backoffice.voipinnovations.com/api2.pl").
--define(VI_URL_V3, %% (Web Service)
-        "https://backoffice.voipinnovations.com/Services/APIService.asmx").
--define(VI_URL_V3_SANDBOX,
-        "http://dev.voipinnovations.com/VOIP/Services/APIService.asmx").
--define(URL_IN_USE,
-        case ?IS_SANDBOX_PROVISIONING_TRUE of 'true' -> ?VI_URL_V3_SANDBOX; 'false' -> ?VI_URL_V3 end).
+-define(IS_SANDBOX_PROVISIONING_TRUE
+       ,kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')
+       ).
+-define(IS_PROVISIONING_ENABLED
+       ,kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"enable_provisioning">>, 'true')
+       ).
 
 -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
 -define(VI_PASSWORD, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, <<>>)).
 -define(VI_ENDPOINT_GROUP, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"endpoint_group">>, <<>>)).
 
+-define(URL_IN_USE
+       ,case ?IS_SANDBOX_PROVISIONING_TRUE of
+            'true' -> ?VI_URL_V3_SANDBOX;
+            'false' -> ?VI_URL_V3
+        end
+       ).
+
 -define(API_SUCCESS, <<"100">>).
 
--type soap_response() :: {'ok', xml_el()} | {'error', any()}.
+-type soap_response() :: {'ok', kz_types:xml_el()} | {'error', any()}.
 -type to_json_ret() :: {'ok', kz_json:object() | kz_json:objects()} |
                        {'error', any()}.
 
 %%% API
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec info() -> map().
 info() ->
     #{?CARRIER_INFO_MAX_PREFIX => 3
      }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
 
-%% @public
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(_Number) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check with carrier if these numbers are registered with it.
+%%------------------------------------------------------------------------------
+%% @doc Check with carrier if these numbers are registered with it.
 %% @end
-%%--------------------------------------------------------------------
--spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
-                                      {error, any()}.
+%%------------------------------------------------------------------------------
+-spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
+                                              {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the system for a quantity of available numbers in a rate center
+%%------------------------------------------------------------------------------
+%% @doc Query the system for a quantity of available numbers in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_search:options()) ->
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_search:options()) ->
                           {'ok', list()} |
                           {'error', any()}.
 find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
@@ -124,12 +125,10 @@ find_numbers(<<NXX:6/binary,_/binary>>, Quantity, Options) ->
     MaybeJson = to_json('find_numbers', Quantity, Resp),
     to_numbers(MaybeJson, knm_search:query_id(Options)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -148,12 +147,10 @@ acquire_number(Number) ->
             maybe_return(Ret, Number)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) ->
                                knm_number:knm_number().
 disconnect_number(Number) ->
@@ -173,14 +170,13 @@ disconnect_number(Number) ->
             maybe_return(Ret, Number)
     end.
 
-%% @public
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'true'.
 
 
 %%% Internals
 
--spec 'remove +1'(ne_binary()) -> ne_binary().
+-spec 'remove +1'(kz_term:ne_binary()) -> kz_term:ne_binary().
 'remove +1'(<<"+", Rest/binary>>) ->
     'remove +1'(Rest);
 'remove +1'(<<"1", Rest/binary>>) ->
@@ -188,7 +184,7 @@ should_lookup_cnam() -> 'true'.
 'remove +1'(Else) ->
     Else.
 
--spec to_numbers(to_json_ret(), ne_binary()) ->
+-spec to_numbers(to_json_ret(), kz_term:ne_binary()) ->
                         {'ok', [tuple()]} |
                         {'error', any()}.
 to_numbers({'error',_R}=Error, _) ->
@@ -336,7 +332,7 @@ body("assignDID", Numbers=[_|_]) ->
     ["<tns:didParams>",
      [ ["<tns:DIDParam>"
         "<tns:tn>", Number, "</tns:tn>"
-        "<tns:epg>", ?VI_ENDPOINT_GROUP, "</tns:epg>"
+        "<tns:endpointId>", ?VI_ENDPOINT_GROUP, "</tns:endpointId>"
         "</tns:DIDParam>"]
        || Number <- Numbers
      ],
@@ -359,7 +355,7 @@ soap_request(Action, Body) ->
               ,{"User-Agent", ?KNM_USER_AGENT}
               ,{"Content-Type", "text/xml;charset=UTF-8"}
               ],
-    HTTPOptions = [{'ssl', [{'verify', 'verify_none'}]}
+    HTTPOptions = [{'ssl', [{'verify', 'verify_none'}, {versions, ['tlsv1.2']}]}
                   ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'body_format', 'string'}
@@ -390,7 +386,7 @@ handle_response({'error', _}=E) ->
     lager:debug("request error: ~p", [E]),
     E.
 
--spec verify_response(xml_el()) -> soap_response().
+-spec verify_response(kz_types:xml_el()) -> soap_response().
 verify_response(Xml) ->
     RespCode = kz_xml:get_value("//responseCode/text()", Xml),
     RespMsg = kz_xml:get_value("//responseMessage/text()", Xml),

@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% This callflow module can be used to prepend a value (or values) to the caller-id-name and caller-id-number of a call.
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc This callflow module can be used to prepend a value (or values) to the
+%%% caller ID (Name and Number) of a call.
+%%% @author Jon Blanton
+%%% @author Mark Magnusson
 %%% @end
-%%%
-%%% @contributors
-%%%   Jon Blanton
-%%%   Mark Magnusson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_prepend_cid).
 
 -behaviour(gen_cf_action).
@@ -20,7 +18,7 @@
 handle(Data, Call) ->
     handle(Data, Call, kz_json:get_ne_binary_value(<<"action">>, Data, <<"prepend">>)).
 
--spec handle(ne_binary(), kz_json:object(), kapps_call:call()) -> 'ok'.
+-spec handle(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 handle(_Data, Call, <<"reset">>) ->
     lager:info("reset prepend cid"),
     set_values('undefined', 'undefined', Call);
@@ -44,7 +42,7 @@ handle(Data, Call, <<"prepend">>) ->
     lager:info("update prepend cid to <~s> ~s", [Name, Number]),
     set_values(Name, Number, Call).
 
--spec set_values(api_binary(), api_binary(), kapps_call:call()) -> 'ok'.
+-spec set_values(kz_term:api_ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> 'ok'.
 set_values(Name, Number, Call) ->
     Updates = [fun(C) -> kapps_call:kvs_store('prepend_cid_number', Number, C) end
               ,fun(C) -> kapps_call:kvs_store('prepend_cid_name', Name, C) end

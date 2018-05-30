@@ -1,10 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @author Stephen Gibberd <stephen.gibberd@2600hz.com>
-%%% This process runs on each node in the Kazoo cluster. It collects information
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc This process runs on each node in the Kazoo cluster. It collects information
 %%% on each node, and regularly sends the information the stats application.
-%%% For ecallmgr nodes, it also collects ecallmgr information, and
+%%% For `ecallmgr' nodes, it also collects `ecallmgr' information, and
 %%% sip events statistics.
-%%%-------------------------------------------------------------------
+%%% @end
+%%%
+%%% @author Stephen Gibberd <stephen.gibberd@2600hz.com>
+%%%-----------------------------------------------------------------------------
 -module(kazoo_stats).
 -behaviour(gen_server).
 
@@ -37,16 +40,19 @@
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
--spec start_link(pos_integer()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec start_link() -> kz_types:startlink_ret().
 start_link() -> start_link(?SEND_INTERVAL).
+
+-spec start_link(pos_integer()) -> kz_types:startlink_ret().
 start_link(Send_stats) ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [Send_stats], []).
 
@@ -59,9 +65,9 @@ getdb() ->
     gen_server:call(?SERVER, 'get_db').
 
 -spec increment_counter(any()) -> 'ok'.
--spec increment_counter(any(), any()) -> 'ok'.
 increment_counter(Item) -> send_counter(Item, 1).
 
+-spec increment_counter(any(), any()) -> 'ok'.
 increment_counter(Realm, Item) ->
     gen_server:cast(?SERVER, {'add', Realm, Item, 1}).
 
@@ -73,41 +79,24 @@ send_counter(Item, Value) when is_integer(Value) ->
 send_absolute(Item, Value) ->
     gen_server:cast(?SERVER, {'store', Item, Value}).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([Send_stats]) ->
     erlang:send_after(Send_stats, self(), {'send_stats', Send_stats}),
     {'ok', #state{send_stats=Send_stats}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call('get_db', _From, State) ->
     {'reply', State, State};
 handle_call(Other,_From,State) ->
@@ -115,17 +104,11 @@ handle_call(Other,_From,State) ->
     {'reply', 'ok', State}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('stop', State) ->
     {'stop', 'ok', State};
 handle_cast({Operation, Key, Val}, State) when Operation == 'add';
@@ -137,17 +120,11 @@ handle_cast({Operation,Realm,Key,Val}, State) when Operation == 'add';
 handle_cast(_,State) ->
     {'noreply',State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'send_stats', SendStats}=Info,State) ->
     send_stats(State#state.variables, State#state.sip),
     erlang:send_after(SendStats, self(), Info),
@@ -155,35 +132,28 @@ handle_info({'send_stats', SendStats}=Info,State) ->
 handle_info(_Info, State) ->
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) -> 'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
 %%% #state{}  stores statistics in the variables field, and sip event
 %%% statistics in the sip field. store_value() either increments the existing

@@ -1,9 +1,7 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% data adapter behaviour
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc data adapter behaviour
 %%% @end
-%%% @contributors
 %%%-----------------------------------------------------------------------------
 -module(kzs_doc).
 
@@ -22,7 +20,7 @@
 
 -include("kz_data.hrl").
 
--type copy_function() :: fun((map(), ne_binary(), kz_json:object(), kz_proplist()) ->
+-type copy_function() :: fun((map(), kz_term:ne_binary(), kz_json:object(), kz_term:proplist()) ->
                                     {'ok', kz_json:object()} | data_error()).
 -export_type([copy_function/0]).
 -define(COPY_DOC_OVERRIDE_PROPERTY, 'override_existing_document').
@@ -30,13 +28,13 @@
 
 %% Document related functions --------------------------------------------------
 
--spec open_doc(map(), ne_binary(), ne_binary(), kz_proplist()) ->
+-spec open_doc(map(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
                       {'ok', kz_json:object()} |
                       data_error().
 open_doc(#{server := {App, Conn}}, DbName, DocId, Options) ->
     App:open_doc(Conn, DbName, DocId, Options).
 
--spec save_doc(map(), ne_binary(), kz_json:object(), kz_proplist()) ->
+-spec save_doc(map(), kz_term:ne_binary(), kz_json:object(), kz_term:proplist()) ->
                       {'ok', kz_json:object()} |
                       data_error().
 save_doc(#{server := {App, Conn}}, DbName, Doc, Options) ->
@@ -46,12 +44,12 @@ save_doc(#{server := {App, Conn}}, DbName, Doc, Options) ->
                            Ok;
         Else -> Else
     catch
-        Ex:Er -> lager:error("exception ~p : ~p", [Ex, Er]),
-                 'failed'
+        Ex:Er -> ?LOG_DEBUG("exception ~p : ~p", [Ex, Er]),
+                 {'error', 'failed'}
     end.
 
 
--spec save_docs(map(), ne_binary(), kz_json:objects(), kz_proplist()) ->
+-spec save_docs(map(), kz_term:ne_binary(), kz_json:objects(), kz_term:proplist()) ->
                        {'ok', kz_json:objects()} |
                        data_error().
 save_docs(#{server := {App, Conn}}, DbName, Docs, Options) ->
@@ -65,13 +63,13 @@ save_docs(#{server := {App, Conn}}, DbName, Docs, Options) ->
         _Ex:Er -> {'error', {_Ex, Er}}
     end.
 
--spec lookup_doc_rev(map(), ne_binary(), ne_binary()) ->
-                            {'ok', ne_binary()} |
+-spec lookup_doc_rev(map(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                            {'ok', kz_term:ne_binary()} |
                             data_error().
 lookup_doc_rev(#{server := {App, Conn}}, DbName, DocId) ->
     App:lookup_doc_rev(Conn, DbName, DocId).
 
--spec ensure_saved(map(), ne_binary(), kz_json:object(), kz_proplist()) ->
+-spec ensure_saved(map(), kz_term:ne_binary(), kz_json:object(), kz_term:proplist()) ->
                           {'ok', kz_json:object()} |
                           data_error().
 ensure_saved(#{server := {App, Conn}}=Map, DbName, Doc, Options) ->
@@ -100,7 +98,7 @@ maybe_ensure_saved_others(<<"_design", _/binary>>, Map, DbName, Doc, Options) ->
 maybe_ensure_saved_others(_, _, _, _, _) -> 'ok'.
 
 
--spec del_doc(map(), ne_binary(), kz_json:object() | ne_binary(), kz_proplist()) ->
+-spec del_doc(map(), kz_term:ne_binary(), kz_json:object() | kz_term:ne_binary(), kz_term:proplist()) ->
                      {'ok', kz_json:object()} |
                      data_error().
 del_doc(Server, DbName, ?NE_BINARY=DocId, Options) ->
@@ -122,7 +120,7 @@ del_doc(#{server := {App, Conn}}=Server, DbName, Doc, Options) ->
             failed
     end.
 
--spec del_docs(map(), ne_binary(), kz_json:objects() | ne_binaries(), kz_proplist()) ->
+-spec del_docs(map(), kz_term:ne_binary(), kz_json:objects() | kz_term:ne_binaries(), kz_term:proplist()) ->
                       {'ok', kz_json:objects()} |
                       data_error().
 del_docs(#{server := {App, Conn}}=Server, DbName, Docs, Options) ->
@@ -137,7 +135,7 @@ del_docs(#{server := {App, Conn}}=Server, DbName, Docs, Options) ->
         _Ex:Er -> {'error', {_Ex, Er}}
     end.
 
--spec prepare_doc_for_del(map(), ne_binary(), kz_json:object() | ne_binary()) ->
+-spec prepare_doc_for_del(map(), kz_term:ne_binary(), kz_json:object() | kz_term:ne_binary()) ->
                                  kz_json:object().
 prepare_doc_for_del(Server, Db, ?NE_BINARY=DocId) ->
     prepare_doc_for_del(Server, Db, kz_json:from_list([{<<"_id">>, DocId}]));
@@ -158,12 +156,12 @@ prepare_doc_for_del(Server, DbName, Doc) ->
        | kzs_publish:publish_fields(Doc)
       ]).
 
--spec prepare_doc_for_save(ne_binary(), kz_json:object()) -> {kz_json:object(), kz_json:object()}.
--spec prepare_doc_for_save(ne_binary(), kz_json:object(), boolean()) -> {kz_json:object(), kz_json:object()}.
+-spec prepare_doc_for_save(kz_term:ne_binary(), kz_json:object()) -> {kz_json:object(), kz_json:object()}.
 prepare_doc_for_save(Db, JObj) ->
     Doc = kz_json:delete_key(<<"id">>, JObj),
     prepare_doc_for_save(Db, Doc, kz_term:is_empty(kz_doc:id(Doc))).
 
+-spec prepare_doc_for_save(kz_term:ne_binary(), kz_json:object(), boolean()) -> {kz_json:object(), kz_json:object()}.
 prepare_doc_for_save(_Db, JObj, 'true') ->
     prepare_publish(maybe_set_docid(JObj));
 prepare_doc_for_save(Db, JObj, 'false') ->
@@ -175,10 +173,10 @@ prepare_publish(JObj) ->
     {maybe_tombstone(JObj), kz_json:from_list(kzs_publish:publish_fields(JObj))}.
 
 -spec maybe_tombstone(kz_json:object()) -> kz_json:object().
--spec maybe_tombstone(kz_json:object(), boolean()) -> kz_json:object().
 maybe_tombstone(JObj) ->
     maybe_tombstone(JObj, kz_json:is_true(<<"_deleted">>, JObj, 'false')).
 
+-spec maybe_tombstone(kz_json:object(), boolean()) -> kz_json:object().
 maybe_tombstone(JObj, 'true') ->
     kz_json:from_list(
       [{<<"_id">>, kz_doc:id(JObj)}
@@ -198,15 +196,14 @@ maybe_set_docid(Doc) ->
 default_copy_function('true') -> fun ensure_saved/4;
 default_copy_function('false') -> fun save_doc/4.
 
--spec copy_doc(map(), map(), copy_doc(), kz_proplist()) ->
+-spec copy_doc(map(), map(), copy_doc(), kz_term:proplist()) ->
                       {'ok', kz_json:object()} |
                       data_error().
 copy_doc(Src, Dst, CopySpec, Options) ->
     SaveFun = default_copy_function(props:is_defined(?COPY_DOC_OVERRIDE_PROPERTY, Options)),
     copy_doc(Src, Dst, CopySpec, SaveFun, props:delete(?COPY_DOC_OVERRIDE_PROPERTY, Options)).
 
-
--spec copy_doc(map(), map(), copy_doc(), copy_function(), kz_proplist()) ->
+-spec copy_doc(map(), map(), copy_doc(), copy_function(), kz_term:proplist()) ->
                       {'ok', kz_json:object()} |
                       data_error().
 copy_doc(Src, Dst, CopySpec, CopyFun, Opts) ->
@@ -220,7 +217,7 @@ copy_doc(Src, Dst, CopySpec, CopyFun, Opts) ->
     case open_doc(Src, SourceDbName, SourceDocId, Options) of
         {'ok', SourceDoc} ->
             Props = [{<<"_id">>, DestDocId}
-                     | maybe_set_account_db(kz_doc:account_db(SourceDoc), SourceDbName, DestDbName)
+                    ,{<<"pvt_account_db">>, DestDbName}
                     ],
             DestinationDoc = kz_json:set_values(Props, kz_json:delete_keys(?DELETE_KEYS, SourceDoc)),
             Doc = copy_transform(Transform, SourceDoc, DestinationDoc),
@@ -239,7 +236,7 @@ copy_transform('undefined', _SourceDoc, DestinationDoc) ->
 copy_transform(Fun, SourceDoc, DestinationDoc) ->
     Fun(SourceDoc, DestinationDoc).
 
--spec copy_attachments(map(), map(), copy_doc(), {kz_json:json_terms(), kz_json:path()}, ne_binary()) ->
+-spec copy_attachments(map(), map(), copy_doc(), {kz_json:json_terms(), kz_json:path()}, kz_term:ne_binary()) ->
                               {'ok', kz_json:object()} |
                               {'error', any()}.
 copy_attachments(_Src, Dst, CopySpec, {[], []}, _) ->
@@ -269,12 +266,7 @@ copy_attachments(Src, Dst, CopySpec, {[JObj | JObjs], [Key | Keys]}, Rev) ->
         Error -> Error
     end.
 
--spec maybe_set_account_db(api_binary(), ne_binary(), ne_binary()) -> kz_proplist().
-maybe_set_account_db(DB, DB, DestDbName) ->
-    [{<<"pvt_account_db">>, DestDbName}];
-maybe_set_account_db(_1, _, _) -> [].
-
--spec move_doc(map(), map(), copy_doc(), kz_proplist()) ->
+-spec move_doc(map(), map(), copy_doc(), kz_term:proplist()) ->
                       {'ok', kz_json:object()} |
                       data_error().
 move_doc(Src, Dst, CopySpec, Options) ->

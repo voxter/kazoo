@@ -1,45 +1,55 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%% Intercept a call in the specified device/user/extension
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Intercept a call in the specified device/user/extension.
 %%%
-%%% data: {
-%%%   "type" : "user | device | extension"
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`type'</dt>
+%%%   <dd>"Can be one of the `group', `user', `device' or `extension' values.</dd>
+%%% </dl>
 %%%
-%%% uses cf_capture_group and type to build parameters to branch to cf_intercept
+%%% This feature is using Callflow `cf_capture_group' and type to build parameters
+%%% to branch to {@link cf_intercept}.
 %%%
-%%% user -> lookup groups by number  (WIP)
-%%% device -> lookup device by sip username
-%%% extension -> lookup callflows
+%%% <strong>Actions will result in:</strong>
+%%% <ul>
+%%%   <li>`group': Lookup groups by number (WIP)</li>
+%%%   <li>`user': Lookup groups by number (WIP)</li>
+%%%   <li>`device': Lookup device by SIP user name</li>
+%%%   <li>`extension': Lookup Callflows</li>
+%%% </ul>
 %%%
-%%% usage example for BLF on spa504g
-%%% the sip user of device we want to monitor for this example is 55578547
-%%% on "Phone" Tab, go to "Line Key 2" and set
-%%%   Extension : disabled
-%%%   Share Call Appearance : private
-%%%   Extended Function :fnc=blf+cp;sub=55578547@sip.domain.com;ext=55578547@sip.domain.com
+%%% <h4>Usage Example for BLF on `spa504g'</h4>
+%%% The SIP user of device we want to monitor for this example is 55578547.
 %%%
-%%% on "Attendant Console" Tab, set "Attendant Console Call Pickup Code:" to *98# instead of *98
-%%% this way the username part of the subscription is passed along (*9855578547)
+%%% <ol>
+%%%    <li>On <i>Phone</i> Tab, go to <i>Line Key 2</i> and set:
+%%%      <ul>
+%%%        <li><strong>Extension: </strong><i>disabled</i></li>
+%%%        <li><strong>Share Call Appearance: </strong><i>private</i></li>
+%%%        <li><strong>Extended Function: </strong>`:fnc=blf+cp;sub=55578547@sip.domain.com;ext=55578547@sip.domain.com'</li>
+%%%      </ul>
+%%%    </li>
 %%%
-%%% create a "pattern callflow" with "patterns": ["^\\*98([0-9]*)$"]
-%%% set the parameter "type" to "device"
+%%%    <li>On <i>Attendant Console</i> Tab, set <i>Attendant Console Call Pickup Code</i> to `*98#' instead of `*98'.
+%%%        This way the user name part of the subscription is passed along (`*9855578547').
+%%%    </li>
+%%%
+%%%    <li>Create a <i>pattern</i> Callflow with `patterns' key as: `["^\\*98([0-9]*)$"]'. Set the parameter `type' to `device'.</li>
+%%% </ol>
+%%%
+%%% <h4>Usage Example for Extension Pickup</h4>
+%%% <ol>
+%%%   <li>Create a <i>pattern</i> Callflow with `patterns' key as: `["^\\*7([0-9]*)$"]' and set the parameter `type' to `extension'.</li>
+%%%   <li>Create simple Callflow with `number' set as `401' and set the target to a <i>ring group</i> or <i>page group</i>.</li>
+%%%   <li>Dial `401' to start ringing the phones in group, in another phone dial `*7401' to pickup the call</li>
+%%% </ol>
 %%%
 %%%
-%%% usage example for extension pickup
-%%%
-%%% 1) create a "pattern callflow" with "patterns": ["^\\*7([0-9]*)$"] and set the parameter "type" to "extension"
-%%% 2) create simple callflow with number = 401 and set the target to a "ring group" or "page group"
-%%% 3) dial 401 to start ringing the phones in group, in another phone dial *7401 to pickup the call
-%%%
-%%%
-%%%
+%%% @author SIPLABS LLC (Mikhail Rodionov)
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Mikhail Rodionov)
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_intercept_feature).
 
 -behaviour(gen_cf_action).
@@ -48,13 +58,11 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, creates the parameters and branches
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, creates the parameters and branches
 %% to cf_intercept.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Number = kapps_call:kvs_fetch('cf_capture_group', Call),
@@ -70,7 +78,7 @@ handle(Data, Call) ->
             cf_exe:stop(Call)
     end.
 
--spec maybe_intercept(kz_json:object(), kapps_call:call(), kz_proplist()) -> 'ok'.
+-spec maybe_intercept(kz_json:object(), kapps_call:call(), kz_term:proplist()) -> 'ok'.
 maybe_intercept(Data, Call, Params) ->
     case intercept_restrictions(Data) of
         [] -> maybe_intercept(Call, Params);
@@ -78,7 +86,7 @@ maybe_intercept(Data, Call, Params) ->
             cf_intercept:handle(kz_json:from_list(SParams ++ Params), Call)
     end.
 
--spec maybe_intercept(kapps_call:call(), kz_proplist()) -> 'ok'.
+-spec maybe_intercept(kapps_call:call(), kz_term:proplist()) -> 'ok'.
 maybe_intercept(Call, Params) ->
     case maybe_allowed_to_intercept(Call, Params) of
         'true' ->
@@ -88,7 +96,7 @@ maybe_intercept(Call, Params) ->
             cf_exe:stop(Call)
     end.
 
--spec intercept_restrictions(kz_json:object()) -> kz_proplist().
+-spec intercept_restrictions(kz_json:object()) -> kz_term:proplist().
 intercept_restrictions(Data) ->
     props:filter_undefined(
       [{<<"approved_device_id">>, kz_json:get_ne_binary_value(<<"approved_device_id">>, Data)}
@@ -96,7 +104,7 @@ intercept_restrictions(Data) ->
       ,{<<"approved_group_id">>, kz_json:get_ne_binary_value(<<"approved_group_id">>, Data)}
       ]).
 
--spec maybe_allowed_to_intercept(kapps_call:call(), kz_proplist()) -> boolean().
+-spec maybe_allowed_to_intercept(kapps_call:call(), kz_term:proplist()) -> boolean().
 maybe_allowed_to_intercept(Call, Props) ->
     case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), kapps_call:authorizing_id(Call)) of
         {'ok', DeviceDoc} ->
@@ -106,7 +114,7 @@ maybe_allowed_to_intercept(Call, Props) ->
             'false'
     end.
 
--spec maybe_allowed_to_intercept(kapps_call:call(), kz_proplist(), kz_json:object()) -> boolean().
+-spec maybe_allowed_to_intercept(kapps_call:call(), kz_term:proplist(), kz_json:object()) -> boolean().
 maybe_allowed_to_intercept(Call, Props, DeviceDoc) ->
     case props:get_value(<<"user_id">>, Props) of
         'undefined' ->
@@ -114,11 +122,11 @@ maybe_allowed_to_intercept(Call, Props, DeviceDoc) ->
         UserId -> UserId =:= kz_json:get_value(<<"owner_id">>, DeviceDoc)
     end.
 
--spec can_device_intercept(kapps_call:call(), kz_proplist(), kz_json:object()) -> boolean().
+-spec can_device_intercept(kapps_call:call(), kz_term:proplist(), kz_json:object()) -> boolean().
 can_device_intercept(Call, Props, DeviceDoc) ->
     device_has_same_owner(Call, DeviceDoc, props:get_value(<<"device_id">>, Props)).
 
--spec device_has_same_owner(kapps_call:call(), kz_json:object(), api_binary()) -> boolean().
+-spec device_has_same_owner(kapps_call:call(), kz_json:object(), kz_term:api_binary()) -> boolean().
 device_has_same_owner(_Call, _Device, 'undefined') -> 'false';
 device_has_same_owner(Call, DeviceDoc, TargetDeviceId) ->
     case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), TargetDeviceId) of
@@ -130,9 +138,9 @@ device_has_same_owner(Call, DeviceDoc, TargetDeviceId) ->
             'false'
     end.
 
--spec build_intercept_params(ne_binary(), ne_binary(), kapps_call:call()) ->
-                                    {'ok', kz_proplist()} |
-                                    {'error', ne_binary()}.
+-spec build_intercept_params(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) ->
+                                    {'ok', kz_term:proplist()} |
+                                    {'error', kz_term:ne_binary()}.
 build_intercept_params(Number, <<"device">>, Call) ->
     AccountDb = kapps_call:account_db(Call),
     case cf_util:endpoint_id_by_sip_username(AccountDb, Number) of
@@ -153,9 +161,9 @@ build_intercept_params(_ ,'undefined', _) ->
 build_intercept_params(_, Other, _) ->
     {'error', <<Other/binary," not implemented">>}.
 
--spec params_from_data(ne_binary(), kz_json:object(), kapps_call:call()) ->
-                              {'ok', kz_proplist()} |
-                              {'error', ne_binary()}.
+-spec params_from_data(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) ->
+                              {'ok', kz_term:proplist()} |
+                              {'error', kz_term:ne_binary()}.
 params_from_data(<<"user">>, Data, _Call) ->
     EndpointId = kz_doc:id(Data),
     {'ok', [{<<"user_id">>, EndpointId}]};

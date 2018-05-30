@@ -1,24 +1,26 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz INC
-%%% @doc
-%%% Execute conference commands
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Execute conference commands
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_conference_command).
 
--export([exec_cmd/3]).
+-export([exec_cmd/3
+        ,dial/4
+        ]).
 
 -include("ecallmgr.hrl").
 
--spec exec_cmd(atom(), ne_binary(), kz_json:object()) ->
-                      'ok' |
-                      'error' |
-                      ecallmgr_util:send_cmd_ret() |
-                      [ecallmgr_util:send_cmd_ret(),...].
+-type api_response() :: 'ok' |
+                        'error' |
+                        ecallmgr_util:send_cmd_ret() |
+                        [ecallmgr_util:send_cmd_ret(),...].
+
+-spec exec_cmd(atom(), kz_term:ne_binary(), kz_json:object()) -> api_response().
 exec_cmd(Node, ConferenceId, JObj) ->
     exec_cmd(Node, ConferenceId, JObj, kz_json:get_value(<<"Conference-ID">>, JObj)).
 
+-spec exec_cmd(atom(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> api_response().
 exec_cmd(Node, ConferenceId, JObj, ConferenceId) ->
     App = kz_json:get_value(<<"Application-Name">>, JObj),
     case get_conf_command(App, Node, ConferenceId, JObj) of
@@ -26,18 +28,22 @@ exec_cmd(Node, ConferenceId, JObj, ConferenceId) ->
         {_, _}=Cmd -> api(Node, ConferenceId, Cmd)
     end;
 exec_cmd(_Node, _ConferenceId, JObj, _DestId) ->
-    lager:debug("command ~s not meant for us (~s) but for ~s", [kz_json:get_value(<<"Application-Name">>, JObj)
-                                                               ,_ConferenceId
-                                                               ,_DestId]).
+    lager:debug("command ~s not meant for us (~s) but for ~s"
+               ,[kz_json:get_value(<<"Application-Name">>, JObj)
+                ,_ConferenceId
+                ,_DestId
+                ]).
 
+-spec api(atom(), kz_term:ne_binary(), {kz_term:ne_binary(), iodata()}) -> api_response().
 api(Node, ConferenceId, {AppName, AppData}) ->
     Command = kz_term:to_list(list_to_binary([ConferenceId, " ", AppName, " ", AppData])),
+    lager:debug("api: ~s", [Command]),
     freeswitch:api(Node, 'conference', Command).
 
--spec get_conf_command(ne_binary(), atom(), ne_binary(), kz_json:object()) ->
+-spec get_conf_command(kz_term:ne_binary(), atom(), kz_term:ne_binary(), kz_json:object()) ->
                               fs_app() | fs_apps() |
-                              {'return', 'error' | ne_binary()} |
-                              {'error', ne_binary()}.
+                              {'return', 'error' | kz_term:ne_binary()} |
+                              {'error', kz_term:ne_binary()}.
 
 %% The following conference commands can operate on the entire conference
 
@@ -128,7 +134,7 @@ get_conf_command(<<"stop_play">>, _Focus, _ConferenceId, JObj) ->
         'true' ->
             Affects = kz_json:get_binary_value(<<"Affects">>, JObj, <<"all">>),
             Args = case kz_json:get_binary_value(<<"Participant-ID">>, JObj) of
-                       undefined -> Affects;
+                       'undefined' -> Affects;
                        Participant -> list_to_binary([Affects, " ", Participant])
                    end,
             {<<"stop">>, Args}
@@ -249,7 +255,34 @@ get_conf_command(Cmd, _Focus, _ConferenceId, _JObj) ->
     lager:debug("unknown conference command ~s", [Cmd]),
     {'error', list_to_binary([<<"unknown conference command: ">>, Cmd])}.
 
--spec relationship(ne_binary()) -> ne_binary().
+-spec dial(atom(), kz_term:ne_binary(), kz_json:object(), kz_json:object() | kz_json:objects()) ->
+                  api_response().
+dial(Node, ConferenceId, JObj, [_|_]=Endpoints) ->
+    AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
+
+    ConferenceName = case kz_json:get_ne_binary_value(<<"Profile-Name">>, JObj) of
+                         'undefined' -> list_to_binary([ConferenceId, "@", ConferenceId, "_", AccountId]);
+                         ProfileName ->
+                             list_to_binary([ConferenceId, "@", ProfileName])
+                     end,
+
+    DialCmd = list_to_binary([ecallmgr_fs_xml:get_channel_vars(JObj)
+                             ,ecallmgr_fs_bridge:try_create_bridge_string(Endpoints, JObj)
+                             ,caller_id(kz_json:get_ne_binary_value(<<"Caller-ID-Number">>, JObj)
+                                       ,kz_json:get_ne_binary_value(<<"Caller-ID-Name">>, JObj)
+                                       )
+                             ]),
+    api(Node, ConferenceName, {<<"bgdial">>, DialCmd});
+dial(Node, ConferenceId, JObj, Endpoint) ->
+    dial(Node, ConferenceId, JObj, [Endpoint]).
+
+-spec relationship(kz_term:ne_binary()) -> kz_term:ne_binary().
 relationship(<<"mute">>) -> <<"nospeak">>;
 relationship(<<"deaf">>) -> <<"nohear">>;
 relationship(_) -> <<"clear">>.
+
+-spec caller_id(kz_term:api_ne_binary(), kz_term:api_ne_binary()) -> iodata().
+caller_id('undefined', 'undefined') -> "";
+caller_id('undefined', Name) -> [" ", $",$", " ", Name];
+caller_id(Number, 'undefined') -> [" ", Number];
+caller_id(Number, Name) -> [" ", Number, " ", $", Name, $"].

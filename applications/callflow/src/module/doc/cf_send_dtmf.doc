@@ -1,5 +1,0 @@
-#-------------------------------------------------------------------
-# "data":{
-#   "digits":"#123" // what sequence to send
-#   ,"duration_ms":2000 // optional duration, in milliseconds, to send dtmf
-# }

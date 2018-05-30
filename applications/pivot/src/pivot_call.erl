@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Handle processing of the pivot call
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Handle processing of the pivot call
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(pivot_call).
 -behaviour(gen_listener).
 
@@ -34,34 +32,36 @@
 
 -type http_method() :: 'get' | 'post'.
 
--record(state, {voice_uri :: api_ne_binary()
-               ,cdr_uri :: api_ne_binary()
-               ,request_format = <<"kazoo">> :: ne_binary()
+-record(state, {voice_uri :: kz_term:api_ne_binary()
+               ,cdr_uri :: kz_term:api_ne_binary()
+               ,request_format = <<"kazoo">> :: kz_term:ne_binary()
+               ,request_body_format = <<"form">> :: kz_term:ne_binary()
                ,method = 'get' :: http_method()
                ,call :: kapps_call:call() | 'undefined'
                ,request_id :: kz_http:req_id() | 'undefined'
-               ,request_params :: api_object()
-               ,response_code :: api_ne_binary()
-               ,response_headers :: binaries() | api_ne_binary()
+               ,request_params :: kz_term:api_object()
+               ,response_code :: kz_term:api_ne_binary()
+               ,response_headers :: kz_term:binaries() | kz_term:api_ne_binary()
                ,response_body = <<>> :: binary()
-               ,response_content_type :: api_binary()
-               ,response_pid :: api_pid() %% pid of the processing of the response
-               ,response_event_handlers = [] :: pids()
-               ,response_ref :: api_reference() %% monitor ref for the pid
+               ,response_content_type :: kz_term:api_binary()
+               ,response_pid :: kz_term:api_pid() %% pid of the processing of the response
+               ,response_event_handlers = [] :: kz_term:pids()
+               ,response_ref :: kz_term:api_reference() %% monitor ref for the pid
                ,debug = 'false' :: boolean()
-               ,requester_queue :: api_ne_binary()
+               ,requester_queue :: kz_term:api_ne_binary()
                }).
 
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(kapps_call:call(), kz_json:object()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(kapps_call:call(), kz_json:object()) -> kz_types:startlink_ret().
 start_link(Call, JObj) ->
     CallId = kapps_call:call_id(Call),
 
@@ -84,10 +84,11 @@ start_link(Call, JObj) ->
 -spec stop_call(pid(), kapps_call:call()) -> 'ok'.
 stop_call(Srv, Call) -> gen_listener:cast(Srv, {'stop', Call}).
 
--spec new_request(pid(), ne_binary(), http_method()) -> 'ok'.
--spec new_request(pid(), ne_binary(), http_method(), kz_json:object()) -> 'ok'.
+-spec new_request(pid(), kz_term:ne_binary(), http_method()) -> 'ok'.
 new_request(Srv, Uri, Method) ->
     gen_listener:cast(Srv, {'request', Uri, Method}).
+
+-spec new_request(pid(), kz_term:ne_binary(), http_method(), kz_json:object()) -> 'ok'.
 new_request(Srv, Uri, Method, Params) ->
     gen_listener:cast(Srv, {'request', Uri, Method, Params}).
 
@@ -97,7 +98,7 @@ updated_call(Srv, Call) -> gen_listener:cast(Srv, {'updated_call', Call}).
 -spec usurp_executor(pid()) -> 'ok'.
 usurp_executor(Srv) -> gen_listener:cast(Srv, 'usurp').
 
--spec maybe_relay_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec maybe_relay_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 maybe_relay_event(JObj, Props) ->
     _ = case props:get_value('pid', Props) of
             P when is_pid(P) -> kapps_call_command:relay_event(P, JObj);
@@ -110,7 +111,7 @@ maybe_relay_event(JObj, Props) ->
         end,
     relay_cdr_event(JObj, Props).
 
--spec relay_cdr_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec relay_cdr_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 relay_cdr_event(JObj, Props) ->
     case kz_util:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
@@ -119,21 +120,14 @@ relay_cdr_event(JObj, Props) ->
         _ -> 'ok'
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {'ok', State} |
-%%                     {'ok', State, Timeout} |
-%%                     ignore |
-%%                     {'stop', Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([kapps_call:call() | kz_json:object()]) -> {'ok', state(), 'hibernate'}.
 init([Call, JObj]) ->
     kz_util:put_callid(kapps_call:call_id(Call)),
@@ -142,6 +136,7 @@ init([Call, JObj]) ->
     VoiceUri = kz_json:get_value(<<"Voice-URI">>, JObj),
 
     ReqFormat = kz_json:get_value(<<"Request-Format">>, JObj, <<"twiml">>),
+    ReqBodyFormat = kz_json:get_value(<<"Request-Body-Format">>, JObj, <<"form">>),
     BaseParams = kz_json:from_list(req_params(ReqFormat, Call)),
 
     lager:debug("starting pivot req to ~s to ~s", [Method, VoiceUri]),
@@ -152,40 +147,25 @@ init([Call, JObj]) ->
     ,#state{cdr_uri=kz_json:get_value(<<"CDR-URI">>, JObj)
            ,call=kzt_util:increment_iteration(Call)
            ,request_format=ReqFormat
+           ,request_body_format=ReqBodyFormat
            ,debug=kz_json:is_true(<<"Debug">>, JObj, 'false')
            ,requester_queue = kapps_call:controller_queue(Call)
            }
     ,'hibernate'
     }.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {'reply', Reply, State} |
-%%                                   {'reply', Reply, State, Timeout} |
-%%                                   {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, Reply, State} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> {'reply', 'ok', state()}.
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> {'reply', 'ok', state()}.
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {'noreply', State} |
-%%                                  {'noreply', State, Timeout} |
-%%                                  {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> {'noreply', state()} |
                                      {'stop', 'normal', state()}.
 handle_cast('usurp', #state{call=Call
@@ -205,11 +185,12 @@ handle_cast({'request', Uri, Method, Params}
            ,#state{call=Call
                   ,debug=Debug
                   ,requester_queue=Q
+                  ,request_body_format=ReqBodyFormat
                   }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
     Headers = kazoo_oauth_util:maybe_oauth_headers(kapps_call:account_id(Call), Uri, Params),
 
-    case send_req(Call1, Uri, Method, Headers, Params, Debug) of
+    case send_req(Call1, Uri, Method, Headers, Params, ReqBodyFormat, Debug) of
         {'ok', ReqId, Call2} ->
             lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
             {'noreply'
@@ -230,7 +211,6 @@ handle_cast({'request', Uri, Method, Params}
     end;
 
 handle_cast({'updated_call', Call}, State) ->
-
     {'noreply', State#state{call=Call}};
 
 handle_cast({'gen_listener', {'created_queue', Q}}
@@ -259,7 +239,7 @@ handle_cast({'cdr', JObj}
                   }=State) ->
     JObj1 = kz_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
     Body =  kz_http_util:json_to_querystring(kz_api:remove_defaults(JObj1)),
-    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
+    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}],
 
     maybe_debug_req(Call, Url, 'post', Headers, Body, Debug),
 
@@ -289,16 +269,10 @@ handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> {'noreply', state()} |
                                      {'stop', any(), state()}.
 handle_info({'stop', _Call}, State) ->
@@ -403,15 +377,10 @@ handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling messaging bus events
-%%
-%% @spec handle_event(JObj, State) -> {'noreply', kz_proplist()} |
-%%                                    ignore
+%%------------------------------------------------------------------------------
+%% @doc Handling messaging bus events
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{response_pid=Pid
                           ,response_event_handlers=Pids
@@ -420,63 +389,65 @@ handle_event(_JObj, #state{response_pid=Pid
               ,{'pids', Pids}
               ]}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{response_pid=Pid}) ->
     exit(Pid, 'kill'),
     lager:info("pivot call terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {'ok', NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
-                                                %-spec send_req(kapps_call:call(), ne_binary(), http_method(), kz_json:object() | kz_proplist(), boolean()) ->
-                                                %                      'ok' |
-                                                %                      {'ok', ibrowse_req_id(), kapps_call:call()} |
-                                                %                      {'stop', kapps_call:call()}.
-                                                %send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
-                                                %    send_req(Call, Uri, Method, [], kz_json:to_proplist(BaseParams), Debug).
+%%%=============================================================================
 
-send_req(Call, Uri, Method, Headers, BaseParams, Debug) when not is_list(BaseParams) ->
-    send_req(Call, Uri, Method, Headers, kz_json:to_proplist(BaseParams), Debug);
-send_req(Call, Uri, 'get', Headers, BaseParams, Debug) ->
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec send_req(kapps_call:call(), kz_term:ne_binary(), http_method(), kz_term:proplist(), kz_json:object() | kz_term:proplist(), kz_term:ne_binary(), boolean()) ->
+                      {'ok', kz_http:req_id(), kapps_call:call()} |
+                      {'stop', kapps_call:call()}.
+send_req(Call, Uri, Method, Headers, BaseParams, ReqBodyFormat, Debug) when not is_list(BaseParams) ->
+    send_req(Call, Uri, Method, Headers, kz_json:to_proplist(BaseParams), ReqBodyFormat, Debug);
+send_req(Call, Uri, 'get', Headers, BaseParams, _ReqBodyFormat, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = kz_json:set_values(BaseParams, UserParams),
     UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, kz_http_util:json_to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], [], Debug);
-send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
+    Headers1 = [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}
+               ,{"Accept-Language", binary_to_list(kapps_call:language(Call))}
+                | Headers
+               ],
+    send(UpdatedCall, uri(Uri, format_request(Params, <<"form">>)), 'get', Headers1, [], Debug);
+send_req(Call, Uri, 'post', Headers, BaseParams, ReqBodyFormat, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = kz_json:set_values(BaseParams, UserParams),
     UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
-    case Headers of
-        [] ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], kz_http_util:json_to_querystring(Params), Debug);
-        _ ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))} | Headers], kz_http_util:json_to_querystring(Params), Debug)
-    end.
+    Accept = case Headers of
+                 [] -> "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
+                 _ -> "application/json"
+             end,
+    Headers1 = [{"Accept", Accept}
+               ,{"Accept-Language", binary_to_list(kapps_call:language(Call))}
+               ,{"Content-Type", req_content_type(ReqBodyFormat)}
+                | Headers
+               ],
+    send(UpdatedCall, Uri, 'post', Headers1, format_request(Params, ReqBodyFormat), Debug).
 
--spec send(kapps_call:call(), ne_binary(), http_method(), kz_proplist(), iolist(), boolean()) ->
+-spec send(kapps_call:call(), kz_term:ne_binary(), http_method(), kz_term:proplist(), iolist(), boolean()) ->
                   {'ok', kz_http:req_id(), kapps_call:call()} |
                   {'stop', kapps_call:call()}.
 send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
@@ -486,18 +457,18 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
 
     case kz_http:async_req(self(), Method, Uri, ReqHdrs, ReqBody) of
         {'http_req_id', ReqId} ->
-            lager:debug("response coming in asynchronosly to ~p", [ReqId]),
+            lager:debug("response coming in asynchronously to ~p", [ReqId]),
             {'ok', ReqId, Call};
         {'error', _Reason} ->
             lager:debug("error with req: ~p", [_Reason]),
             {'stop', Call}
     end.
 
--spec normalize_resp_headers(kz_proplist()) -> kz_proplist().
+-spec normalize_resp_headers(kz_term:proplist()) -> kz_term:proplist().
 normalize_resp_headers(Headers) ->
     [{kz_term:to_lower_binary(K), kz_term:to_binary(V)} || {K, V} <- Headers].
 
--spec handle_resp(api_binary(), kapps_call:call(), ne_binary(), binary()) -> 'ok'.
+-spec handle_resp(kz_term:api_binary(), kapps_call:call(), kz_term:ne_binary(), binary()) -> 'ok'.
 handle_resp(RequesterQ, Call, CT, <<_/binary>> = RespBody) ->
     kz_util:put_callid(kapps_call:call_id(Call)),
     Srv = kzt_util:get_amqp_listener(Call),
@@ -514,7 +485,7 @@ handle_resp(RequesterQ, Call, CT, <<_/binary>> = RespBody) ->
                        )
     end.
 
--spec process_resp(api_binary(), kapps_call:call(), list() | binary(), binary()) ->
+-spec process_resp(kz_term:api_binary(), kapps_call:call(), list() | binary(), binary()) ->
                           {'stop', kapps_call:call()} |
                           {'ok', kapps_call:call()} |
                           {'request', kapps_call:call()} |
@@ -562,7 +533,7 @@ process_resp(RequesterQ, Call, CT, RespBody) ->
             {'stop', Call}
     end.
 
--spec publish_failed(kapps_call:call(), ne_binary()) -> 'ok'.
+-spec publish_failed(kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 publish_failed(Call, RequesterQ) ->
     PubFun = fun(P) -> kapi_pivot:publish_failed(RequesterQ, P) end,
     kz_amqp_worker:cast([{<<"Call-ID">>, kapps_call:call_id(Call)}
@@ -571,7 +542,7 @@ publish_failed(Call, RequesterQ) ->
                        ,PubFun
                        ).
 
--spec uri(ne_binary(), iolist()) -> ne_binary().
+-spec uri(kz_term:ne_binary(), iolist()) -> kz_term:ne_binary().
 uri(URI, QueryString) ->
     SuppliedQS = iolist_to_binary(QueryString),
     case kz_http_util:urlsplit(URI) of
@@ -581,7 +552,7 @@ uri(URI, QueryString) ->
             kz_http_util:urlunsplit({Scheme, Host, Path, <<QS/binary, "&", SuppliedQS/binary>>, Fragment})
     end.
 
--spec req_params(ne_binary(), kapps_call:call()) -> kz_proplist().
+-spec req_params(kz_term:ne_binary(), kapps_call:call()) -> kz_term:proplist().
 req_params(Format, Call) ->
     FmtAtom = kz_term:to_atom(<<"kzt_", Format/binary>>, 'true'),
     try FmtAtom:req_params(Call) of
@@ -592,7 +563,7 @@ req_params(Format, Call) ->
         'error':'undef' -> []
     end.
 
--spec maybe_debug_req(kapps_call:call(), binary(), atom(), kz_proplist(), iolist(), boolean()) -> 'ok'.
+-spec maybe_debug_req(kapps_call:call(), binary(), atom(), kz_term:proplist(), iolist(), boolean()) -> 'ok'.
 maybe_debug_req(_Call, _Uri, _Method, _ReqHdrs, _ReqBody, 'false') -> 'ok';
 maybe_debug_req(Call, Uri, Method, ReqHdrs, ReqBody, 'true') ->
     Headers = kz_json:from_list([{fix_value(K), fix_value(V)} || {K, V} <- ReqHdrs]),
@@ -602,7 +573,7 @@ maybe_debug_req(Call, Uri, Method, ReqHdrs, ReqBody, 'true') ->
                       ,{<<"req_body">>, iolist_to_binary(ReqBody)}
                       ]).
 
--spec maybe_debug_resp(boolean(), kapps_call:call(), ne_binary(), kz_proplist(), binary()) -> 'ok'.
+-spec maybe_debug_resp(boolean(), kapps_call:call(), kz_term:ne_binary(), kz_term:proplist(), binary()) -> 'ok'.
 maybe_debug_resp('false', _Call, _StatusCode, _RespHeaders, _RespBody) -> 'ok';
 maybe_debug_resp('true', Call, StatusCode, RespHeaders, RespBody) ->
     Headers = kz_json:from_list([{fix_value(K), fix_value(V)} || {K, V} <- RespHeaders]),
@@ -615,7 +586,7 @@ maybe_debug_resp('true', Call, StatusCode, RespHeaders, RespBody) ->
 
 -spec debug_error(kapps_call:call(), [jesse_error:error_reason()], binary()) -> 'ok'.
 debug_error(Call, Errors, RespBody) ->
-    JObj = lists:foldl(fun error_to_jobj/2, kz_json:new(), Errors),
+    JObj = kz_json_schema:errors_to_jobj(Errors),
     store_debug(Call
                ,kz_json:from_list([{<<"schema_errors">>, JObj}
                                   ,{<<"resp_body">>, RespBody}
@@ -633,12 +604,7 @@ debug_json_error(Call, Msg, Before, After, RespBody) ->
                              ]),
     store_debug(Call, JObj).
 
--spec error_to_jobj(jesse_error:error_reason(), kz_json:object()) -> kz_json:object().
-error_to_jobj(Error, Errors) ->
-    {_Code, _Message, JObj} = kz_json_schema:error_to_jobj(Error),
-    kz_json:merge_jobjs(JObj, Errors).
-
--spec store_debug(kapps_call:call(), kz_proplist() | kz_json:object()) -> 'ok'.
+-spec store_debug(kapps_call:call(), kz_term:proplist() | kz_json:object()) -> 'ok'.
 store_debug(Call, Doc) when is_list(Doc) ->
     store_debug(Call, kz_json:from_list(Doc));
 store_debug(Call, DebugJObj) ->
@@ -653,7 +619,7 @@ store_debug(Call, DebugJObj) ->
                                     ,[{'account_id', kapps_call:account_id(Call)}
                                      ,{'account_db', AccountModDb}
                                      ,{'type', <<"pivot_debug">>}
-                                     ,{'now', kz_time:current_tstamp()}
+                                     ,{'now', kz_time:now_s()}
                                      ]
                                     ),
     case kazoo_modb:save_doc(AccountModDb, JObj) of
@@ -663,6 +629,18 @@ store_debug(Call, DebugJObj) ->
             lager:debug("failed to save debug doc: ~p", [_E])
     end.
 
--spec fix_value(number() | list()) -> number() | ne_binary().
+-spec fix_value(number() | list()) -> number() | kz_term:ne_binary().
 fix_value(N) when is_number(N) -> N;
 fix_value(O) -> kz_term:to_lower_binary(O).
+
+-spec format_request(kz_json:object(), kz_term:ne_binary()) -> iolist().
+format_request(Params, <<"form">>) ->
+    kz_http_util:json_to_querystring(Params);
+format_request(Params, <<"json">>) ->
+    kz_json:encode(Params).
+
+-spec req_content_type(kz_term:ne_binary()) -> list().
+req_content_type(<<"form">>) ->
+    "application/x-www-form-urlencoded";
+req_content_type(<<"json">>) ->
+    "application/json".

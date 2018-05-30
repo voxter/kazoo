@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(whs_account_conversion).
 
 -export([promote/1
@@ -17,16 +15,14 @@
 -export([set_reseller_id/2]).
 -export([has_reseller_descendants/1]).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set the reseller status on the provided account and update all
+%%------------------------------------------------------------------------------
+%% @doc Set the reseller status on the provided account and update all
 %% sub accounts
 %% @end
-%%--------------------------------------------------------------------
--spec promote(ne_binary()) -> {'error', _} | 'ok'.
+%%------------------------------------------------------------------------------
+-spec promote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 promote(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     case kapps_util:is_master_account(AccountId) of
@@ -38,26 +34,24 @@ promote(Account) ->
             end
     end.
 
--spec force_promote(ne_binary()) -> {'error', _} | 'ok'.
+-spec force_promote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 force_promote(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     do_promote(AccountId).
 
--spec do_promote(ne_binary()) -> {'error', _} | 'ok'.
+-spec do_promote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 do_promote(AccountId) ->
-    _ = kz_util:account_update(AccountId, fun kz_account:promote/1),
-    _ = maybe_update_services(AccountId, <<"pvt_reseller">>, 'true'),
+    _ = kz_util:account_update(AccountId, fun kzd_accounts:promote/1),
+    _ = maybe_update_services(AccountId, ?SERVICES_PVT_IS_RESELLER, 'true'),
     io:format("promoting account ~s to reseller status, updating sub accounts~n", [AccountId]),
     cascade_reseller_id(AccountId, AccountId).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Remove reseller status from an account and set all its sub accounts
+%%------------------------------------------------------------------------------
+%% @doc Remove reseller status from an account and set all its sub accounts
 %% to the next higher reseller
 %% @end
-%%--------------------------------------------------------------------
--spec demote(ne_binary()) -> {'error', _} | 'ok'.
+%%------------------------------------------------------------------------------
+-spec demote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 demote(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     case kapps_util:is_master_account(AccountId) of
@@ -69,27 +63,25 @@ demote(Account) ->
             end
     end.
 
--spec force_demote(ne_binary()) -> {'error', _} | 'ok'.
+-spec force_demote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 force_demote(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     do_demote(AccountId).
 
--spec do_demote(ne_binary()) -> {'error', _} | 'ok'.
+-spec do_demote(kz_term:ne_binary()) -> {'error', _} | 'ok'.
 do_demote(AccountId) ->
-    _ = kz_util:account_update(AccountId, fun kz_account:demote/1),
-    _ = maybe_update_services(AccountId, <<"pvt_reseller">>, 'false'),
+    _ = kz_util:account_update(AccountId, fun kzd_accounts:demote/1),
+    _ = maybe_update_services(AccountId, ?SERVICES_PVT_IS_RESELLER, 'false'),
     ResellerId = kz_services:find_reseller_id(AccountId),
     io:format("demoting reseller status for account ~s, and now belongs to reseller ~s~n", [AccountId, ResellerId]),
     cascade_reseller_id(ResellerId, AccountId).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set the reseller_id to the provided value on all the sub-accounts
+%%------------------------------------------------------------------------------
+%% @doc Set the reseller_id to the provided value on all the sub-accounts
 %% of the provided account
 %% @end
-%%--------------------------------------------------------------------
--spec cascade_reseller_id(ne_binary(), ne_binary()) -> {'error', _} | 'ok'.
+%%------------------------------------------------------------------------------
+-spec cascade_reseller_id(kz_term:ne_binary(), kz_term:ne_binary()) -> {'error', _} | 'ok'.
 cascade_reseller_id(Reseller, Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     ResellerId = kz_util:format_account_id(Reseller, 'raw'),
@@ -108,29 +100,25 @@ cascade_reseller_id(Reseller, Account) ->
             'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set teh reseller_id to the provided value on the provided account
+%%------------------------------------------------------------------------------
+%% @doc Set teh reseller_id to the provided value on the provided account
 %% @end
-%%--------------------------------------------------------------------
--spec set_reseller_id(ne_binary(), ne_binary()) -> {'error', _} | 'ok'.
+%%------------------------------------------------------------------------------
+-spec set_reseller_id(kz_term:ne_binary(), kz_term:ne_binary()) -> {'error', _} | 'ok'.
 set_reseller_id(Reseller, Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     ResellerId = kz_util:format_account_id(Reseller, 'raw'),
     io:format("setting account ~s reseller id to ~s~n", [AccountId, ResellerId]),
-    _ = kz_util:account_update(AccountId, fun(JObj) -> kz_account:set_reseller_id(JObj, ResellerId) end),
-    maybe_update_services(AccountId, <<"pvt_reseller_id">>, ResellerId).
+    _ = kz_util:account_update(AccountId, fun(JObj) -> kzd_accounts:set_reseller_id(JObj, ResellerId) end),
+    maybe_update_services(AccountId, ?SERVICES_PVT_RESELLER_ID, ResellerId).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec maybe_update_services(ne_binary(), ne_binary(), any()) -> {'error', _} | 'ok'.
+%%------------------------------------------------------------------------------
+-spec maybe_update_services(kz_term:ne_binary(), kz_term:ne_binary(), any()) -> {'error', _} | 'ok'.
 maybe_update_services(AccountId, Key, Value) ->
-    case kz_datamgr:open_doc(?KZ_SERVICES_DB, AccountId) of
+    case kz_services:fetch_services_doc(AccountId, true) of
         {'error', _R}=Error ->
             io:format("unable to open services doc ~s: ~p~n", [AccountId, _R]),
             Error;
@@ -143,7 +131,7 @@ maybe_update_services(AccountId, Key, Value) ->
             end
     end.
 
--spec has_reseller_descendants(ne_binary()) -> boolean().
+-spec has_reseller_descendants(kz_term:ne_binary()) -> boolean().
 has_reseller_descendants(AccountId) ->
     %% its very important that this check not operate against stale data!
     _ = kz_datamgr:flush_cache_docs(?KZ_SERVICES_DB),
@@ -155,4 +143,4 @@ has_reseller_descendants(AccountId) ->
 
 -spec is_reseller(kz_json:object()) -> boolean().
 is_reseller(JObj) ->
-    kz_services:is_reseller(kz_account:id(JObj)).
+    kz_services:is_reseller(kz_doc:id(JObj)).

@@ -14,6 +14,11 @@ A simple script to query the Erlang VMs process count
 10
 ```
 
+## apps_of_app.escript
+
+Calculates application interdependencies, correcting .app.src files as necessary. Also can be used to detect circular references.
+
+For now, we just calculate app files in `applications/` since `core/` is a tangled mess right now (and is typically installed as one lump package anyway).
 
 ## bump-copyright-year.sh
 
@@ -70,6 +75,18 @@ Creates a release, starts it, and issues some commands to test that the release 
 A quick script to check that all scripts in `$(ROOT)/scripts` are documented in this file!
 
 
+## check-spelling.bash
+
+Takes the misspellings.txt and checks for common mistakes.
+
+Each line on the text file has the format `{correct}|{mispelt} [{misspelt} ...]`
+
+
+## check-unstaged.bash
+
+Checks if any unstaged changes are found in the repo and exits if so. Used in CircleCI to fail builds with unstaged changes after applying code checks, spell checking, etc.
+
+
 ## check-xref.escript
 
 An Erlang escript for cross referencing (xref) calls to remote modules. Set \`TO\_XREF\` to ebin paths (or use the default):
@@ -84,7 +101,7 @@ Xref: listing undefined_functions
 Done
 ```
 
-If there are any calls to non-existant modules, or non-exported functions, you will get errors listed here.
+If there are any calls to nonexistent modules, or non-exported functions, you will get errors listed here.
 
 
 ## check-whitespace.sh
@@ -222,7 +239,7 @@ done (warnings were emitted)
 
 ## dialyze-usage.bash
 
-Given a module name, such as 'props' or 'kz\_json', search core/applications for modules that make calls to the supplied module and dialyze those beam files looking for dialyzer complaints. You will likely see complaints unrelated to your supplied module - go ahead and fix those too if possilbe ;)
+Given a module name, such as 'props' or 'kz\_json', search core/applications for modules that make calls to the supplied module and dialyze those beam files looking for dialyzer complaints. You will likely see complaints unrelated to your supplied module - go ahead and fix those too if possible ;)
 
 The more heavily utilized the module is, the longer this will take to run!
 
@@ -244,6 +261,35 @@ done (warnings were emitted)
 
 Connects to the ecallmgr VM and outputs a count of running Erlang processes.
 
+
+## `edocify.escript`
+
+A script to fixes most issues which prevent EDoc to run properly.
+
+> **Note:** This script needs [`ag`](https://github.com/ggreer/the_silver_searcher) command line to run!
+
+```shell
+edocify.escript
+```
+
+Sample Output:
+
+```shell
+$ scripts/edocify.escript
+Edocify Kazoo...
+
+* removing evil sepc+specs:  done
+* rename and fix `@contributors' tags to '@author':  done
+* remove @public tag:  done
+* removing @spec from comments: .............................. done
+* adding missing comments block after separator:  done
+* escape code block for 'resource_exists' function crossbar modules:  done
+* fix comment blocks with no @end:  done
+* move first comment line to the same line as @doc:  done
+* remove empty comment line after @doc: .......... done
+
+Already EDocified! 🎉
+```
 
 ## `empty_schema_descriptions.bash`
 
@@ -280,6 +326,9 @@ Updates crossbar docs with the schema table from the ref (auto-gen) version
 
 Parses the ecallmgr code looking for keys used to access values in the FreeSWITCH proplist and builds a header file at applications/ecallmgr/src/fs\_event\_filters.hrl for use when initializing mod\_kazoo.
 
+## generate-kzd-builders.escript
+
+Builds accessor modules (`.erl.src` files) in `core/kazoo_documents/src` from the API schemas. Changes to the `.erl.src` should be manually migrated to the corresponding `.erl` file.
 
 ## generate-schemas.escript
 
@@ -294,6 +343,40 @@ Script for updating Erlang code to account for functions that have moved modules
 
 -   kz\_util to alternative modules
 -   kz\_json to kz\_doc for public/private fields
+
+
+## `list-ext-deps.escript`
+
+This escript gathers information from all `.beam` files in the filesystem tree specified by a list of directories provided to it on the command line, determines which external calls these files collectively make, and compares these calls with the applications provided by the Erlang runtime under which the script is running.
+
+The end result is a list of OTP applications that this set of `.beam` files collectively make calls to (i.e. depend on).
+
+* NOTE: The `.beam` files *must* be compiled with debug information for this script to be useful.
+
+### Example
+
+In this example, we find the names of all the Erlang applications which the `.beam` files in `applications/`, `core/`, and `deps` depend on.
+
+```
+$ scripts/list-ext-deps.escript core applications deps 2> /tmp/errors.log
+common_test
+compiler
+crypto
+erts
+eunit
+inets
+kernel
+mnesia
+observer
+public_key
+runtime_tools
+sasl
+ssl
+stdlib
+syntax_tools
+tools
+xmerl
+```
 
 
 ## `no_raw_json.escript`
@@ -564,6 +647,74 @@ Searches for undocumented APIs and reports percentage of doc coverage.
     > POST /v2/resource_selectors/rules
     > POST /v2/whitelabel/domains
 
+## state-of-edoc.escript
+
+Searches for undocumented source files:
+
+```shell
+./scripts/state-of-edoc.escript
+```
+
+    State of EDoc
+    ...........................................[more_dots]
+
+    These files don't have documentations in module header:
+    -- applications/acdc/src/acdc_agent_listener.erl
+    -- applications/acdc/src/acdc_agent_maintenance.erl
+    -- applications/acdc/src/acdc_agent_sup.erl
+    -- applications/acdc/src/acdc_agent_util.erl
+    -- applications/acdc/src/acdc_agents_sup.erl
+    -- applications/acdc/src/acdc_announcements.erl
+    -- applications/acdc/src/acdc_announcements_sup.erl
+    -- applications/acdc/src/acdc_app.erl
+    -- applications/acdc/src/acdc_eavesdrop.erl
+    -- core/kazoo_xml/src/kz_xml.erl
+    [more_files]
+
+    These functions in files don't have any documentations:
+    -- applications/acdc/src/acdc_agent_handler.erl [undocumented functions: 11/11 (%100)]
+    -- applications/acdc/src/acdc_agent_maintenance.erl [undocumented functions: 5/5 (%100)]
+    -- applications/acdc/src/acdc_queue_thief.erl [undocumented functions: 1/1 (%100)]
+    -- applications/acdc/src/acdc_stats.erl [undocumented functions: 33/33 (%100)]
+    -- applications/acdc/src/acdc_stats_util.erl [undocumented functions: 7/7 (%100)]
+    -- applications/acdc/src/acdc_sup.erl [undocumented functions: 2/2 (%100)]
+    -- applications/acdc/src/acdc_util.erl [undocumented functions: 15/15 (%100)]
+    -- applications/cccp/src/cccp_shared_listener.erl [undocumented functions: 1/9 (%11)]
+    -- applications/ecallmgr/src/ecallmgr_fs_conferences_shared.erl [undocumented functions: 1/9 (%11)]
+    -- applications/webhooks/src/webhooks_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/amqp_cron/src/amqp_cron_task.erl [undocumented functions: 1/9 (%11)]
+    -- core/amqp_leader/src/amqp_leader_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/kazoo_apps/src/kazoo_apps_maint_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/kazoo_maintenance/src/kapps_config_maint_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/kazoo_maintenance/src/kazoo_oauth_maint_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/kazoo_maintenance/src/skel_maint_listener.erl [undocumented functions: 1/9 (%11)]
+    -- core/braintree/src/braintree_customer.erl [undocumented functions: 2/21 (%9)]
+    [more_files]
+
+
+    Processed 1277 files
+    Files without documentations in module header: 769/1277 (%60)
+    Files with undocumented functions: 1021/1277 (%79)
+
+## `sync_to_remote.bash`
+
+```bash
+HOST="server.com" ERL_FILES="path/to/source.erl" BEAM_PATH="/tmp/beams" ./scripts/sync_to_remote.bash
+```
+
+Takes the provided Erlang files, finds their .beam and syncs those to the remote server provided.
+
+-   `ERL_FILES`: which source files to sync (the changed files (against master) are used by default).
+-   `HOST`: The Host to use for the scp command
+-   `BEAM_PATH`: Where on the Host to put the beam files
+
+## `sync_to_release.bash`
+
+Useful in conjunction with `sync_to_remote`. Takes .beam files in a directory and moves them into a release, into the proper application ebin, and reloads them in the default VMs
+
+-   `BEAMS`: Path to beam files, defaults to `/tmp/beams/*.beam`
+-   `DEST`: Path to the release's lib/ directory, defaults to `/opt/kazoo/lib`
+
 
 ## update-the-types.sh
 
@@ -643,7 +794,7 @@ Here no errors were generated.
 
 ## `validate_mkdocs.py`
 
-Parses the mkdocs.yml and looks for non-existent docs
+Parses the mkdocs.yml and looks for nonexistent docs
 
 
 ## `wh_to_kz.sh`

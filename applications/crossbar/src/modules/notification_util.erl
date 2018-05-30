@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc Provide helper functions for firing notifications based on crossbar changes
+%%% @author Mark Magnusson
 %%% @end
-%%% @contributors
-%%%     Mark Magnusson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(notification_util).
 
 -include("crossbar.hrl").
@@ -29,7 +28,7 @@ maybe_notify_account_change(Old, Context) ->
 
     kz_json:foreach(Notify, Changed).
 
--spec notify_account_change(api_binary(), {ne_binary(), kz_json:object()}, cb_context:context()) -> 'ok'.
+-spec notify_account_change(kz_term:api_binary(), {kz_term:ne_binary(), kz_json:object()}, cb_context:context()) -> 'ok'.
 notify_account_change(AccountId, {<<"zones">>, Zones}, _Context) ->
     lager:info("publishing zone change notification for ~p, zones: ~p", [AccountId, Zones]),
     Props = [{<<"Account-ID">>, AccountId}

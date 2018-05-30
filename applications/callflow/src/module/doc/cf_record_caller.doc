@@ -1,8 +1,0 @@
-#-------------------------------------------------------------------
-# Handles starting/stopping a call recording
-#
-# "data":{
-#   "time_limit":600 // in seconds, how long to record the call
-#   ,"format":["mp3","wav"] // what format to store the recording in
-#   ,"url":"http://server.com/path/to/dump/file" // what URL to PUT the file to
-# }

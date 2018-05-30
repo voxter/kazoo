@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_commander).
 
 -export([handle/3]).
@@ -8,9 +13,9 @@
 -define(AMI_DB, <<"ami">>).
 
 %% Handle a payload sent as an AMI command
--spec handle(binary(), ne_binary(), pos_integer()) ->
-                    {'ok', {kz_proplist(), 'n'}}
-                        | {'logoff', 'ok'} | kz_proplist()
+-spec handle(binary(), kz_term:ne_binary(), pos_integer()) ->
+                    {'ok', {kz_term:proplist(), 'n'}}
+                        | {'logoff', 'ok'} | kz_term:proplist()
                         | {'error', 'no_action'}.
 handle(Payload, AccountId, 'undefined') ->
     Props = amimulator_util:parse_payload(Payload),
@@ -37,9 +42,9 @@ handle_event(Props) ->
     handle_event(Action, Props).
 
                                                 % TODO: add AMI username lookup db initialization
--spec handle_event(string(), kz_proplist()) ->
-                          {'ok', {kz_proplist(), 'n'}}
-                              | {'logoff', 'ok'} | kz_proplist()
+-spec handle_event(string(), kz_term:proplist()) ->
+                          {'ok', {kz_term:proplist(), 'n'}}
+                              | {'logoff', 'ok'} | kz_term:proplist()
                               | {'error', 'no_action'}.
 handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
@@ -315,8 +320,8 @@ login_md5(Username, Md5, Challenge, ActionId) ->
             check_login(Md5, SuccessMd5, AccountId, ActionId)
     end.
 
--spec check_login(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
-                         {'ok', {kz_proplist(), 'broken' | 'n'}}.
+-spec check_login(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                         {'ok', {kz_term:proplist(), 'broken' | 'n'}}.
 check_login(SuccessCredentials, SuccessCredentials, AccountId, ActionId) ->
     login_success(AccountId, ActionId);
 check_login(_, _, _, ActionId) ->
@@ -341,7 +346,7 @@ login_fail(ActionId) ->
                                      ]),
     {'ok', {Payload, 'n'}}.
 
--spec get_ami_doc(ne_binary()) -> kz_json:object() | 'not_found'.
+-spec get_ami_doc(kz_term:ne_binary()) -> kz_json:object() | 'not_found'.
 get_ami_doc(Username) ->
     case kz_datamgr:open_doc(?AMI_DB, Username) of
         {'ok', Doc} -> Doc;
@@ -567,8 +572,8 @@ status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName,
 status_payload(<<"concise">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
-      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_term:to_binary(Seconds))/binary
-      ,"!", BridgedChannel/binary, "\n">>;
+     ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_term:to_binary(Seconds))/binary
+     ,"!", BridgedChannel/binary, "\n">>;
 status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
@@ -579,9 +584,9 @@ status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, Conne
                                    end),
 
     <<(fit_list(Channel, 20))/binary, " ", (fit_list(Context, 20))/binary, " ", (fit_list(Extension, 16))/binary, " "
-      ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(CallerIDName, 25))/binary
-      ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
-      ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
+     ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(CallerIDName, 25))/binary
+     ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
+     ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
 fit_list(Binary, Size) when is_binary(Binary) ->
     kz_term:to_binary(fit_list(kz_term:to_list(Binary), Size));

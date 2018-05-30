@@ -1,14 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
-%%% @doc
-%%% Module for interacting with JSON schema docs
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
+%%% @doc Module for interacting with JSON schema docs
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_json_schema_test).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("schemas.hrl").
 
 add_defaults_test_() ->
     JObj = kz_json:decode(<<"{\"key1\":\"value1\"}">>),
@@ -51,7 +50,7 @@ add_defaults_array_test_() ->
     ].
 
 add_sub_defaults_array_test_() ->
-    {'ok', SchemaJObj} = fixture('kazoo_schemas', "fixtures/schemav3_sub_defaults_array.json"),
+    {ok, SchemaJObj} = kz_json:fixture(?APP, "fixtures/schemav3_sub_defaults_array.json"),
 
     JObj = kz_json:decode(<<"{\"gateways\":[{\"name\":\"gateway1\",\"media\":{}}]}">>),
 
@@ -78,7 +77,7 @@ add_sub_defaults_array_test_() ->
     ].
 
 validate_sub_array_test_() ->
-    {'ok', SchemaJObj} = fixture('kazoo_schemas', "fixtures/schemav3_sub_defaults_array.json"),
+    {ok, SchemaJObj} = kz_json:fixture(?APP, "fixtures/schemav3_sub_defaults_array.json"),
 
     JObj = kz_json:decode(<<"{\"gateways\":[{\"name\":\"gateway1\",\"media\":{}, \"codecs\": [\"G999\"]}, {\"name\":\"gateway2\", \"codecs\": [\"G999\"]}, {\"name\":\"gateway3\", \"codecs\": [\"PCMU\", \"G999\"]}]}">>),
 
@@ -89,22 +88,6 @@ validate_sub_array_test_() ->
                   ,kz_json_schema:validate(SchemaJObj, JObj)
                   )
     ].
-
--spec fixture(file:filename_all()) -> {ok, kz_json:object()} | {error, not_found}.
-fixture(Path) ->
-    case file:read_file(Path) of
-        {ok, Bin} -> {ok, kz_json:decode(Bin)};
-        {error, _} -> {error, not_found}
-    end.
-
--spec fixture(atom(), file:filename_all()) -> {ok, kz_json:object()} | {error, not_found}.
-fixture(App, Path) when is_atom(App) ->
-    fixture(filename:join(code:lib_dir(App, test), Path)).
-
-
--spec from_file(nonempty_string()) -> kz_json:object().
-from_file(File) ->
-    kz_json:load_fixture_from_file('kazoo', "fixtures", File).
 
 valid_task_data() ->
     kz_json:from_list([{<<"do_it_now">>, true}]).
@@ -128,7 +111,7 @@ invalid_task_data4() ->
                       ]).
 
 validate_v3_test_() ->
-    V3SchemaJObj = from_file("schemav3_tasks.json"),
+    {ok,V3SchemaJObj} = kz_json:fixture(?APP, "fixtures/schemav3_tasks.json"),
     [?_assertMatch({ok,_}, kz_json_schema:validate(V3SchemaJObj, valid_task_data()))
     ,?_assertMatch({error, [{data_invalid,_,{missing_required_property,<<"do_it_now">>},_,_}
                            ,{data_invalid,_,wrong_size,_,[<<"records">>]}
@@ -150,7 +133,7 @@ validate_v3_test_() ->
     ].
 
 validate_v4_test_() ->
-    V4SchemaJObj = from_file("schemav4_tasks.json"),
+    {ok,V4SchemaJObj} = kz_json:fixture(?APP, "fixtures/schemav4_tasks.json"),
     [?_assertMatch({ok,_}, kz_json_schema:validate(V4SchemaJObj, valid_task_data()))
     ,?_assertMatch({error, [{data_invalid,_,wrong_size,_,[<<"records">>]}
                            ,{data_invalid,_,missing_required_property,_,_}
@@ -180,15 +163,20 @@ get_schema_sms() ->
 default_object_test() ->
     Schema = get_schema(),
     Default = kz_json_schema:default_object(Schema),
-    [?_assertEqual({[{<<"caller_id">>,{[{<<"emergency">>,{[{<<"name">>,<<"emer_default">>}]}}]}}]}, Default)].
+    [?_assertEqual(kz_json:from_list_recursive([{<<"caller_id">>, [{<<"emergency">>,[{<<"name">>,<<"emer_default">>}]}]}])
+                  ,Default
+                  )
+    ].
 
 flatten_sms_schema_test() ->
-    Flat = kz_json_schema:flatten(get_schema_sms()),
-    [?_assertEqual(Flat, {[
-                           {[<<"outbound">>,<<"options">>,<<"default">>], {[{<<"delivery_mode">>,2},{<<"mandatory">>,true}]}},
-                           {[<<"outbound">>,<<"options">>,<<"description">>], <<"sms options">>},
-                           {[<<"outbound">>,<<"options">>,<<"type">>],<<"object">>}]
-                         })].
+    SMSSchema = get_schema_sms(),
+    Flat = kz_json_schema:flatten(SMSSchema),
+
+    JObj = kz_json:from_list_recursive([{<<"outbound">>, [{<<"options">>, [{<<"default">>, [{<<"delivery_mode">>,2},{<<"mandatory">>,true}]}]}]}
+                                       ,{[<<"outbound">>,<<"options">>,<<"description">>], <<"sms options">>}
+                                       ,{[<<"outbound">>,<<"options">>,<<"type">>],<<"object">>}
+                                       ]),
+    [?_assertEqual(Flat, JObj)].
 
 did_duplication_test() ->
     SrvA = kz_json:from_list([{<<"DIDs">>,kz_json:new()}

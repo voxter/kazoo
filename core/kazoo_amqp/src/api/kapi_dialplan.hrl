@@ -1,14 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @yright (C) 2011-2015 2600Hz INC
-%%% @doc
-%%% Dialplan API definitions
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018 2600Hz
+%%% @doc Dialplan API definitions.
+%%% @author James Aimonetti
+%%% @author Karl Anderson
+%%% @author Sponsored by Velvetech LLC, Implemented by SIPLABS LLC
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%
-%%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -ifndef(KAPI_DIALPLAN_HRL).
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
 
@@ -51,6 +48,7 @@
         ,<<"Confirm-Cancel-Timeout">>
         ,<<"Confirm-File">>
         ,<<"Continue-On-Fail">>
+        ,<<"Custom-Application-Vars">>
         ,<<"Custom-Channel-Vars">>
         ,<<"Custom-SIP-Headers">>
         ,<<"Dial-Endpoint-Method">>
@@ -74,6 +72,7 @@
         ,<<"Outbound-Caller-ID-Number">>
         ,<<"Ringback">>
         ,<<"SIP-Transport">>
+        ,<<"SIP-Invite-Parameters">>
         ,<<"Secure-RTP">>
         ,<<"Timeout">>
         ,<<"Simplify-Loopback">>
@@ -88,12 +87,14 @@
                            ,{<<"Enable-T38-Gateway">>, [<<"self">>, <<"peer">>]}
                            ,?INSERT_AT_TUPLE
                            ]).
--define(BRIDGE_REQ_TYPES, [{<<"Endpoints">>, fun kz_json:are_json_objects/1}
-                          ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
-                          ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+-define(BRIDGE_REQ_TYPES, [{<<"B-Leg-Events">>, fun b_leg_events_v/1}
                           ,{<<"Continue-On-Fail">>, fun kz_term:is_boolean/1}
+                          ,{<<"Custom-Application-Vars">>, fun kz_json:is_json_object/1}
+                          ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+                          ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
+                          ,{<<"Endpoints">>, fun kz_json:are_json_objects/1}
+                          ,{<<"SIP-Invite-Parameters">>, fun is_list/1}
                           ,{<<"Secure-RTP">>, fun kz_term:is_boolean/1}
-                          ,{<<"B-Leg-Events">>, fun b_leg_events_v/1}
                           ]).
 
 %% Bridge Endpoints
@@ -108,6 +109,7 @@
         ,<<"Caller-ID-Name">>
         ,<<"Caller-ID-Number">>
         ,<<"Codecs">>
+        ,<<"Custom-Application-Vars">>
         ,<<"Custom-Channel-Vars">>
         ,<<"Custom-SIP-Headers">>
         ,<<"Enable-T38-Fax">>
@@ -136,6 +138,7 @@
         ,<<"Route">>
         ,<<"SIP-Interface">>
         ,<<"SIP-Transport">>
+        ,<<"SIP-Invite-Parameters">>
         ,<<"To-DID">>
         ,<<"To-IP">>
         ,<<"To-Realm">>
@@ -152,19 +155,23 @@
                                     ,{<<"SIP-Transport">>, [<<"udp">>, <<"tcp">>, <<"tls">>, <<"sctp">>]}
                                     ]).
 -define(BRIDGE_REQ_ENDPOINT_TYPES, [{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
+                                   ,{<<"Custom-Application-Vars">>, fun kz_json:is_json_object/1}
                                    ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
                                    ,{<<"Endpoint-Options">>, fun kz_json:is_json_object/1}
                                    ,{<<"Ignore-Early-Media">>, fun kz_term:is_boolean/1}
                                    ,{<<"Bypass-Media">>, fun kz_term:is_boolean/1}
+                                   ,{<<"SIP-Invite-Parameters">>, fun is_list/1}
                                    ]).
 
 %% Page Request
 -define(PAGE_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Endpoints">>]).
 -define(OPTIONAL_PAGE_REQ_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
                                    ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
-                                   ,<<"Timeout">>, <<"Insert-At">>
+                                   ,<<"Timeout">>
+                                   ,<<"Insert-At">>
                                    ,<<"Page-Options">>
-                                   ,<<"Custom-Channel-Vars">>, <<"Custom-SIP-Headers">>
+                                   ,<<"Custom-Channel-Vars">>
+                                   ,<<"Custom-SIP-Headers">>
                                    ]).
 -define(PAGE_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                          ,{<<"Event-Name">>, <<"command">>}
@@ -256,8 +263,10 @@
 
 %% Tones Request
 -define(TONES_REQ_HEADERS, [<<"Call-ID">>, <<"Application-Name">>, <<"Tones">>]).
--define(OPTIONAL_TONES_REQ_HEADERS, [<<"Insert-At">>, <<"Terminators">>
-                                    ,<<"Conference-ID">>, <<"Group-ID">>
+-define(OPTIONAL_TONES_REQ_HEADERS, [<<"Conference-ID">>
+                                    ,<<"Group-ID">>
+                                    ,<<"Insert-At">>
+                                    ,<<"Terminators">>
                                     ]).
 -define(TONES_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                           ,{<<"Event-Name">>, <<"command">>}
@@ -369,13 +378,17 @@
 %% Hangup
 %% Include the Other-Leg-Call-ID to only hangup the other leg
 -define(HANGUP_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>]).
--define(OPTIONAL_HANGUP_REQ_HEADERS, [<<"Insert-At">>, <<"Other-Leg-Only">>]).
+-define(OPTIONAL_HANGUP_REQ_HEADERS, [<<"Insert-At">>
+                                     ,<<"Other-Leg-Only">>
+                                     ,<<"Hangup-Cause">>
+                                     ]).
 -define(HANGUP_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                            ,{<<"Event-Name">>, <<"command">>}
                            ,{<<"Application-Name">>, <<"hangup">>}
                            ,?INSERT_AT_TUPLE
                            ]).
 -define(HANGUP_REQ_TYPES, [{<<"Other-Leg-Only">>, fun kz_term:is_boolean/1}
+                          ,{<<"Hangup-Cause">>, fun is_binary/1}
                           ]).
 
 %% Hold
@@ -430,16 +443,21 @@
 -define(AUDIO_REQ_TYPES, []).
 
 %% Set
--define(SET_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>
-                         ,<<"Custom-Channel-Vars">>, <<"Custom-Call-Vars">>
+-define(SET_REQ_HEADERS, [<<"Application-Name">>
+                         ,<<"Call-ID">>
+                         ,<<"Custom-Call-Vars">>
+                         ,<<"Custom-Channel-Vars">>
                          ]).
--define(OPTIONAL_SET_REQ_HEADERS, [<<"Insert-At">>]).
+-define(OPTIONAL_SET_REQ_HEADERS, [<<"Insert-At">>
+                                  ,<<"Custom-Application-Vars">>
+                                  ]).
 -define(SET_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                         ,{<<"Event-Name">>, <<"command">>}
                         ,{<<"Application-Name">>, <<"set">>}
                         ,?INSERT_AT_TUPLE
                         ]).
--define(SET_REQ_TYPES, [{<<"Custom-Channel-Vars">>,fun kz_json:is_json_object/1}
+-define(SET_REQ_TYPES, [{<<"Custom-Application-Vars">>, fun kz_json:is_json_object/1}
+                       ,{<<"Custom-Channel-Vars">>,fun kz_json:is_json_object/1}
                        ,{<<"Custom-Call-Vars">>, fun kz_json:is_json_object/1}
                        ]).
 
@@ -519,10 +537,19 @@
 -define(EAVESDROP_REQ_TYPES, [{<<"Move-Channel-If-Necessary">>, fun kz_term:is_boolean/1}]).
 
 %% Play Request
--define(PLAY_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Media-Name">>]).
--define(OPTIONAL_PLAY_REQ_HEADERS, [<<"Terminators">>, <<"Insert-At">>, <<"Leg">>
-                                   ,<<"Voice">>, <<"Language">>, <<"Format">>
+-define(PLAY_REQ_HEADERS, [<<"Application-Name">>
+                          ,<<"Call-ID">>
+                          ,<<"Media-Name">>
+                          ]).
+-define(OPTIONAL_PLAY_REQ_HEADERS, [<<"Endless-Playback">>
+                                   ,<<"Loop-Count">>
+                                   ,<<"Format">>
                                    ,<<"Group-ID">> % group media together (one DTMF cancels all in group)
+                                   ,<<"Insert-At">>
+                                   ,<<"Language">>
+                                   ,<<"Leg">>
+                                   ,<<"Terminators">>
+                                   ,<<"Voice">>
                                    ]).
 -define(PLAY_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                          ,{<<"Event-Name">>, <<"command">>}
@@ -530,7 +557,10 @@
                          ,{<<"Leg">>, [<<"A">>, <<"B">>, <<"Both">>]}
                          ,?INSERT_AT_TUPLE
                          ]).
--define(PLAY_REQ_TYPES, [{<<"Terminators">>, ?IS_TERMINATOR}]).
+-define(PLAY_REQ_TYPES, [{<<"Terminators">>, ?IS_TERMINATOR}
+                        ,{<<"Endless-Playback">>, fun kz_term:is_boolean/1}
+                        ,{<<"Loop-Count">>, fun kz_term:is_pos_integer/1}
+                        ]).
 
 %% Break Request
 -define(BREAK_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>]).
@@ -612,10 +642,16 @@
 -define(PLAY_COLLECT_DIGITS_REQ_TYPES, [{<<"Terminators">>, ?IS_TERMINATOR}]).
 
 %% Say
--define(SAY_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Language">>
-                         ,<<"Type">>, <<"Method">>, <<"Say-Text">>
+-define(SAY_REQ_HEADERS, [<<"Application-Name">>
+                         ,<<"Call-ID">>
+                         ,<<"Language">>
+                         ,<<"Method">>
+                         ,<<"Say-Text">>
+                         ,<<"Type">>
                          ]).
--define(OPTIONAL_SAY_REQ_HEADERS, [<<"Insert-At">>]).
+-define(OPTIONAL_SAY_REQ_HEADERS, [<<"Group-ID">>
+                                  ,<<"Insert-At">>
+                                  ]).
 -define(SAY_REQ_VALUES
        ,[{<<"Event-Category">>, <<"call">>}
         ,{<<"Event-Name">>, <<"command">>}
@@ -638,11 +674,16 @@
 
 %% TTS
 -define(TTS_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Text">>]).
--define(OPTIONAL_TTS_REQ_HEADERS, [<<"Terminators">>, <<"Insert-At">>
-                                  ,<<"Voice">>, <<"Language">>, <<"Engine">>
+-define(OPTIONAL_TTS_REQ_HEADERS, [<<"Conference-ID">>
+                                  ,<<"Endless-Playback">>
+                                  ,<<"Loop-Count">>
+                                  ,<<"Engine">>
                                   ,<<"Group-ID">> % group media together (one DTMF cancels all in group)
-                                  ,<<"Conference-ID">>
+                                  ,<<"Insert-At">>
+                                  ,<<"Language">>
                                   ,<<"Leg">>
+                                  ,<<"Terminators">>
+                                  ,<<"Voice">>
                                   ]).
 -define(TTS_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                         ,{<<"Event-Name">>, <<"command">>}
@@ -650,7 +691,10 @@
                         ,{<<"Voice">>, [<<"male">>, <<"female">>]}
                         ,?INSERT_AT_TUPLE
                         ]).
--define(TTS_REQ_TYPES, [{<<"Terminators">>, ?IS_TERMINATOR}]).
+-define(TTS_REQ_TYPES, [{<<"Terminators">>, ?IS_TERMINATOR}
+                       ,{<<"Endless-Playback">>, fun kz_term:is_boolean/1}
+                       ,{<<"Loop-Count">>, fun kz_term:is_pos_integer/1}
+                       ]).
 
 %% Respond
 -define(RESPOND_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Response-Code">>]).
@@ -833,6 +877,7 @@
                             ,{<<"Insert-At">>, <<"now">>}
                             ]).
 -define(MEDIA_MACRO_TYPES, [{<<"Call-ID">>, fun is_binary/1}
+                           ,{<<"Media-Macros">>, fun kz_json:is_json_object/1}
                            ]).
 
 %% play_macro

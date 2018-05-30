@@ -12,6 +12,9 @@
         "Call-ID": {
             "type": "string"
         },
+        "Endless-Playback": {
+            "type": "boolean"
+        },
         "Event-Category": {
             "enum": [
                 "call"
@@ -49,6 +52,10 @@
                 "Both"
             ],
             "type": "string"
+        },
+        "Loop-Count": {
+            "minimum": 1,
+            "type": "integer"
         },
         "Media-Name": {
             "type": "string"

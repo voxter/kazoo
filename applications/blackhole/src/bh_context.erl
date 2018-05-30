@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Helpers for manipulating the #bh_context{} record
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Helpers for manipulating the #bh_context{} record
+%%% @author Ben Wann
 %%% @end
-%%% @contributors
-%%%   Ben Wann
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(bh_context).
 
 -export([new/0, new/2
@@ -53,32 +51,32 @@
 -export_type([context/0]).
 
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec new() -> context().
--spec new(pid(), ne_binary()) -> context().
 new()->
     #bh_context{}.
 
+-spec new(pid(), kz_term:ne_binary()) -> context().
 new(SessionPid, SessionId) ->
     Setters = [{fun set_websocket_session_id/2, SessionId}
               ,{fun set_websocket_pid/2, SessionPid}
               ],
     setters(new(), Setters).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec from_json(kz_json:object()) -> context().
--spec from_json(context(), kz_json:object()) -> context().
 from_json(JObj) ->
     from_json(new(), JObj).
 
+-spec from_json(context(), kz_json:object()) -> context().
 from_json(Context, JObj) ->
     Rand = kz_binary:rand_hex(16),
     Setters = [{fun set_auth_token/2, kz_json:get_value(<<"auth_token">>, JObj)}
@@ -88,11 +86,10 @@ from_json(Context, JObj) ->
               ],
     setters(Context, Setters).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec to_json(context()) -> kz_json:object().
 to_json(Context) ->
     kz_json:from_list(
@@ -108,47 +105,43 @@ to_json(Context) ->
       ,{<<"req_id">>, req_id(Context)}
       ]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_context(any()) -> boolean().
 is_context(#bh_context{}) -> 'true';
 is_context(_) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec setters(context(), setters()) -> context().
 setters(Context, Setters) ->
     lists:foldl(fun setters_fold/2, Context, Setters).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec auth_token(context()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec auth_token(context()) -> kz_term:api_binary().
 auth_token(#bh_context{auth_token=AuthToken}) ->
     AuthToken.
 
--spec set_auth_token(context(), ne_binary()) -> context().
+-spec set_auth_token(context(), kz_term:ne_binary()) -> context().
 set_auth_token(#bh_context{}=Context, AuthToken) ->
     Context#bh_context{auth_token=AuthToken}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec auth_account_id(context()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec auth_account_id(context()) -> kz_term:api_binary().
 auth_account_id(#bh_context{auth_account_id=AuthBy}) ->
     AuthBy.
 
--spec set_auth_account_id(context(), ne_binary()) -> context().
+-spec set_auth_account_id(context(), kz_term:ne_binary()) -> context().
 set_auth_account_id(#bh_context{}=Context, AuthBy) ->
     Context#bh_context{auth_account_id=AuthBy}.
 
@@ -156,16 +149,15 @@ set_auth_account_id(#bh_context{}=Context, AuthBy) ->
 is_superduper_admin(#bh_context{auth_account_id=AccountId}) ->
     kz_util:is_system_admin(AccountId).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec bindings(context()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+-spec bindings(context()) -> kz_term:ne_binaries().
 bindings(#bh_context{bindings=Bds}) ->
     Bds.
 
--spec bindings_from_json(kz_json:object()) -> ne_binaries().
+-spec bindings_from_json(kz_json:object()) -> kz_term:ne_binaries().
 bindings_from_json(JObj) ->
     case kz_json:get_value(<<"binding">>, JObj) of
         'undefined' ->
@@ -173,96 +165,89 @@ bindings_from_json(JObj) ->
         Binding -> [Binding]
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec set_bindings(context(), ne_binaries()) -> context().
+%%------------------------------------------------------------------------------
+-spec set_bindings(context(), kz_term:ne_binaries()) -> context().
 set_bindings(Context, Bindings) ->
     Context#bh_context{bindings=Bindings}.
 
--spec add_binding(context(), ne_binary()) -> context().
+-spec add_binding(context(), kz_term:ne_binary()) -> context().
 add_binding(#bh_context{bindings=Bds}=Context, Binding) ->
     Context#bh_context{bindings=[Binding|Bds]}.
 
--spec add_bindings(context(), ne_binaries()) -> context().
+-spec add_bindings(context(), kz_term:ne_binaries()) -> context().
 add_bindings(#bh_context{bindings=Bds}=Context, Bindings) ->
     Context#bh_context{bindings= Bds ++ Bindings}.
 
--spec remove_binding(context(), ne_binary()) -> context().
+-spec remove_binding(context(), kz_term:ne_binary()) -> context().
 remove_binding(#bh_context{bindings=Bds}=Context, Binding) ->
     Context#bh_context{bindings=lists:delete(Binding, Bds)}.
 
--spec remove_bindings(context(), ne_binaries()) -> context().
+-spec remove_bindings(context(), kz_term:ne_binaries()) -> context().
 remove_bindings(#bh_context{bindings=Bds}=Context, Bindings) ->
     Context#bh_context{bindings= Bds -- Bindings}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec is_bound(context(), ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_bound(context(), kz_term:ne_binary()) -> boolean().
 is_bound(#bh_context{bindings=Bds}, Binding) ->
     lists:member(Binding, Bds).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec websocket_pid(context()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec websocket_pid(context()) -> kz_term:api_binary().
 websocket_pid(#bh_context{websocket_pid=SocketPid}) -> SocketPid.
 
 -spec set_websocket_pid(context(), pid()) -> context().
 set_websocket_pid(#bh_context{}=Context, SocketPid) ->
     Context#bh_context{websocket_pid=SocketPid}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec websocket_session_id(context()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec websocket_session_id(context()) -> kz_term:api_binary().
 websocket_session_id(#bh_context{websocket_session_id=SessionId}) ->
     SessionId.
 
--spec set_websocket_session_id(context(), ne_binary()) -> context().
+-spec set_websocket_session_id(context(), kz_term:ne_binary()) -> context().
 set_websocket_session_id(#bh_context{}=Context, SessionId) ->
     Context#bh_context{websocket_session_id=SessionId}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec timestamp(context()) -> gregorian_seconds().
+%%------------------------------------------------------------------------------
+-spec timestamp(context()) -> kz_time:gregorian_seconds().
 timestamp(#bh_context{timestamp=Timestamp}) ->
     Timestamp.
 
--spec set_timestamp(context(), gregorian_seconds()) -> context().
+-spec set_timestamp(context(), kz_time:gregorian_seconds()) -> context().
 set_timestamp(#bh_context{}=Context, Timestamp) ->
     Context#bh_context{timestamp=Timestamp}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec name(context()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec name(context()) -> kz_term:ne_binary().
 name(#bh_context{name=Name}) ->
     Name.
 
--spec set_name(context(), ne_binary()) -> context().
+-spec set_name(context(), kz_term:ne_binary()) -> context().
 set_name(#bh_context{}=Context, Name) ->
     Context#bh_context{name=Name}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec metadata(context()) -> any().
 metadata(#bh_context{metadata=Meta}) ->
     Meta.
@@ -271,61 +256,51 @@ metadata(#bh_context{metadata=Meta}) ->
 set_metadata(#bh_context{}=Context, Meta) ->
     Context#bh_context{metadata=Meta}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec source(context()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec source(context()) -> kz_term:ne_binary().
 source(#bh_context{source=Source}) ->
     Source.
 
--spec set_source(context(), ne_binary()) -> context().
+-spec set_source(context(), kz_term:ne_binary()) -> context().
 set_source(#bh_context{}=Context, Source) ->
     Context#bh_context{source=Source}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec destination(context()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec destination(context()) -> kz_term:ne_binary().
 destination(#bh_context{destination=Destination}) ->
     Destination.
 
--spec set_destination(context(), ne_binary()) -> context().
+-spec set_destination(context(), kz_term:ne_binary()) -> context().
 set_destination(#bh_context{}=Context, Destination) ->
     Context#bh_context{destination=Destination}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec req_id(context()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec req_id(context()) -> kz_term:ne_binary().
 req_id(#bh_context{req_id=Id}) ->
     Id.
 
--spec set_req_id(context(), ne_binary()) -> context().
+-spec set_req_id(context(), kz_term:ne_binary()) -> context().
 set_req_id(#bh_context{}=Context, ReqId) ->
     kz_util:put_callid(ReqId),
     Context#bh_context{req_id=ReqId}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec setters_fold(setter_kv(), context()) -> context().
 setters_fold({F, V}, C) -> F(C, V);
 setters_fold({F, K, V}, C) -> F(C, K, V);
@@ -335,11 +310,11 @@ setters_fold(F, C) when is_function(F, 1) -> F(C).
 is_authenticated(#bh_context{auth_account_id='undefined'}) -> 'false';
 is_authenticated(_) -> 'true'.
 
--spec add_error(context(), text()) -> context().
+-spec add_error(context(), kz_term:text()) -> context().
 add_error(Context, Error) ->
     add_error(Context, 'error', Error).
 
--spec add_error(context(), 'ok' | 'error' | 'shutdown', text()) -> context().
+-spec add_error(context(), 'ok' | 'error' | 'shutdown', kz_term:text()) -> context().
 add_error(#bh_context{errors=Errors}=Context, Result, Error) ->
     Context#bh_context{result=Result, errors=[kz_term:to_binary(Error) | Errors]}.
 
@@ -363,7 +338,7 @@ success(#bh_context{}) -> 'false'.
 set_resp_data(#bh_context{}=Context, Data) ->
     Context#bh_context{resp_data=Data}.
 
--spec set_resp_status(context(), ne_binary()) -> context().
+-spec set_resp_status(context(), kz_term:ne_binary()) -> context().
 set_resp_status(#bh_context{}=Context, Status) ->
     Context#bh_context{resp_status=Status}.
 
@@ -371,6 +346,6 @@ set_resp_status(#bh_context{}=Context, Status) ->
 resp_data(#bh_context{resp_data=Data}) ->
     Data.
 
--spec resp_status(context()) -> ne_binary().
+-spec resp_status(context()) -> kz_term:ne_binary().
 resp_status(#bh_context{resp_status=Status}) ->
     Status.

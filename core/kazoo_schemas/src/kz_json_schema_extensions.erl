@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
-%%% @doc
-%%% Module for extending schema validation
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
+%%% @doc Module for extending schema validation
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_json_schema_extensions).
 
 -export([extra_validator/2
@@ -23,7 +21,6 @@ extra_validator(Value, State) ->
         'false' -> State
     end.
 
-
 -spec extra_validation(jesse:json_term(), jesse_state:state()) -> jesse_state:state().
 extra_validation(Value, State) ->
     SchemaId = jesse_state:get_current_schema_id(State),
@@ -37,23 +34,24 @@ extra_validation(Value, State) ->
 extra_validation(<<"metaflow.data">>, Value, State) ->
     JObj = jesse_state:get_current_value(State),
     [_Data | Path] = jesse_state:get_current_path(State),
-    Module = jesse_json_path:path(lists:reverse([<<"module">> | Path]), JObj, undefined),
+    Module = jesse_json_path:path(lists:reverse([<<"module">> | Path]), JObj, 'undefined'),
     lager:debug("validating metaflow action '~s' with data ~p", [Module, Value]),
-    validate_module_data(<<"metaflow.", Module/binary>>, Value, State);
+    validate_module_data(<<"metaflows.", Module/binary>>, Value, State);
+
 extra_validation(<<"metaflow.module">>, Value, State) ->
     lager:debug("validating metaflow action '~s'", [Value]),
-    Schema = <<"metaflow.", Value/binary>>,
+    Schema = <<"metaflows.", Value/binary>>,
     State1 = jesse_state:resolve_ref(State, Schema),
     State2 = case jesse_state:get_current_schema_id(State1) of
                  Schema -> State1;
-                 _OtherSchema -> jesse_error:handle_data_invalid(external_error, <<"unable to find metaflow schema for module ", Value/binary>>, State)
+                 _OtherSchema -> jesse_error:handle_data_invalid('external_error', <<"unable to find metaflow schema for module ", Value/binary>>, State)
              end,
     jesse_state:undo_resolve_ref(State2, State);
 extra_validation(<<"callflows.action.data">>, Value, State) ->
     JObj = jesse_state:get_current_value(State),
     [_Data | Path] = jesse_state:get_current_path(State),
     case jesse_json_path:path(lists:reverse([<<"module">> | Path]), JObj, undefined) of
-        undefined -> State;
+        'undefined' -> State;
         Module -> validate_module_data(<<"callflows.", Module/binary>>, Value, State)
     end;
 extra_validation(<<"callflows.action.module">>, Value, State) ->
@@ -85,6 +83,14 @@ extra_validation(<<"storage.plan.database.attachment.handler">>, Value, State) -
                                                   ,State
                                                   )
     end;
+extra_validation(<<"storage.attachment.google_drive.oauth_doc_id">>, Value, State) ->
+    validate_attachment_oauth_doc_id(Value, State);
+extra_validation(<<"storage.attachment.google_storage.oauth_doc_id">>, Value, State) ->
+    validate_attachment_oauth_doc_id(Value, State);
+extra_validation(<<"storage.attachment.onedrive.oauth_doc_id">>, Value, State) ->
+    validate_attachment_oauth_doc_id(Value, State);
+extra_validation(<<"storage.attachment.dropbox.oauth_doc_id">>, Value, State) ->
+    validate_attachment_oauth_doc_id(Value, State);
 extra_validation(_Key, _Value, State) ->
     lager:debug("extra validation of ~s not handled for value ~p", [_Key, _Value]),
     State.
@@ -98,3 +104,14 @@ validate_module_data(Schema, Value, State) ->
                  _OtherSchema -> State1
              end,
     jesse_state:undo_resolve_ref(State2, State).
+
+validate_attachment_oauth_doc_id(Value, State) ->
+    lager:debug("Validating oauth_doc_id: ~s", [Value]),
+    case kz_datamgr:open_doc(<<"system_auth">>, Value) of
+        {ok, _Obj} ->
+            State;
+        {error, not_found} ->
+            ErrorMsg = <<"Invalid oauth_doc_id: ", Value/binary>>,
+            lager:debug("~s", [ErrorMsg]),
+            jesse_error:handle_data_invalid('external_error', ErrorMsg, State)
+    end.

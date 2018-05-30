@@ -19,13 +19,15 @@
                          kz_json:object()
                         }.
 -type cf_api_std_return() :: cf_api_error() | {'ok', kz_json:object()}.
--type cf_api_bridge_return() :: {'error', 'timeout' | kz_json:object()} |
+-type cf_api_bridge_return() :: {'error', 'invalid_endpoint' | 'timeout' | kz_json:object()} |
                                 {'fail', kz_json:object()} |
                                 {'ok', kz_json:object()}.
 
 -define(APP_NAME, <<"callflow">>).
 -define(APP_VERSION, <<"4.0.0">> ).
 -define(CF_CONFIG_CAT, ?APP_NAME).
+
+-define(DEFAULT_CHILD_KEY, <<"_">>).
 
 -define(RECORDED_NAME_KEY, [<<"media">>, <<"name">>]).
 -define(CF_RECORDING_ID_KEY, <<"Recording-ID">>).

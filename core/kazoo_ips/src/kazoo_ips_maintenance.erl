@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_ips_maintenance).
 
 -include("kazoo_ips.hrl").
@@ -26,29 +24,25 @@
         ,summary/1
         ]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec refresh() -> 'no_return'.
 refresh() ->
     kz_ip_utils:refresh_database(),
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec add() -> 'no_return'.
 add() ->
     io:format("Please use: sup kazoo_ips_maintenance add <ip> <zone> <host>~n", []),
     'no_return'.
 
--spec add(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec add(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 add(IPAddress, Zone, Host) ->
     case kz_ip:create(IPAddress, Zone, Host) of
         {'ok', _IP} ->
@@ -59,47 +53,43 @@ add(IPAddress, Zone, Host) ->
             io:format("unable to add IP ~s: ~p~n", [IPAddress, _R])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec assign() -> 'no_return'.
 assign() ->
     io:format("Please use: sup kazoo_ips_maintenance assign <ip> <account>~n", []),
     'no_return'.
 
--spec assign(ne_binary(), ne_binary()) -> 'no_return'.
+-spec assign(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 assign(IP, Account) ->
-    AccountDb = kz_util:format_account_id(Account, 'encoded'),
-    AccountId = kz_util:format_account_id(Account, 'raw'),
-    _ = case kz_datamgr:open_doc(AccountDb, AccountId) of
-            {'ok', _} ->
-                case kz_ip:assign(Account, IP) of
-                    {'ok', _} ->
-                        io:format("assigned IP ~s to ~s~n"
-                                 ,[IP, Account]);
-                    {'error', _R} ->
-                        io:format("unable to assign IP: ~p~n", [_R])
-                end;
-            {'error', _R} ->
-                io:format("unable to find account: ~p~n", [_R])
-        end,
+    case kzd_accounts:fetch(Account) of
+        {'ok', _} -> do_assignment(Account, IP);
+        {'error', _R} ->
+            io:format("unable to find account: ~p~n", [_R])
+    end,
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+-spec do_assignment(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+do_assignment(Account, IP) ->
+    case kz_ip:assign(Account, IP) of
+        {'ok', _} ->
+            io:format("assigned IP ~s to ~s~n", [IP, Account]);
+        {'error', _R} ->
+            io:format("unable to assign IP: ~p~n", [_R])
+    end.
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec release() -> 'no_return'.
 release() ->
     io:format("Please use: sup kazoo_ips_maintenance release <ip>~n", []),
     'no_return'.
 
--spec release(ne_binary()) -> 'no_return'.
+-spec release(kz_term:ne_binary()) -> 'no_return'.
 release(IP) ->
     _ = case kz_ip:release(IP) of
             {'ok', _} ->
@@ -109,18 +99,16 @@ release(IP) ->
         end,
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete() -> 'no_return'.
 delete() ->
     io:format("Please use: sup kazoo_ips_maintenance delete <ip>~n", []),
     'no_return'.
 
--spec delete(ne_binary()) -> 'no_return'.
+-spec delete(kz_term:ne_binary()) -> 'no_return'.
 delete(IP) ->
     _ = case kz_ip:delete(IP) of
             {'ok', _} ->
@@ -130,16 +118,14 @@ delete(IP) ->
         end,
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary() -> 'no_return'.
 summary() -> summary('undefined').
 
--spec summary(api_binary()) -> 'no_return'.
+-spec summary(kz_term:api_binary()) -> 'no_return'.
 summary(Host) ->
     _ = case kz_ips:summary(Host) of
             {'ok', []} ->

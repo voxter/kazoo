@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_socket_listener).
 -behaviour(gen_server).
 
@@ -21,11 +26,11 @@
 %% Public functions
 %%
 
--spec start_link(gen_tcp:socket()) -> startlink_ret().
+-spec start_link(gen_tcp:socket()) -> kz_types:startlink_ret().
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
 
--spec login(ne_binary()) -> 'ok'.
+-spec login(kz_term:ne_binary()) -> 'ok'.
 login(AccountId) ->
     gen_server:cast(self(), {'login', AccountId}).
 
@@ -40,13 +45,13 @@ init(Socket) ->
     gen_server:cast(self(), 'accept'),
     {'ok', #state{listen_socket=Socket}}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call"),
     {'stop', {'unknown_call', Request}, State}.
 
 %% Start the listener waiting for socket accept
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('accept', #state{listen_socket=Socket}=State) ->
     case gen_tcp:accept(Socket) of
         {'ok', AcceptSocket} ->
@@ -90,7 +95,7 @@ handle_cast(Event, State) ->
     {'noreply', State}.
 
 %% Route socket data to command processor
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
                                           ,account_id=AccountId
                                           ,event_mask=EventMask
@@ -190,6 +195,3 @@ publish_event(Props, _, Socket) ->
                                                 %lager:debug("AMI: publish ~p", [Props]),
     _ = gen_tcp:send(Socket, amimulator_util:format_binary(Props)),
     'ok'.
-
-
-

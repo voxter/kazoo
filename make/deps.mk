@@ -13,7 +13,6 @@ DEPS = amqp_client \
 	erlsom \
 	erlydtl \
 	escalus \
-	eunit \
 	exml \
 	folsom \
 	fs_event \
@@ -28,6 +27,7 @@ DEPS = amqp_client \
 	jiffy \
 	lager \
 	lager_syslog \
+	meck \
 	nklib \
 	plists \
 	poolboy \
@@ -52,12 +52,14 @@ endif
 dep_amqp_client_commit = rabbitmq_v3_6_0
 dep_apns = git https://github.com/inaka/apns4erl.git 2.2.0
 dep_certifi = hex 0.3.0
+dep_cowboy = git https://github.com/ninenines/cowboy 2.2.0
 dep_detergent = git https://github.com/pap/detergent e86dfeded3e4f9f3f9278c6a1aea802079d38b54
 dep_eflame = git https://github.com/slfritchie/eflame 7b0bb1a7e8c8482a59421a3a50ae69d49af59d52
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
 dep_exml = git https://github.com/paulgray/exml 2.2.1
 dep_jiffy = git https://github.com/fenollp/jiffy patch-1  ## See https://github.com/davisp/jiffy/pull/152
+dep_meck = git https://github.com/eproxus/meck
 dep_nklib = git https://github.com/NetComposer/nklib
 dep_plists = hex 1.0.0
 dep_pqueue = hex 1.7.2
@@ -98,3 +100,5 @@ dep_reloader = git https://github.com/lazedo/reloader v0.1
 dep_parse_trans = git https://github.com/lazedo/parse_trans
 
 dep_horse = git https://github.com/ninenines/horse
+
+dep_proper = git https://github.com/manopapad/proper v1.2

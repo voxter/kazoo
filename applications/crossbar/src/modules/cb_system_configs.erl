@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Listing of all expected v1 callbacks
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Listing of all expected v1 callbacks
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_system_configs).
 
 -export([init/0
@@ -26,20 +22,18 @@
 
 -define(DEFAULT, <<"default">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = kz_datamgr:db_create(?KZ_CONFIG_DB),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, 'crossbar', <<"views/system_configs.json">>),
+    _ = kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, ?APP, <<"views/system_configs.json">>),
 
     _ = crossbar_bindings:bind(<<"*.authorize.system_configs">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"*.allowed_methods.system_configs">>, ?MODULE, 'allowed_methods'),
@@ -50,71 +44,75 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.patch.system_configs">>, ?MODULE, 'patch'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.system_configs">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Authorizes the incoming request, returning true if the requestor is
+%%------------------------------------------------------------------------------
+%% @doc Authorizes the incoming request, returning true if the requestor is
 %% allowed to access the resource, or false if not.
 %% @end
-%%--------------------------------------------------------------------
--type authorize_return() :: boolean() | {'halt', cb_context:context()}.
+%%------------------------------------------------------------------------------
+-type authorize_return() :: boolean() | {'stop', cb_context:context()}.
 
 -spec authorize(cb_context:context()) -> authorize_return().
--spec authorize(cb_context:context(), path_token()) -> authorize_return().
--spec authorize(cb_context:context(), path_token(), path_token()) -> authorize_return().
 authorize(Context) ->
     case cb_context:is_superduper_admin(Context)
         andalso cb_context:req_nouns(Context) of
-        'false' -> {'halt', cb_context:add_system_error('forbidden', Context)};
+        'false' -> {'stop', cb_context:add_system_error('forbidden', Context)};
         [{<<"system_configs">>, _}] -> 'true';
-        _ -> {'halt', cb_context:add_system_error('bad_identifier', Context)}
+        _ -> {'stop', cb_context:add_system_error('bad_identifier', Context)}
     end.
+
+-spec authorize(cb_context:context(), path_token()) -> authorize_return().
 authorize(Context, _Id) -> authorize(Context).
+
+-spec authorize(cb_context:context(), path_token(), path_token()) -> authorize_return().
 authorize(Context, _Id, _Node) -> authorize(Context).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_SystemConfigId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE, ?HTTP_PUT, ?HTTP_PATCH].
+
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_SystemConfigId, _Node) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE, ?HTTP_PATCH].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /system_configs => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /system_configs => []
 %%    /system_configs/foo => [<<"foo">>]
 %%    /system_configs/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_Id) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_Id, _Node) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /system_configs mights load a list of system_config objects
 %% /system_configs/123 might load the system_config object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     summary(set_db_to_system(Context)).
@@ -127,9 +125,9 @@ validate(Context, Id) ->
 validate(Context, Id, Node) ->
     validate_document_node(set_db_to_system(Context), Id, cb_context:req_verb(Context), Node).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Document API
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 -spec validate_document(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate_document(Context, Id, ?HTTP_GET) ->
@@ -166,11 +164,11 @@ validate_document_request(Context, Id, FullConfig) ->
                                     ).
 
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Node API
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
--spec validate_document_node(cb_context:context(), path_token(), http_method(), api_ne_binary()) -> cb_context:context().
+-spec validate_document_node(cb_context:context(), path_token(), http_method(), kz_term:api_ne_binary()) -> cb_context:context().
 validate_document_node(Context, Id, ?HTTP_GET, Node) ->
     Config =
         case kz_term:is_true(cb_context:req_value(Context, <<"with_defaults">>, false)) of
@@ -205,27 +203,25 @@ validate_node_request(Context, Id, Node, FullConfig) ->
 
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is PUT, execute the actual action, usually a db save.
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is PUT, execute the actual action, usually a db save.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context, _Id) ->
     crossbar_doc:save(Context).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is POST, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, _Id) ->
     crossbar_doc:save(Context).
+
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, Id, Node) ->
     Ctx = crossbar_doc:save(Context),
     case cb_context:resp_status(Ctx) of
@@ -235,30 +231,30 @@ post(Context, Id, Node) ->
     end.
 
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
--spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 patch(Context, Id) ->
     post(Context, Id).
+
+-spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 patch(Context, Id, Node) ->
     post(Context, Id, Node).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is DELETE, execute the actual action, usually a db delete
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec delete(cb_context:context(), path_token()) ->
-                    cb_context:context().
--spec delete(cb_context:context(), path_token(), path_token()) ->
-                    cb_context:context().
--spec delete(cb_context:context(), path_token(), path_token(), api_object() | kz_json:objects()) ->
                     cb_context:context().
 delete(Context, _Id) ->
     crossbar_doc:delete(Context, ?HARD_DELETE).
 
+-spec delete(cb_context:context(), path_token(), path_token()) ->
+                    cb_context:context().
 delete(Context, Id, Node) ->
     delete(Context, Id, Node, cb_context:doc(Context)).
 
+-spec delete(cb_context:context(), path_token(), path_token(), kz_term:api_object() | kz_json:objects()) ->
+                    cb_context:context().
 delete(Context, Id, _Node, 'undefined') ->
     crossbar_util:response_bad_identifier(Id, Context);
 delete(Context, Id, Node, Doc) ->
@@ -269,13 +265,11 @@ delete(Context, Id, Node, Doc) ->
             cb_context:set_resp_data(crossbar_doc:save(Context1), set_id(Id, Node, kz_json:new()))
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load an instance from the database
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
--spec read_for_delete(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec read_for_delete(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read_for_delete(Id, Context) ->
     Context1 = crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"config">>)),
     case cb_context:resp_status(Context) of
@@ -285,25 +279,21 @@ read_for_delete(Id, Context) ->
             Context1
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     View = <<"system_configs/crossbar_listing">>,
     crossbar_doc:load_view(View, [], Context, fun normalize_view_results/2).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
--spec normalize_view_results(kz_json:object(), ne_binaries()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+-spec normalize_view_results(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"key">>, JObj) | Acc].
 
@@ -314,18 +304,18 @@ set_db_to_system(Context) ->
                        ,{fun cb_context:set_account_id/2, cb_context:auth_account_id(Context)}
                        ]).
 
--spec maybe_set_private_fields(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec maybe_set_private_fields(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 maybe_set_private_fields(ConfigId, JObj) ->
     case kapps_config:get_category(ConfigId) of
         {ok, Doc} -> kz_json:merge(JObj, kz_doc:private_fields(Doc));
         _ -> kz_doc:set_id(JObj, ConfigId)
     end.
 
--spec set_id(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec set_id(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 set_id(Id, JObj) ->
     kz_json:set_value(<<"id">>, Id, JObj).
 
--spec set_id(ne_binary(), ne_binary(), kz_json:object()) -> kz_json:object().
+-spec set_id(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 set_id(Id, Node, JObj) ->
     kz_json:set_value(<<"id">>, <<Id/binary, "/", Node/binary>>, JObj).
 

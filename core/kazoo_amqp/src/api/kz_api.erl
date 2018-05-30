@@ -1,22 +1,20 @@
-%%%-------------------------------------------------------------------
-%%% @Copyright (C) 2010-2016, 2600Hz
-%%% @doc
-%%% Kazoo API Helpers
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Kazoo API Helpers.
 %%% Most API functions take a proplist, filter it against required headers
 %%% and optional headers, and return either the JSON string if all
 %%% required headers (default AND API-call-specific) are present, or an
 %%% error if some headers are missing.
 %%%
-%%% To only check the validity, use the api call's corresponding *_v/1 function.
+%%% To only check the validity, use the API call's corresponding *_v/1 function.
 %%% This will parse the proplist and return a boolean()if the proplist is valid
 %%% for creating a JSON message.
 %%%
+%%%
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_api).
 
 %% API
@@ -37,6 +35,9 @@
         ,app_name/1
         ,app_version/1
         ,node/1
+        ,defer_response/1
+        ,from_pid/1
+        ,reply_to/1
         ]).
 
 -export([is_federated_event/1
@@ -67,77 +68,96 @@
 -export([has_any/2, has_all/2]).
 -endif.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
--spec server_id(kz_json:object()) -> api_binary().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec server_id(kz_json:object()) -> kz_term:api_binary().
 server_id(JObj) ->
     kz_json:get_ne_binary_value(?KEY_SERVER_ID, JObj).
 
--spec queue_id(kz_json:object()) -> api_binary().
+-spec queue_id(kz_json:object()) -> kz_term:api_binary().
 queue_id(JObj) ->
     kz_json:get_ne_binary_value(?KEY_QUEUE_ID, JObj, server_id(JObj)).
 
--spec event_category(kz_json:object()) -> api_binary().
+-spec event_category(kz_json:object()) -> kz_term:api_binary().
 event_category(JObj) ->
     kz_json:get_value(?KEY_EVENT_CATEGORY, JObj).
 
--spec event_name(kz_json:object()) -> api_binary().
+-spec event_name(kz_json:object()) -> kz_term:api_binary().
 event_name(JObj) ->
     kz_json:get_value(?KEY_EVENT_NAME, JObj).
 
--spec app_name(kz_json:object()) -> api_binary().
+-spec app_name(kz_json:object()) -> kz_term:api_binary().
 app_name(JObj) ->
     kz_json:get_value(?KEY_APP_NAME, JObj).
 
--spec app_version(kz_json:object()) -> api_binary().
+-spec app_version(kz_json:object()) -> kz_term:api_binary().
 app_version(JObj) ->
     kz_json:get_value(?KEY_APP_VERSION, JObj).
 
--spec node(kz_json:object()) -> api_binary().
+-spec node(kz_json:object()) -> kz_term:api_ne_binary().
 node(JObj) ->
-    kz_json:get_value(?KEY_NODE, JObj).
+    kz_json:get_ne_binary_value(?KEY_NODE, JObj).
 
--spec msg_id(api_terms()) -> api_binary().
+-spec msg_id(kz_term:api_terms()) -> kz_term:api_binary().
 msg_id(Props) when is_list(Props) ->
     props:get_value(?KEY_MSG_ID, Props);
 msg_id(JObj) ->
     kz_json:get_value(?KEY_MSG_ID, JObj).
 
--spec msg_reply_id(api_terms()) -> api_binary().
+-spec msg_reply_id(kz_term:api_terms()) -> kz_term:api_binary().
 msg_reply_id(Props) when is_list(Props) ->
     props:get_value(?KEY_MSG_REPLY_ID, Props, msg_id(Props));
 msg_reply_id(JObj) ->
     kz_json:get_value(?KEY_MSG_REPLY_ID, JObj, msg_id(JObj)).
 
--spec account_id(api_terms()) -> api_binary().
+-spec account_id(kz_term:api_terms()) -> kz_term:api_binary().
 account_id(Props) when is_list(Props) ->
     props:get_value(?KEY_API_ACCOUNT_ID, Props);
 account_id(JObj) ->
     kz_json:get_value(?KEY_API_ACCOUNT_ID, JObj).
 
--spec call_id(api_terms()) -> api_binary().
+-spec call_id(kz_term:api_terms()) -> kz_term:api_binary().
 call_id(Props) when is_list(Props) ->
     props:get_value(?KEY_API_CALL_ID, Props);
 call_id(JObj) ->
     kz_json:get_value(?KEY_API_CALL_ID, JObj).
 
-%%--------------------------------------------------------------------
+-spec defer_response(kz_term:api_terms()) -> kz_term:api_binary().
+defer_response(Props) when is_list(Props) ->
+    props:get_is_true(?KEY_DEFER_RESPONSE, Props);
+defer_response(JObj) ->
+    kz_json:is_true(?KEY_DEFER_RESPONSE, JObj).
+
+-spec from_pid(kz_term:api_terms()) -> kz_term:api_binary().
+from_pid(Props) when is_list(Props) ->
+    props:get_value(?KEY_REQUEST_FROM_PID, Props);
+from_pid(JObj) ->
+    kz_json:get_value(?KEY_REQUEST_FROM_PID, JObj).
+
+-spec reply_to(kz_term:api_terms()) -> kz_term:api_binary().
+reply_to(Props) when is_list(Props) ->
+    props:get_value(?KEY_REPLY_TO_PID, Props);
+reply_to(JObj) ->
+    kz_json:get_value(?KEY_REPLY_TO_PID, JObj).
+
+%%------------------------------------------------------------------------------
 %% @doc Default Headers in all messages - see wiki
 %% Creates the seed proplist for the eventual message to be sent
 %% All fields are required general headers.
 %% @end
-%%--------------------------------------------------------------------
--spec default_headers_v(api_terms()) -> boolean().
+%%------------------------------------------------------------------------------
 
--spec default_headers(ne_binary(), ne_binary()) -> kz_proplist().
--spec default_headers(api_binary(), ne_binary(), ne_binary()) -> kz_proplist().
--spec default_headers(api_binary(), ne_binary(), ne_binary(), ne_binary()) -> kz_proplist().
--spec default_headers(api_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> kz_proplist().
-
+-spec default_headers(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 default_headers(AppName, AppVsn) ->
     default_headers('undefined', AppName, AppVsn).
 
+-spec default_headers(kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 default_headers(ServerID, AppName, AppVsn) ->
     [{?KEY_SERVER_ID, ServerID}
     ,{?KEY_APP_NAME, AppName}
@@ -145,9 +165,11 @@ default_headers(ServerID, AppName, AppVsn) ->
     ,{?KEY_NODE, kz_term:to_binary(node())}
     ].
 
+-spec default_headers(kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 default_headers(EvtCat, EvtName, AppName, AppVsn) ->
     default_headers(<<>>, EvtCat, EvtName, AppName, AppVsn).
 
+-spec default_headers(kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 default_headers(ServerID, EvtCat, EvtName, AppName, AppVsn) ->
     [{?KEY_SERVER_ID, ServerID}
     ,{?KEY_EVENT_CATEGORY, EvtCat}
@@ -157,40 +179,42 @@ default_headers(ServerID, EvtCat, EvtName, AppName, AppVsn) ->
     ,{?KEY_NODE, kz_term:to_binary(node())}
     ].
 
+-spec default_headers_v(kz_term:api_terms()) -> boolean().
+
+
 default_headers_v(Props) when is_list(Props) ->
     Filtered = props:filter_empty(Props),
     lists:all(fun(K) -> default_header_v(K, Filtered) end, ?DEFAULT_HEADERS);
 default_headers_v(JObj) ->
     default_headers_v(kz_json:to_proplist(JObj)).
 
--spec default_header_v(ne_binary(), kz_proplist()) -> boolean().
+-spec default_header_v(kz_term:ne_binary(), kz_term:proplist()) -> boolean().
 default_header_v(Header, Props) ->
     not kz_term:is_empty(props:get_value(Header, Props)).
 
--spec disambiguate_and_publish(kz_json:object(), kz_json:object(), ne_binary() | atom()) -> any().
+-spec disambiguate_and_publish(kz_json:object(), kz_json:object(), kz_term:ne_binary() | atom()) -> any().
 disambiguate_and_publish(ReqJObj, RespJObj, Binding) ->
     Wapi = list_to_binary([<<"kapi_">>, kz_term:to_binary(Binding)]),
     ApiMod = kz_term:to_atom(Wapi),
     ApiMod:disambiguate_and_publish(ReqJObj, RespJObj).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Set any missing defaults with the values defined in the by the
+%%------------------------------------------------------------------------------
+%% @doc Set any missing defaults with the values defined in the by the
 %% validation definitions and remove any empty values
 %% @end
-%%--------------------------------------------------------------------
--type api_formatter_fun() :: fun((api_terms()) -> api_formatter_return()).
+%%------------------------------------------------------------------------------
+-type api_formatter_fun() :: fun((kz_term:api_terms()) -> api_formatter_return()).
 -type prepare_option_el() :: {'formatter', api_formatter_fun()} |
                              {'remove_recursive', boolean()}.
 -type prepare_options() :: [prepare_option_el()].
 
--spec prepare_api_payload(api_terms(), kz_proplist()) -> api_formatter_return() | kz_proplist().
--spec prepare_api_payload(api_terms(), kz_proplist(), api_formatter_fun() | prepare_options()) ->
-                                 api_formatter_return() | kz_proplist().
 
+-spec prepare_api_payload(kz_term:api_terms(), kz_term:proplist()) -> api_formatter_return() | kz_term:proplist().
 prepare_api_payload(Prop, HeaderValues) ->
     prepare_api_payload(Prop, HeaderValues, []).
 
+-spec prepare_api_payload(kz_term:api_terms(), kz_term:proplist(), api_formatter_fun() | prepare_options()) ->
+                                 api_formatter_return() | kz_term:proplist().
 prepare_api_payload(Prop, HeaderValues, FormatterFun) when is_function(FormatterFun, 1) ->
     prepare_api_payload(Prop, HeaderValues, [{'formatter', FormatterFun}]);
 prepare_api_payload(Prop, HeaderValues, Options) when is_list(Prop) ->
@@ -203,13 +227,12 @@ prepare_api_payload(Prop, HeaderValues, Options) when is_list(Prop) ->
 prepare_api_payload(JObj, HeaderValues, Options) ->
     prepare_api_payload(kz_json:to_proplist(JObj), HeaderValues, Options).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Set any missing defaults with the values defined in the by the
+%%------------------------------------------------------------------------------
+%% @doc Set any missing defaults with the values defined in the by the
 %% validation definitions
 %% @end
-%%--------------------------------------------------------------------
--spec set_missing_values(api_terms(), kz_proplist()) -> api_terms().
+%%------------------------------------------------------------------------------
+-spec set_missing_values(kz_term:api_terms(), kz_term:proplist()) -> kz_term:api_terms().
 set_missing_values(Prop, HeaderValues) when is_list(Prop) ->
     lists:foldl(fun({_, V}, PropAcc) when is_list(V) ->
                         PropAcc;
@@ -222,13 +245,12 @@ set_missing_values(Prop, HeaderValues) when is_list(Prop) ->
 set_missing_values(JObj, HeaderValues) ->
     kz_json:from_list(set_missing_values(kz_json:to_proplist(JObj), HeaderValues)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Recursively cleans a proplist or json object, returning the same
+%%------------------------------------------------------------------------------
+%% @doc Recursively cleans a proplist or json object, returning the same
 %% type given
 %% @end
-%%--------------------------------------------------------------------
--spec remove_empty_values(api_terms()) -> api_terms().
+%%------------------------------------------------------------------------------
+-spec remove_empty_values(kz_term:api_terms()) -> kz_term:api_terms().
 remove_empty_values(API) ->
     remove_empty_values(API, 'true').
 
@@ -267,11 +289,11 @@ is_empty([]) -> 'true';
 is_empty(<<>>) -> 'true';
 is_empty(_) -> 'false'.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Extract just the default headers from a message
 %% @end
-%%--------------------------------------------------------------------
--spec extract_defaults(api_terms()) -> kz_proplist().
+%%------------------------------------------------------------------------------
+-spec extract_defaults(kz_term:api_terms()) -> kz_term:proplist().
 extract_defaults(Prop) when is_list(Prop) ->
     %% not measurable faster over the foldl, but cleaner (imo)
     [ {H, V} || H <- ?DEFAULT_HEADERS ++ ?OPTIONAL_DEFAULT_HEADERS,
@@ -280,7 +302,7 @@ extract_defaults(Prop) when is_list(Prop) ->
 extract_defaults(JObj) ->
     extract_defaults(kz_json:to_proplist(JObj)).
 
--spec remove_defaults(api_terms()) -> api_terms().
+-spec remove_defaults(kz_term:api_terms()) -> kz_term:api_terms().
 remove_defaults(Prop) when is_list(Prop) ->
     props:delete_keys(?OPTIONAL_DEFAULT_HEADERS
                      ,props:delete_keys(?DEFAULT_HEADERS, Prop)
@@ -290,12 +312,12 @@ remove_defaults(JObj) ->
                        ,kz_json:delete_keys(?DEFAULT_HEADERS, JObj)
                        ).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Format an error event
 %% Takes proplist, creates JSON string or error
 %% @end
-%%--------------------------------------------------------------------
--spec error_resp(api_terms()) -> api_formatter_return().
+%%------------------------------------------------------------------------------
+-spec error_resp(kz_term:api_terms()) -> api_formatter_return().
 error_resp(Prop) when is_list(Prop) ->
     case error_resp_v(Prop) of
         'true' -> build_message(Prop, ?ERROR_RESP_HEADERS, ?OPTIONAL_ERROR_RESP_HEADERS);
@@ -304,16 +326,17 @@ error_resp(Prop) when is_list(Prop) ->
 error_resp(JObj) ->
     error_resp(kz_json:to_proplist(JObj)).
 
--spec error_resp_v(api_terms()) -> boolean().
+-spec error_resp_v(kz_term:api_terms()) -> boolean().
 error_resp_v(Prop) when is_list(Prop) ->
     validate(Prop, ?ERROR_RESP_HEADERS, ?ERROR_RESP_VALUES, ?ERROR_RESP_TYPES);
 error_resp_v(JObj) ->
     error_resp_v(kz_json:to_proplist(JObj)).
 
--spec publish_error(ne_binary(), api_terms()) -> 'ok'.
--spec publish_error(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_error(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_error(TargetQ, JObj) ->
     publish_error(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_error(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_error(TargetQ, Error, ContentType) ->
     {'ok', Payload} = prepare_api_payload(Error, ?ERROR_RESP_VALUES, fun error_resp/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).
@@ -337,10 +360,15 @@ remove_optional_defaults(JObj) ->
            ],
     kz_json:delete_keys(Keys, JObj).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec validate(api_terms(), api_headers(), api_valid_values(), api_types()) -> boolean().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec validate(kz_term:api_terms(), api_headers(), api_valid_values(), api_types()) -> boolean().
 validate(Prop, ReqH, Vals, Types) when is_list(Prop) ->
     case has_all(Prop, ?DEFAULT_HEADERS)
         andalso validate_message(Prop, ReqH, Vals, Types)
@@ -353,7 +381,7 @@ validate(Prop, ReqH, Vals, Types) when is_list(Prop) ->
 validate(JObj, ReqH, Vals, Types) ->
     validate(kz_json:to_proplist(JObj), ReqH, Vals, Types).
 
--spec validate_message(api_terms(), api_headers(), kz_proplist(), kz_proplist()) -> boolean().
+-spec validate_message(kz_term:api_terms(), api_headers(), kz_term:proplist(), kz_term:proplist()) -> boolean().
 validate_message(Prop, ReqH, Vals, Types) when is_list(Prop) ->
     has_all(Prop, ReqH)
         andalso values_check(Prop, Vals)
@@ -361,7 +389,7 @@ validate_message(Prop, ReqH, Vals, Types) when is_list(Prop) ->
 validate_message(JObj, ReqH, Vals, Types) ->
     validate_message(kz_json:to_proplist(JObj), ReqH, Vals, Types).
 
--spec build_message(api_terms(), api_headers(), api_headers()) -> api_formatter_return().
+-spec build_message(kz_term:api_terms(), api_headers(), api_headers()) -> api_formatter_return().
 build_message(Prop, ReqH, OptH) when is_list(Prop) ->
     case defaults(Prop, ReqH ++ OptH) of
         {'error', _Reason}=Error ->
@@ -378,8 +406,8 @@ build_message(Prop, ReqH, OptH) when is_list(Prop) ->
 build_message(JObj, ReqH, OptH) ->
     build_message(kz_json:to_proplist(JObj), ReqH, OptH).
 
--spec build_message_specific_headers(kz_proplist() | {api_headers(), kz_proplist()}, api_headers(), api_headers()) ->
-                                            {'ok', kz_proplist()} |
+-spec build_message_specific_headers(kz_term:proplist() | {api_headers(), kz_term:proplist()}, api_headers(), api_headers()) ->
+                                            {'ok', kz_term:proplist()} |
                                             {'error', string()}.
 build_message_specific_headers({Headers, Prop}, ReqH, OptH) ->
     case update_required_headers(Prop, ReqH, Headers) of
@@ -395,7 +423,7 @@ build_message_specific_headers({Headers, Prop}, ReqH, OptH) ->
 build_message_specific_headers(Prop, ReqH, OptH) ->
     build_message_specific_headers({[], Prop}, ReqH, OptH).
 
--spec build_message_specific(kz_proplist() | {api_headers(), kz_proplist()}, api_headers(), api_headers()) ->
+-spec build_message_specific(kz_term:proplist() | {api_headers(), kz_term:proplist()}, api_headers(), api_headers()) ->
                                     api_formatter_return().
 build_message_specific({Headers, Prop}, ReqH, OptH) ->
     case update_required_headers(Prop, ReqH, Headers) of
@@ -411,7 +439,7 @@ build_message_specific({Headers, Prop}, ReqH, OptH) ->
 build_message_specific(Prop, ReqH, OptH) ->
     build_message_specific({[], Prop}, ReqH, OptH).
 
--spec headers_to_json(kz_proplist()) -> api_formatter_return().
+-spec headers_to_json(kz_term:proplist()) -> api_formatter_return().
 headers_to_json([_|_]=HeadersProp) ->
     _ = kz_util:kz_log_md_put('msg_id', msg_id(HeadersProp)),
     try kz_json:encode(kz_json:from_list(HeadersProp)) of
@@ -423,8 +451,8 @@ headers_to_json([_|_]=HeadersProp) ->
 %% Checks Prop for all default headers, throws error if one is missing
 %% defaults(PassedProps, MessageHeaders) -> { Headers, NewPropList } | {error, Reason}
 
--spec defaults(api_terms(), api_headers()) ->
-                      {kz_proplist(), kz_proplist()} |
+-spec defaults(kz_term:api_terms(), api_headers()) ->
+                      {kz_term:proplist(), kz_term:proplist()} |
                       {'error', string()}.
 defaults(Prop, MsgHeaders) -> defaults(Prop, expand_headers(MsgHeaders), []).
 defaults(Prop, MsgHeaders, Headers) ->
@@ -435,18 +463,18 @@ defaults(Prop, MsgHeaders, Headers) ->
             update_optional_headers(Prop1, ?OPTIONAL_DEFAULT_HEADERS -- MsgHeaders, Headers1)
     end.
 
--spec expand_headers(list()) -> ne_binaries().
+-spec expand_headers(list()) -> kz_term:ne_binaries().
 expand_headers(Headers) ->
     lists:foldr(fun expand_header/2, [], Headers).
 
--spec expand_header(ne_binary() | ne_binaries(), ne_binaries()) -> ne_binaries().
+-spec expand_header(kz_term:ne_binary() | kz_term:ne_binaries(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 expand_header(Header, Acc)
   when is_binary(Header) -> [Header | Acc];
 expand_header(Headers, Acc)
   when is_list(Headers) -> expand_headers(Headers) ++ Acc.
 
--spec update_required_headers(kz_proplist(), api_headers(), kz_proplist()) ->
-                                     {kz_proplist(), kz_proplist()} |
+-spec update_required_headers(kz_term:proplist(), api_headers(), kz_term:proplist()) ->
+                                     {kz_term:proplist(), kz_term:proplist()} |
                                      {'error', string()}.
 update_required_headers(Prop, Fields, Headers) ->
     case has_all(Prop, Fields) of
@@ -454,8 +482,8 @@ update_required_headers(Prop, Fields, Headers) ->
         'false' -> {'error', "All required headers not defined"}
     end.
 
--spec update_optional_headers(kz_proplist(), api_headers(), kz_proplist()) ->
-                                     {kz_proplist(), kz_proplist()}.
+-spec update_optional_headers(kz_term:proplist(), api_headers(), kz_term:proplist()) ->
+                                     {kz_term:proplist(), kz_term:proplist()}.
 update_optional_headers(Prop, Fields, Headers) ->
     case has_any(Prop, Fields) of
         'true' -> add_optional_headers(Prop, Fields, Headers);
@@ -463,8 +491,8 @@ update_optional_headers(Prop, Fields, Headers) ->
     end.
 
 %% add [Header] from Prop to HeadProp
--spec add_headers(kz_proplist(), api_headers(), kz_proplist()) ->
-                         {kz_proplist(), kz_proplist()}.
+-spec add_headers(kz_term:proplist(), api_headers(), kz_term:proplist()) ->
+                         {kz_term:proplist(), kz_term:proplist()}.
 add_headers(Prop, Fields, Headers) ->
     lists:foldl(fun(K, {Headers1, KVs}) when is_list(K) ->
                         K1 = [Ki || Ki <- K, props:is_defined(Ki, KVs)],
@@ -473,8 +501,8 @@ add_headers(Prop, Fields, Headers) ->
                         {[{K, props:get_value(K, KVs)} | Headers1], props:delete(K, KVs)}
                 end, {Headers, Prop}, Fields).
 
--spec add_optional_headers(kz_proplist(), api_headers(), kz_proplist()) ->
-                                  {kz_proplist(), kz_proplist()}.
+-spec add_optional_headers(kz_term:proplist(), api_headers(), kz_term:proplist()) ->
+                                  {kz_term:proplist(), kz_term:proplist()}.
 add_optional_headers(Prop, Fields, Headers) ->
     lists:foldl(fun(K, {Headers1, KVs}) ->
                         case props:get_value(K, KVs) of
@@ -484,19 +512,19 @@ add_optional_headers(Prop, Fields, Headers) ->
                 end, {Headers, Prop}, Fields).
 
 %% Checks Prop against a list of required headers, returns true | false
--spec has_all(kz_proplist() | kz_proplists(), api_headers()) -> boolean().
+-spec has_all(kz_term:proplist(), api_headers()) -> boolean().
 has_all(Prop, Headers) ->
     lists:all(fun(Header) -> has_all_header(Header, Prop) end, Headers).
 
--spec has_all_header(kz_proplist() | kz_proplists(), api_headers()) -> boolean().
-has_all_header(Header, Prop) when is_list(Header) ->
-    case has_any(Prop, Header) of
+-spec has_all_header(api_headers(), kz_term:proplist()) -> boolean().
+has_all_header(Headers, Prop) when is_list(Headers) ->
+    case has_any(Prop, Headers) of
         'true' -> 'true';
         'false' ->
-            lager:debug("failed to find one of keys '~p' on API message", [Header]),
+            lager:debug("failed to find one of keys '~p' on API message", [Headers]),
             'false'
     end;
-has_all_header(Header, Prop) ->
+has_all_header(Header, Prop) when is_binary(Header) ->
     case props:is_defined(Header, Prop) of
         'true' -> 'true';
         'false' ->
@@ -505,17 +533,17 @@ has_all_header(Header, Prop) ->
     end.
 
 %% Checks Prop against a list of optional headers, returns true | false if at least one if found
--spec has_any(kz_proplist(), api_headers()) -> boolean().
+-spec has_any(kz_term:proplist(), api_headers()) -> boolean().
 has_any(Prop, Headers) ->
     lists:any(fun(Header) -> props:is_defined(Header, Prop) end, Headers).
 
 %% checks Prop against a list of values to ensure known key/value pairs are correct (like Event-Category
 %% and Event-Name). We don't care if a key is defined in Values and not in Prop; that is handled by has_all/1
--spec values_check(kz_proplist(), kz_proplist()) -> boolean().
+-spec values_check(kz_term:proplist(), kz_term:proplist()) -> boolean().
 values_check(Prop, Values) ->
     lists:all(fun(Value) -> values_check_all(Prop, Value) end, Values).
 
--spec values_check_all(kz_proplist(), {any(), any()}) -> boolean().
+-spec values_check_all(kz_term:proplist(), {any(), any()}) -> boolean().
 values_check_all(Prop, {Key, Vs}) when is_list(Vs) ->
     case props:get_value(Key, Prop) of
         'undefined' -> 'true'; % isn't defined in Prop, has_all will error if req'd
@@ -540,13 +568,13 @@ values_check_all(Prop, {Key, V}) ->
 
 %% checks Prop against a list of {Key, Fun}, running the value of Key through Fun, which returns a
 %% boolean.
--type typecheck() :: {ne_binary(), fun((_) -> boolean())}.
+-type typecheck() :: {kz_term:ne_binary(), fun((_) -> boolean())}.
 -type typechecks() :: [typecheck()].
--spec type_check(kz_proplist(), typechecks()) -> boolean().
+-spec type_check(kz_term:proplist(), typechecks()) -> boolean().
 type_check(Prop, Types) ->
     lists:all(fun(Type) -> type_check_all(Prop, Type) end, Types).
 
--spec type_check_all(kz_proplist(), typecheck()) -> boolean().
+-spec type_check_all(kz_term:proplist(), typecheck()) -> boolean().
 type_check_all(Prop, {Key, Fun}) ->
     case props:get_value(Key, Prop) of
         %% isn't defined in Prop, has_all will error if req'd
@@ -571,13 +599,13 @@ is_federated_event(JObj) ->
         _Broker -> 'true'
     end.
 
--spec event_zone(kz_json:object()) -> ne_binary().
+-spec event_zone(kz_json:object()) -> kz_term:ne_binary().
 event_zone(JObj) ->
     kz_json:get_ne_binary_value(?KEY_AMQP_ZONE, JObj).
 
--type exec_fun_1() :: fun((api_terms()) -> api_terms()).
--type exec_fun_2() :: {fun((_, api_terms()) -> api_terms()), _}.
--type exec_fun_3() :: {fun((_, _, api_terms()) -> api_terms()), _, _}.
+-type exec_fun_1() :: fun((kz_term:api_terms()) -> kz_term:api_terms()).
+-type exec_fun_2() :: {fun((_, kz_term:api_terms()) -> kz_term:api_terms()), _}.
+-type exec_fun_3() :: {fun((_, _, kz_term:api_terms()) -> kz_term:api_terms()), _, _}.
 -type exec_fun() :: exec_fun_1() | exec_fun_2() | exec_fun_3().
 -type exec_funs() :: [exec_fun(),...].
 
@@ -585,13 +613,13 @@ event_zone(JObj) ->
         andalso is_list(element(1, Obj))
        ).
 
--spec exec(exec_funs(), api_terms()) -> api_terms().
+-spec exec(exec_funs(), kz_term:api_terms()) -> kz_term:api_terms().
 exec(Funs, API)
   when is_list(API);
        ?is_json(API) ->
     lists:foldl(fun exec_fold/2, API, Funs).
 
--spec exec_fold(exec_fun(), api_terms()) -> api_terms().
+-spec exec_fold(exec_fun(), kz_term:api_terms()) -> kz_term:api_terms().
 exec_fold({F, K, V}, C) when is_function(F, 3) -> F(K, V, C);
 exec_fold({F, V}, C) when is_function(F, 2) -> F(V, C);
 exec_fold(F, C) when is_function(F, 1) -> F(C);

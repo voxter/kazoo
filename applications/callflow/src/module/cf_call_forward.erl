@@ -1,13 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% "data":{
-%%%   "action":"activate" | "deactivate" | "update" | "toggle" | "menu"
-%%% }
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Callflow action to control call forwarding feature.
+%%%
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`action'</dt>
+%%%   <dd>The action to be done: `activate', `deactivate', `update', `toggle' and `menu'.</dd>
+%%% </dl>
+%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_call_forward).
 
 -behaviour(gen_cf_action).
@@ -24,14 +27,16 @@
 -define(CALLFWD_NUMBER_TIMEOUT, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"callfwd_number_timeout">>, 8000)).
 
 -record(keys, {menu_toggle_cf =
-                   kapps_config:get_binary(?MOD_CONFIG_CAT, [<<"keys">>, <<"menu_toggle_option">>], <<"1">>)
+                   kapps_config:get_ne_binary(?MOD_CONFIG_CAT, [<<"keys">>, <<"menu_toggle_option">>], <<"1">>)
+               :: kz_term:ne_binary()
               ,menu_change_number =
-                   kapps_config:get_binary(?MOD_CONFIG_CAT, [<<"keys">>, <<"menu_change_number">>], <<"2">>)
+                   kapps_config:get_ne_binary(?MOD_CONFIG_CAT, [<<"keys">>, <<"menu_change_number">>], <<"2">>)
+               :: kz_term:ne_binary()
               }).
 -type keys() :: #keys{}.
 
 -record(callfwd, {keys = #keys{} :: keys()
-                 ,doc_id = 'undefined' :: api_binary()
+                 ,doc_id :: kz_term:api_ne_binary()
                  ,enabled = 'false' :: boolean()
                  ,number = <<>> :: binary()
                  ,require_keypress = 'true' :: boolean()
@@ -40,14 +45,12 @@
                  }).
 -type callfwd() :: #callfwd{}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     case get_call_forward(Call) of
@@ -72,13 +75,11 @@ handle(Data, Call) ->
             cf_exe:continue(Call)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function provides a menu with the call forwarding options
+%%------------------------------------------------------------------------------
+%% @doc This function provides a menu with the call forwarding options
 %% @end
-%%--------------------------------------------------------------------
--spec cf_menu(callfwd(), ne_binary(), kapps_call:call()) -> callfwd().
+%%------------------------------------------------------------------------------
+-spec cf_menu(callfwd(), kz_term:ne_binary(), kapps_call:call()) -> callfwd().
 cf_menu(#callfwd{keys=#keys{menu_toggle_cf=Toggle
                            ,menu_change_number=ChangeNum
                            }
@@ -115,14 +116,12 @@ cf_menu(#callfwd{keys=#keys{menu_toggle_cf=Toggle
             CF
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will update the call forwarding enabling it if it is
+%%------------------------------------------------------------------------------
+%% @doc This function will update the call forwarding enabling it if it is
 %% not, and disabling it if it is
 %% @end
-%%--------------------------------------------------------------------
--spec cf_toggle(callfwd(), api_binary(), kapps_call:call()) -> callfwd().
+%%------------------------------------------------------------------------------
+-spec cf_toggle(callfwd(), kz_term:api_binary(), kapps_call:call()) -> callfwd().
 cf_toggle(#callfwd{enabled='false'
                   ,number=Number
                   }=CF, _, Call) when is_binary(Number), Number =/= <<>> ->
@@ -138,14 +137,12 @@ cf_toggle(#callfwd{enabled='false'}=CF, CaptureGroup, Call) ->
 cf_toggle(CF, _, Call) ->
     cf_deactivate(CF, Call).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will udpate the call forwarding object on the owner
+%%------------------------------------------------------------------------------
+%% @doc This function will udpate the call forwarding object on the owner
 %% document to enable call forwarding
 %% @end
-%%--------------------------------------------------------------------
--spec cf_activate(callfwd(), api_binary(), kapps_call:call()) -> callfwd().
+%%------------------------------------------------------------------------------
+-spec cf_activate(callfwd(), kz_term:api_binary(), kapps_call:call()) -> callfwd().
 cf_activate(CF1, CaptureGroup, Call) when is_atom(CaptureGroup); CaptureGroup =:= <<>> ->
     lager:info("activating call forwarding to '~s'", [CaptureGroup]),
     CF2 = #callfwd{number=Number} = cf_update_number(CF1, CaptureGroup, Call),
@@ -166,27 +163,23 @@ cf_activate(CF, CaptureGroup, Call) ->
         end,
     CF#callfwd{enabled='true', number=CaptureGroup}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will udpate the call forwarding object on the owner
+%%------------------------------------------------------------------------------
+%% @doc This function will udpate the call forwarding object on the owner
 %% document to disable call forwarding
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec cf_deactivate(callfwd(), kapps_call:call()) -> callfwd().
 cf_deactivate(CF, Call) ->
     lager:info("deactivating call forwarding"),
     catch({'ok', _} = kapps_call_command:b_prompt(<<"cf-disabled">>, Call)),
     CF#callfwd{enabled='false'}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will udpate the call forwarding object on the owner
+%%------------------------------------------------------------------------------
+%% @doc This function will udpate the call forwarding object on the owner
 %% document with a new number
 %% @end
-%%--------------------------------------------------------------------
--spec cf_update_number(callfwd(), api_binary(), kapps_call:call()) -> callfwd().
+%%------------------------------------------------------------------------------
+-spec cf_update_number(callfwd(), kz_term:api_binary(), kapps_call:call()) -> callfwd().
 cf_update_number(#callfwd{interdigit_timeout=Interdigit}=CF, CaptureGroup, Call)
   when is_atom(CaptureGroup); CaptureGroup =:= <<>> ->
     EnterNumber = kapps_call:get_prompt(Call, <<"cf-enter_number">>),
@@ -216,15 +209,13 @@ cf_update_number(CF, CaptureGroup, _) ->
     lager:info("update call forwarding number with '~s'", [CaptureGroup]),
     CF#callfwd{number=CaptureGroup}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This is a helper function to update a document, and corrects the
+%%------------------------------------------------------------------------------
+%% @doc This is a helper function to update a document, and corrects the
 %% rev tag if the document is in conflict
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_callfwd(callfwd(), kapps_call:call()) ->
-                            {'ok', api_object()} |
+                            {'ok', kz_term:api_object()} |
                             {'error', atom()}.
 update_callfwd('undefined', _Call) -> {'ok', 'undefined'};
 update_callfwd(#callfwd{doc_id=Id
@@ -254,12 +245,10 @@ update_callfwd(#callfwd{doc_id=Id
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will load the call forwarding record
+%%------------------------------------------------------------------------------
+%% @doc This function will load the call forwarding record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec get_call_forward(kapps_call:call()) ->
                               callfwd() |
                               {'error', callfwd()}.
@@ -273,7 +262,7 @@ get_call_forward(Call) ->
         end,
     maybe_get_call_forward(Call, OwnerId).
 
--spec maybe_get_call_forward(kapps_call:call(), api_binary()) ->
+-spec maybe_get_call_forward(kapps_call:call(), kz_term:api_binary()) ->
                                     callfwd() |
                                     {'error', callfwd()}.
 maybe_get_call_forward(_Call, 'undefined') ->

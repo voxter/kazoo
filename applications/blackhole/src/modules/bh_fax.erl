@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
+%%% @author Roman Galeev
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%   Roman Galeev
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(bh_fax).
 
 -export([init/0
@@ -55,7 +53,8 @@ bindings(_Context, #{account_id := AccountId
         ,listeners => Listeners
         }.
 
--spec fax_status_bind_options(ne_binary(), ne_binary()) -> kz_proplist().
+-spec fax_status_bind_options(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                     kz_term:proplist().
 fax_status_bind_options(AccountId, FaxId) ->
     [{'restrict_to', ['status']}
     ,{'account_id', AccountId}
@@ -63,7 +62,8 @@ fax_status_bind_options(AccountId, FaxId) ->
     ,'federate'
     ].
 
--spec fax_object_bind_options(ne_binary(), ne_binary()) -> gen_listener:bindings().
+-spec fax_object_bind_options(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                     kz_term:proplist().
 fax_object_bind_options(MODB, Action) ->
     [{'keys', [[{'action', Action}
                ,{'db', MODB}

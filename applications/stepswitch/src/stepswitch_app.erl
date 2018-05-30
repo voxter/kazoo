@@ -1,9 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
-%%% @doc
-%%% stepswitch routing WhApp entry module
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc stepswitch routing WhApp entry module
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stepswitch_app).
 
 -behaviour(application).
@@ -13,23 +12,22 @@
 
 -export([start/2, stop/1]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application start behaviour
-%%--------------------------------------------------------------------
--spec start(application:start_type(), any()) -> startapp_ret().
+%%------------------------------------------------------------------------------
+%% @doc Implement the application start behaviour.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     _ = declare_exchanges(),
-    _ = kapps_maintenance:bind({'refresh', ?KZ_OFFNET_DB}, 'stepswitch_maintenance', 'refresh'),
+    _ = stepswitch_maintenance:refresh(),
     stepswitch_sup:start_link().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application stop behaviour
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Implement the application stop behaviour.
+%% @end
+%%------------------------------------------------------------------------------
 -spec stop(any()) -> any().
 stop(_State) ->
-    _ = kapps_maintenance:unbind({'refresh', ?KZ_OFFNET_DB}, 'stepswitch_maintenance', 'refresh'),
     'ok'.
 
 -spec declare_exchanges() -> 'ok'.

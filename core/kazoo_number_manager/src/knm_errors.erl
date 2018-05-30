@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_errors).
 
 -export([unspecified/2
@@ -38,7 +36,7 @@
 -define(CAUSE, <<"cause">>).
 -define(MESSAGE, <<"message">>).
 
--type reason() :: atom() | ne_binary().
+-type reason() :: atom() | kz_term:ne_binary().
 -type error() :: kz_json:object().
 
 -type kn() :: knm_number:knm_number().
@@ -52,7 +50,7 @@
              ,thrown_error/0
              ]).
 
--spec unspecified(any(), kn() | ne_binary()) -> no_return().
+-spec unspecified(any(), kn() | kz_term:ne_binary()) -> no_return().
 unspecified(Error, Number) ->
     throw({'error', Error, Number}).
 
@@ -60,11 +58,11 @@ unspecified(Error, Number) ->
 unauthorized() ->
     throw({'error', 'unauthorized'}).
 
--spec number_exists(ne_binary()) -> no_return().
+-spec number_exists(kz_term:ne_binary()) -> no_return().
 number_exists(DID) ->
     throw({'error', 'number_exists', DID}).
 
--spec invalid_state_transition(kn() | kpn(), api_ne_binary(), ne_binary()) -> no_return().
+-spec invalid_state_transition(kn() | kpn(), kz_term:api_ne_binary(), kz_term:ne_binary()) -> no_return().
 invalid_state_transition(Number, undefined, ToState) ->
     invalid_state_transition(Number, <<"(nothing)">>, ToState);
 invalid_state_transition(Number, FromState, ToState) ->
@@ -75,7 +73,7 @@ invalid_state_transition(Number, FromState, ToState) ->
 no_change_required(Number) ->
     throw({'error', 'no_change_required', Number}).
 
--spec service_restriction(kn(), ne_binary()) -> no_return().
+-spec service_restriction(kn(), kz_term:ne_binary()) -> no_return().
 service_restriction(Number, Message) ->
     throw({'error', 'service_restriction', Number, Message}).
 
@@ -87,7 +85,7 @@ carrier_not_specified(Number) ->
 not_enough_credit(Number, Units) ->
     throw({'error', 'not_enough_credit', Number, Units}).
 
--spec invalid(kn(), ne_binary()) -> no_return().
+-spec invalid(kn(), kz_term:ne_binary()) -> no_return().
 invalid(Number, Reason) ->
     throw({'error', 'invalid', Number, Reason}).
 
@@ -103,34 +101,34 @@ assign_failure(PhoneNumber, E) ->
 database_error(E, PhoneNumber) ->
     throw({'error', 'database_error', PhoneNumber, E}).
 
--spec number_is_porting(ne_binary()) -> no_return().
+-spec number_is_porting(kz_term:ne_binary()) -> no_return().
 number_is_porting(Num) ->
     throw({'error', 'number_is_porting', Num}).
 
--spec by_carrier(module(), ne_binary() | atom(), ne_binary() | kn()) -> no_return().
+-spec by_carrier(module(), kz_term:ne_binary() | atom(), kz_term:ne_binary() | kn()) -> no_return().
 by_carrier(Carrier, E, Num) when is_binary(Num) ->
     throw({'error', 'by_carrier', Num, {Carrier,E}});
 by_carrier(Carrier, E, Number) ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
     by_carrier(Carrier, E, Num).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec to_json(reason()) ->
-                     error().
--spec to_json(reason(), api_ne_binary()) ->
-                     error().
--spec to_json(reason(), api_ne_binary(), api_ne_binary()) ->
                      error().
 to_json(Reason)->
     to_json(Reason, 'undefined').
 
+-spec to_json(reason(), kz_term:api_ne_binary()) ->
+                     error().
 to_json(Reason, Num)->
     to_json(Reason, Num, 'undefined').
 
+-spec to_json(reason(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
+                     error().
 to_json('number_is_porting', Num=?NE_BINARY, _) ->
     Message = <<"number ", Num/binary, " is porting">>,
     build_error(400, 'number_is_porting', Message, Num);
@@ -164,18 +162,18 @@ to_json('by_carrier', Num, {_Carrier,_Cause}) ->
     lager:error("carrier ~s fault: ~p", [_Carrier, _Cause]),
     build_error(500, 'unspecified_fault', <<"fault by carrier">>, Num);
 to_json(Reason, _, Cause) ->
+    ?LOG_ERROR("funky 500 error: ~p/~p", [Reason, Cause]),
     build_error(500, 'unspecified_fault', Reason, Cause).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec build_error(integer(), atom(), api_binary(), api_binary()) ->
+%%------------------------------------------------------------------------------
+-spec build_error(integer(), atom(), kz_term:api_binary(), kz_term:api_binary()) ->
                          error().
 build_error(Code, Error, Message, Cause) ->
     kz_json:from_list(
@@ -189,18 +187,18 @@ build_error(Code, Error, Message, Cause) ->
          ]
      ).
 
--spec code(error()) -> api_integer().
+-spec code(error()) -> kz_term:api_integer().
 code(JObj) ->
     kz_json:get_value(?CODE, JObj).
 
--spec error(error()) -> api_binary().
+-spec error(error()) -> kz_term:api_binary().
 error(JObj) ->
     kz_json:get_value(?ERROR, JObj).
 
--spec cause(error()) -> api_binary().
+-spec cause(error()) -> kz_term:api_binary().
 cause(JObj) ->
     kz_json:get_value(?CAUSE, JObj).
 
--spec message(error()) -> api_binary().
+-spec message(error()) -> kz_term:api_binary().
 message(JObj) ->
     kz_json:get_value(?MESSAGE, JObj).

@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @copyright (C) 2016, Voxter Communications Inc.
 %%% @doc
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_queue_manager_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -21,6 +20,10 @@
 %%% TESTS
 %%% =====
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 ss_size_empty_test_() ->
     SS = #strategy_state{agents=[]},
     [?_assertEqual(0, acdc_queue_manager:ss_size('mi', SS, 'free'))
@@ -37,9 +40,7 @@ ss_size_one_busy_test_() ->
     ,?_assertEqual(1, acdc_queue_manager:ss_size('mi', SS2, 'logged_in'))].
 
 %%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Test a skills-based round robin situation where multiple agents may
+%% @doc Test a skills-based round robin situation where multiple agents may
 %% be the candidate for a call, but there's an ideal mapping that
 %% should be used.
 %% @end
@@ -94,9 +95,7 @@ sbrr_multiple_candidates_test_() ->
     ].
 
 %%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Test a skills-based round robin queue with a series of adds/removes
+%% @doc Test a skills-based round robin queue with a series of adds/removes
 %% of calls and agents. Verifies the state as it mutates.
 %% @end
 %%--------------------------------------------------------------------
@@ -292,9 +291,7 @@ sbrr_multi_phase_test_() ->
     ].
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Runs a load test on the sbrr strategy with a given number of
+%% @doc Runs a load test on the sbrr strategy with a given number of
 %% agents, calls, and unique skills. Each agent and call has a random
 %% assortment of skills assigned to it.
 %% @end
@@ -365,9 +362,7 @@ apply_n({Fun, Args}, State, N) ->
     apply_n({Fun, Args}, apply(Fun, [State | Args]), N-1).
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Create a state for skills-based round robin tests.
+%% @doc Create a state for skills-based round robin tests.
 %% @end
 %%--------------------------------------------------------------------
 create_state() ->
@@ -380,9 +375,7 @@ create_state() ->
     {'state', dict:new(), ?ACCOUNT_ID, ?QUEUE_ID, 'undefined', 'sbrr', SS, 'true', 'undefined', [], [], #{}, []}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add an agent with specified skills to an sbrr queue state.
+%% @doc Add an agent with specified skills to an sbrr queue state.
 %% @end
 %%--------------------------------------------------------------------
 add_agent({AgentId, Skills}, State) ->
@@ -390,9 +383,7 @@ add_agent({AgentId, Skills}, State) ->
     State#state{strategy_state=SS}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Remove an agent from an sbrr queue state.
+%% @doc Remove an agent from an sbrr queue state.
 %% @end
 %%--------------------------------------------------------------------
 remove_agent(AgentId, State) ->
@@ -400,9 +391,7 @@ remove_agent(AgentId, State) ->
     State#state{strategy_state=SS}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add a call with specified required skills to an sbrr queue state.
+%% @doc Add a call with specified required skills to an sbrr queue state.
 %% @end
 %%--------------------------------------------------------------------
 add_call({CallId, Skills}, #state{current_member_calls=Calls}=State) ->
@@ -416,9 +405,7 @@ add_call({CallId, Skills}, #state{current_member_calls=Calls}=State) ->
     State1#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Remove a call from an sbrr queue state.
+%% @doc Remove a call from an sbrr queue state.
 %% @end
 %%--------------------------------------------------------------------
 remove_call(CallId, #state{current_member_calls=Calls}=State) ->

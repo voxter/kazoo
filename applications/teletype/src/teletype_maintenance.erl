@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_maintenance).
 
 -export([receipts/0
@@ -18,6 +16,7 @@
 -export([renderer_status/0]).
 -export([start_module/1
         ,stop_module/1
+        ,list_templates_from_db/1
         ]).
 
 -include("teletype.hrl").
@@ -40,7 +39,7 @@ filter_receipts(_, _) -> 'false'.
 sort_receipts({_, #email_receipt{timestamp=S1}}, {_, #email_receipt{timestamp=S2}}) ->
     S1 < S2.
 
--spec print_receipt({{'receipt', ne_binary()}, email_receipt()}, pos_integer()) -> pos_integer().
+-spec print_receipt({{'receipt', kz_term:ne_binary()}, email_receipt()}, pos_integer()) -> pos_integer().
 print_receipt({{'receipt', Receipt}
               ,#email_receipt{to=To
                              ,from=From
@@ -58,11 +57,11 @@ print_receipt({{'receipt', Receipt}
                                ]),
     Count+1.
 
--spec convert_for_printing(ne_binary() | ne_binaries()) -> ne_binary().
+-spec convert_for_printing(kz_term:ne_binary() | kz_term:ne_binaries()) -> kz_term:ne_binary().
 convert_for_printing(<<_/binary>>=V) -> V;
 convert_for_printing([_|_]=Vs) -> kz_binary:join(Vs, <<",">>).
 
--spec receipt_for_printing(ne_binary()) -> ne_binary().
+-spec receipt_for_printing(kz_term:ne_binary()) -> kz_term:ne_binary().
 receipt_for_printing(Receipt) ->
     case re:run(Receipt
                ,<<"^2.0.0 Ok: queued as ([[:alnum:]]+).*\$">>
@@ -81,7 +80,7 @@ default_receipt_printing(Receipt) ->
 restore_system_templates() ->
     lists:foreach(fun restore_system_template/1, list_templates_from_db(?KZ_CONFIG_DB)).
 
--spec restore_system_template(ne_binary()) -> ok.
+-spec restore_system_template(kz_term:ne_binary()) -> ok.
 restore_system_template(<<"skel">>) -> 'ok';
 restore_system_template(TemplateId) ->
     DbId = kz_notification:db_id(TemplateId),
@@ -95,10 +94,18 @@ restore_system_template(TemplateId) ->
 
     Mod = kz_term:to_atom(<<"teletype_", ModId/binary>>, 'true'),
     io:format("  re-initializing template ~s~n", [ModId]),
-    catch(Mod:init()),
-    io:format("  finished~n").
+    try Mod:init() of
+        'ok' -> io:format("  finished~n")
+    catch
+        _E:_T ->
+            io:format("  crashed for reason ~p:~p ~n", [_E, _T]),
+            ST = erlang:get_stacktrace(),
+            kz_util:log_stacktrace(ST),
+            io:format("St: ~p~n~n", [ST])
 
--spec list_templates_from_db(ne_binary()) -> ne_binaries().
+    end.
+
+-spec list_templates_from_db(kz_term:ne_binary()) -> kz_term:ne_binaries().
 list_templates_from_db(Db) ->
     case kz_datamgr:all_docs(Db
                             ,[{'startkey', <<"notification.">>}
@@ -107,23 +114,25 @@ list_templates_from_db(Db) ->
                             )
     of
         {'ok', Results} ->
-            [kz_doc:id(Result) || Result <- Results];
+            [Id
+             || Result <- Results,
+                Id <- [kz_doc:id(Result)],
+                'notification.skel' =/=  Id
+            ];
         {'error', _E} ->
             io:format("failed to query existing notifications: ~p~n", [_E]),
             []
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Remove Template Customization from an account
+%%------------------------------------------------------------------------------
+%% @doc Remove Template Customization from an account
 %% @end
-%%--------------------------------------------------------------------
--spec remove_customization(ne_binary()) -> 'no_return'.
+%%------------------------------------------------------------------------------
+-spec remove_customization(kz_term:ne_binary()) -> 'no_return'.
 remove_customization(Account) ->
     remove_customization(Account, list_templates_from_db(kz_util:format_account_db(Account))).
 
--spec remove_customization(ne_binary(), ne_binary() | ne_binaries()) -> 'no_return'.
+-spec remove_customization(kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()) -> 'no_return'.
 remove_customization(Account, Id) when is_binary(Id) ->
     remove_customization(Account, [kz_notification:db_id(Id)]);
 remove_customization(_Account, []) ->
@@ -142,19 +151,17 @@ remove_customization(Account, Ids) ->
             'no_return'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Forcing System's Templates to an account by first removing
+%%------------------------------------------------------------------------------
+%% @doc Forcing System's Templates to an account by first removing
 %% account's customization and then copy the templates from
 %% system_config to account's db.
 %% @end
-%%--------------------------------------------------------------------
--spec force_system_default(ne_binary()) -> 'no_return'.
+%%------------------------------------------------------------------------------
+-spec force_system_default(kz_term:ne_binary()) -> 'no_return'.
 force_system_default(Account) ->
     force_system_default(Account, list_templates_from_db(?KZ_CONFIG_DB)).
 
--spec force_system_default(ne_binary(), ne_binary() | ne_binaries()) -> 'no_return'.
+-spec force_system_default(kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()) -> 'no_return'.
 force_system_default(Account, Id) when is_binary(Id) ->
     force_system_default(Account, [kz_notification:db_id(Id)]);
 force_system_default(_Account, []) -> 'no_return';
@@ -165,7 +172,7 @@ force_system_default(Account, Ids) ->
     _ = [copy_from_system_to_account(AccountDb, Id) || Id <- Ids],
     'no_return'.
 
--spec copy_from_system_to_account(ne_binary(), ne_binary()) -> 'ok'.
+-spec copy_from_system_to_account(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 copy_from_system_to_account(AccountDb, Id) ->
     case kz_datamgr:copy_doc(?KZ_CONFIG_DB, Id, AccountDb, Id, []) of
         {'ok', _} -> io:format("  ~s: done~n", [kz_notification:resp_id(Id)]);
@@ -175,9 +182,9 @@ copy_from_system_to_account(AccountDb, Id) ->
 -spec renderer_status() -> 'no_return'.
 renderer_status() ->
     Workers = [{Pid, process_info(Pid, 'message_queue_len')}
-               || {_, Pid, _, _} <- gen_server:call(teletype_sup:render_farm_name(), 'get_all_workers')
+               || {_, Pid, _, _} <- gen_server:call(teletype_farms_sup:render_farm_name(), 'get_all_workers')
               ],
-    {StateName, TotalWorkers, TotalOverflow, TotalInUse} = poolboy:status(teletype_sup:render_farm_name()),
+    {StateName, TotalWorkers, TotalOverflow, TotalInUse} = poolboy:status(teletype_farms_sup:render_farm_name()),
     io:format("Renderer Pool~n", []),
     io:format("  State           : ~s~n", [StateName]),
     io:format("  Total Workers   : ~p~n", [TotalWorkers]),
@@ -189,7 +196,7 @@ renderer_status() ->
         ],
     'no_return'.
 
--spec start_module(module() | ne_binary()) -> 'ok' | {'error', any()}.
+-spec start_module(module() | kz_term:ne_binary()) -> 'ok' | {'error', any()}.
 start_module(Module) when is_atom(Module) ->
     lager:info("starting teletype module ~s", [Module]),
     try Module:init() of
@@ -209,7 +216,7 @@ start_module(Module) ->
         Err -> Err
     end.
 
--spec stop_module(module() | ne_binary()) -> 'ok' | {'error', any()}.
+-spec stop_module(module() | kz_term:ne_binary()) -> 'ok' | {'error', any()}.
 stop_module(Module) when is_atom(Module) ->
     teletype_bindings:flush_mod(Module),
     maybe_remove_module_from_autoload(Module);
@@ -219,7 +226,7 @@ stop_module(Module) ->
         Err -> Err
     end.
 
--spec module_from_binary(ne_binary()) ->
+-spec module_from_binary(kz_term:ne_binary()) ->
                                 {'ok', module()} |
                                 {'error', 'invalid_mod'}.
 module_from_binary(<<"teletype_", _/binary>> = Template) ->
@@ -227,15 +234,15 @@ module_from_binary(<<"teletype_", _/binary>> = Template) ->
         'false' -> invalid_module(Template);
         Module -> {'ok', Module}
     end;
-module_from_binary(Module) ->
-    invalid_module(Module).
+module_from_binary(?NE_BINARY=Module) ->
+    module_from_binary(<<"teletype_", Module/binary>>).
 
--spec invalid_module(ne_binary()) -> {'error', 'invalid_mod'}.
+-spec invalid_module(kz_term:ne_binary()) -> {'error', 'invalid_mod'}.
 invalid_module(Module) ->
     lager:error("~s is not a valid teletype module", [Module]),
     {'error', 'invalid_mod'}.
 
--spec maybe_add_module_to_autoload(ne_binary() | module()) -> 'ok'.
+-spec maybe_add_module_to_autoload(kz_term:ne_binary() | module()) -> 'ok'.
 maybe_add_module_to_autoload(Module) when is_binary(Module) ->
     Autoload = ?AUTOLOAD_MODULES,
     case lists:member(Module, Autoload) of
@@ -247,7 +254,7 @@ maybe_add_module_to_autoload(Module) when is_binary(Module) ->
 maybe_add_module_to_autoload(Module) ->
     maybe_add_module_to_autoload(kz_term:to_binary(Module)).
 
--spec maybe_remove_module_from_autoload(ne_binary() | module()) -> 'ok'.
+-spec maybe_remove_module_from_autoload(kz_term:ne_binary() | module()) -> 'ok'.
 maybe_remove_module_from_autoload(Module) when is_binary(Module) ->
     Autoload = ?AUTOLOAD_MODULES,
     case lists:member(Module, Autoload) of

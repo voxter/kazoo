@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz INC
-%%% @doc
-%%% Manage a FreeSWITCH node and its resources
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Manage a FreeSWITCH node and its resources
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_node).
 -behaviour(gen_listener).
 
@@ -40,7 +38,7 @@
 
 -define(UPTIME_S, ecallmgr_config:get_integer(<<"fs_node_uptime_s">>, 600)).
 
--type interface() :: {ne_binary(), kz_proplist()}.
+-type interface() :: {kz_term:ne_binary(), kz_term:proplist()}.
 -type interfaces() :: [interface()].
 
 -define(DEFAULT_FS_COMMANDS, [kz_json:from_list([{<<"load">>, <<"mod_sofia">>}])
@@ -99,9 +97,9 @@
                               ]).
 
 -record(state, {node :: atom()
-               ,options = []             :: kz_proplist()
+               ,options = []             :: kz_term:proplist()
                ,interfaces = []          :: interfaces()
-               ,start_cmds_pid_ref       :: pid_ref() | 'undefined'
+               ,start_cmds_pid_ref       :: kz_term:pid_ref() | 'undefined'
                }).
 -type state() :: #state{}.
 
@@ -146,23 +144,27 @@
         ,{<<"Expires">>, {fun replay_expires/1, <<"expires">>}}
         ]).
 
--type fs_node() :: atom() | ne_binary() | pid().
+-type fs_node() :: atom() | kz_term:ne_binary() | pid().
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(atom()) -> startlink_ret().
--spec start_link(atom(), kz_proplist()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec start_link(atom()) -> kz_types:startlink_ret().
 start_link(Node) -> start_link(Node, []).
+
+-spec start_link(atom(), kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Node, Options) when is_atom(Node) ->
-    QueueName = <<(kz_term:to_binary(Node))/binary
-                  ,"-"
-                  ,(kz_term:to_binary(?MODULE))/binary
-                >>,
+    QueueName = list_to_binary([kz_term:to_binary(Node)
+                               ,"-"
+                               ,kz_term:to_binary(?MODULE)
+                               ]),
+
     gen_listener:start_link(?SERVER
                            ,[{'responders', ?RESPONDERS}
                             ,{'bindings', ?BINDINGS(Node)}
@@ -185,7 +187,7 @@ sync_interfaces(Srv) ->
 sync_interface(Srv) ->
     sync_interface(Srv, <<?DEFAULT_FS_PROFILE>>).
 
--spec sync_interface(fs_node(), ne_binary()) -> 'ok'.
+-spec sync_interface(fs_node(), kz_term:ne_binary()) -> 'ok'.
 sync_interface(Srv, Profile) ->
     gen_server:cast(find_srv(Srv), {'sync_interface', Profile}).
 
@@ -193,7 +195,7 @@ sync_interface(Srv, Profile) ->
 sync_capabilities(Srv) ->
     gen_server:cast(find_srv(Srv), 'sync_capabilities').
 
--spec hostname(fs_node()) -> api_binary().
+-spec hostname(fs_node()) -> kz_term:api_binary().
 hostname(Srv) ->
     case fs_node(Srv) of
         'undefined' -> 'undefined';
@@ -202,23 +204,23 @@ hostname(Srv) ->
             Hostname
     end.
 
--spec sip_url(fs_node()) -> api_binary().
+-spec sip_url(fs_node()) -> kz_term:api_binary().
 sip_url(Srv) ->
     sip_url(Srv, <<?DEFAULT_FS_PROFILE>>).
 
--spec sip_url(fs_node(), ne_binary()) -> api_binary().
+-spec sip_url(fs_node(), kz_term:ne_binary()) -> kz_term:api_binary().
 sip_url(Srv, Profile) ->
     gen_server:call(find_srv(Srv), {'sip_url', Profile}).
 
--spec sip_external_ip(fs_node()) -> api_binary().
+-spec sip_external_ip(fs_node()) -> kz_term:api_binary().
 sip_external_ip(Srv) ->
     sip_external_ip(Srv, <<?DEFAULT_FS_PROFILE>>).
 
--spec sip_external_ip(fs_node(), ne_binary()) -> api_binary().
+-spec sip_external_ip(fs_node(), kz_term:ne_binary()) -> kz_term:api_binary().
 sip_external_ip(Srv, Profile) ->
     gen_server:call(find_srv(Srv), {'sip_external_ip', Profile}).
 
--spec handle_reload_acls(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_reload_acls(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_reload_acls(JObj, Props) ->
     'true' = kapi_switch:reload_acls_v(JObj),
 
@@ -228,7 +230,7 @@ handle_reload_acls(JObj, Props) ->
         {'error', _E} -> lager:debug("reloadacl failed with error: ~p", [_E])
     end.
 
--spec handle_reload_gateways(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_reload_gateways(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_reload_gateways(JObj, Props) ->
     'true' = kapi_switch:reload_gateways_v(JObj),
 
@@ -259,24 +261,23 @@ find_srv(Node) when is_atom(Node) ->
     ecallmgr_fs_node_sup:node_srv(ecallmgr_fs_sup:find_node(Node)).
 
 -spec fetch_timeout() -> pos_integer().
--spec fetch_timeout(fs_node()) -> pos_integer().
 fetch_timeout() ->
     ecallmgr_config:get_integer(<<"fetch_timeout">>, ?DEFAULT_FETCH_TIMEOUT).
+
+-spec fetch_timeout(fs_node()) -> pos_integer().
 fetch_timeout(_Node) ->
     %% TODO: eventually expose this timeout via mod_kazoo and decrement a bit.
     fetch_timeout().
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
--spec init([atom() | kz_proplist()]) -> {'ok', state()}.
+%%------------------------------------------------------------------------------
+-spec init([atom() | kz_term:proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
     process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
@@ -291,21 +292,11 @@ init([Node, Options]) ->
                  ,start_cmds_pid_ref=PidRef
                  }}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call({'sip_external_ip', Profile}, _, #state{interfaces=Interfaces}=State) ->
     ExternalIP = case props:get_value(Profile, Interfaces) of
                      'undefined' -> 'undefined';
@@ -326,17 +317,11 @@ handle_call('interfaces', _, #state{interfaces=Interfaces}=State) ->
 handle_call('node', _, #state{node=Node}=State) ->
     {'reply', Node, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('sync_interfaces', #state{node=Node
                                      ,interfaces=Interfaces
                                      }=State) ->
@@ -355,17 +340,11 @@ handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info('sync_interfaces', #state{node=Node
                                      ,interfaces=Interfaces
                                      }=State) ->
@@ -386,14 +365,10 @@ handle_info(_Msg, State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Allows listener to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {reply, Options}
+%%------------------------------------------------------------------------------
+%% @doc Allows listener to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{node=Node
                           ,options=Options
@@ -403,47 +378,41 @@ handle_event(_JObj, #state{node=Node
               ]
     }.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{node=Node}) ->
     lager:info("node listener for ~s terminating: ~p", [Node, _Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--type cmd_result() :: {'ok', {atom(), nonempty_string()}, ne_binary()} |
-                      {'error', {atom(), nonempty_string()}, ne_binary()} |
-                      {'timeout', {atom(), ne_binary()}}.
+%%%=============================================================================
+
+-type cmd_result() :: {'ok', {atom(), nonempty_string()}, kz_term:ne_binary()} |
+                      {'error', {atom(), nonempty_string()}, kz_term:ne_binary()} |
+                      {'timeout', {atom(), kz_term:ne_binary()}}.
 -type cmd_results() :: [cmd_result()] |
                        {'error', 'retry'}.
 
--spec run_start_cmds(atom(), kz_proplist()) -> pid_ref().
--spec run_start_cmds(atom(), kz_proplist(), pid()) -> any().
+-spec run_start_cmds(atom(), kz_term:proplist()) -> kz_term:pid_ref().
 run_start_cmds(Node, Options) ->
     kz_util:spawn_monitor(fun run_start_cmds/3, [Node, Options, self()]).
 
+-spec run_start_cmds(atom(), kz_term:proplist(), pid()) -> any().
 run_start_cmds(Node, Options, Parent) ->
     kz_util:put_callid(Node),
     timer:sleep(ecallmgr_config:get_integer(<<"fs_cmds_wait_ms">>, 5 * ?MILLISECONDS_IN_SECOND, Node)),
@@ -461,7 +430,7 @@ is_restarting(Node) when is_atom(Node) ->
             'false'
     end.
 
--spec is_restarting_status(ne_binary()) -> boolean().
+-spec is_restarting_status(kz_term:ne_binary()) -> boolean().
 is_restarting_status(UP) ->
     case re:run(UP, <<"UP (\\d+) years, (\\d+) days, (\\d+) hours, (\\d+) minutes, (\\d+) seconds, (\\d+) milliseconds, (\\d+) microseconds">>, [{'capture', 'all_but_first', 'binary'}]) of
         {'match', [Years, Days, Hours, Minutes, Seconds, _Mille, _Micro]} ->
@@ -475,13 +444,13 @@ is_restarting_status(UP) ->
         'nomatch' -> 'false'
     end.
 
--spec run_start_cmds(atom(), kz_proplist(), pid(), boolean() | kz_json:objects()) -> 'ok'.
+-spec run_start_cmds(atom(), kz_term:proplist(), pid(), boolean() | kz_json:objects()) -> 'ok'.
 run_start_cmds(Node, Options, Parent, 'true') ->
     lager:debug("node ~s is considered restarting", [Node]),
     run_start_cmds(Node, Options, Parent, ?FS_CMDS(Node));
 run_start_cmds(Node, Options, Parent, 'false') ->
     lager:debug("node ~s is not considered restarting, trying reconnect cmds first", [Node]),
-    Cmds = case ecallmgr_config:get_jsons(<<"fs_reconnect_cmds">>) of
+    Cmds = case ecallmgr_config:get_jsons(<<"fs_reconnect_cmds">>, 'undefined') of
                'undefined' -> ?FS_CMDS(Node);
                ReconCmds -> ReconCmds
            end,
@@ -492,7 +461,10 @@ run_start_cmds(Node, Options, Parent, Cmds) ->
     case is_list(Res)
         andalso [R || R <- Res, was_not_successful_cmd(R)]
     of
-        [] -> sync(Parent);
+        [] ->
+            lager:debug("ask freeswitch ~s to get latest config", [Node]),
+            freeswitch:config(Node),
+            sync(Parent);
         'false' ->
             lager:debug("failed to run start commands, retrying"),
             run_start_cmds(Node, Options, Parent);
@@ -506,35 +478,32 @@ sync(Parent) ->
     sync_interfaces(Parent),
     sync_capabilities(Parent).
 
--spec process_cmds(atom(), kz_proplist(), kz_json:object() | ne_binaries()) -> cmd_results().
+-spec process_cmds(atom(), kz_term:proplist(), kz_json:objects()) -> cmd_results().
 process_cmds(_Node, _Options, []) ->
     lager:info("no freeswitch commands to run, seems suspect. Is your ecallmgr connected to the same AMQP as the kapps running sysconf?"),
     [];
 process_cmds(Node, Options, Cmds) when is_list(Cmds) ->
-    lists:foldl(fun(Cmd, Acc) -> process_cmd(Node, Options, Cmd, Acc) end, [], Cmds);
-process_cmds(Node, Options, Cmds) ->
-    case kz_json:is_json_object(Cmds) of
-        'true' -> process_cmd(Node, Options, Cmds, []);
-        'false' ->
-            lager:debug("recv something other than a list for fs_cmds: ~p", [Cmds]),
-            {'error', 'retry'}
-    end.
+    lists:foldl(fun(Cmd, Acc) -> process_cmd(Node, Options, Cmd, Acc) end, [], Cmds).
 
--spec process_cmd(atom(), kz_proplist(), kz_json:object(), cmd_results()) -> cmd_results().
+-spec process_cmd(atom(), kz_term:proplist(), kz_json:object(), cmd_results()) -> cmd_results().
 process_cmd(Node, Options, JObj, Acc0) ->
     kz_json:foldl(fun(ApiCmd, ApiArg, Acc) ->
                           lager:debug("process ~s: ~s: ~s", [Node, ApiCmd, ApiArg]),
                           process_cmd(Node, Options, ApiCmd, ApiArg, Acc)
-                  end, Acc0, JObj).
+                  end
+                 ,Acc0
+                 ,JObj
+                 ).
 
--spec process_cmd(atom(), kz_proplist(), ne_binary(), kz_json:json_term(), cmd_results()) -> cmd_results().
--spec process_cmd(atom(), kz_proplist(), ne_binary(), kz_json:json_term(), cmd_results(), 'list'|'binary') -> cmd_results().
+-spec process_cmd(atom(), kz_term:proplist(), kz_term:ne_binary(), kz_json:json_term(), cmd_results()) -> cmd_results().
 process_cmd(Node, Options, ApiCmd0, ApiArg, Acc) ->
     process_cmd(Node, Options, ApiCmd0, ApiArg, Acc, 'binary').
+
+-spec process_cmd(atom(), kz_term:proplist(), kz_term:ne_binary(), kz_json:json_term(), cmd_results(), 'list'|'binary') -> cmd_results().
 process_cmd(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
     execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat).
 
--spec execute_command(atom(), kz_proplist(), ne_binary(), kz_json:json_term(), cmd_results(), 'list'|'binary') ->
+-spec execute_command(atom(), kz_term:proplist(), kz_term:ne_binary(), kz_json:json_term(), cmd_results(), 'list'|'binary') ->
                              cmd_results().
 execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
     ApiCmd = kz_term:to_atom(ApiCmd0, ?FS_CMD_SAFELIST),
@@ -555,11 +524,11 @@ execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
             [Error | Acc]
     end.
 
--spec format_args('list'|'binary', api_terms()) -> api_terms().
+-spec format_args('list'|'binary', kz_term:api_terms()) -> kz_term:api_terms().
 format_args('list', Args) -> kz_term:to_list(Args);
 format_args('binary', Args) -> kz_term:to_binary(Args).
 
--spec process_resp(atom(), api_terms(), ne_binaries(), cmd_results()) -> cmd_results().
+-spec process_resp(atom(), kz_term:api_terms(), kz_term:ne_binaries(), cmd_results()) -> cmd_results().
 process_resp(ApiCmd, ApiArg, [<<>>|Resps], Acc) ->
     process_resp(ApiCmd, ApiArg, Resps, Acc);
 process_resp(ApiCmd, ApiArg, [<<"+OK Reloading XML">>|Resps], Acc) ->
@@ -577,7 +546,7 @@ process_resp(ApiCmd, ApiArg, [<<"-ERR ", Err/binary>>|Resps], Acc) ->
     end;
 process_resp(_, _, [], Acc) -> Acc.
 
--spec was_bad_error(ne_binary(), atom(), any()) -> boolean().
+-spec was_bad_error(kz_term:ne_binary(), atom(), any()) -> boolean().
 was_bad_error(<<"[Module already loaded]">>, 'load', _) -> 'false';
 was_bad_error(_E, _, _) -> 'true'.
 
@@ -616,15 +585,15 @@ channels_as_json(Node) ->
     end.
 
 -spec probe_capabilities(atom()) -> 'ok'.
--spec probe_capabilities(atom(), kz_json:objects()) -> 'ok'.
 probe_capabilities(Node) ->
     probe_capabilities(Node, ecallmgr_config:get_jsons(<<"capabilities">>, ?DEFAULT_CAPABILITIES)).
+
+-spec probe_capabilities(atom(), kz_json:objects()) -> 'ok'.
 probe_capabilities(Node, PossibleCapabilities) ->
     kz_util:put_callid(Node),
     F = fun(Capability) -> maybe_add_capability(Node, Capability) end,
     lists:foreach(F, PossibleCapabilities),
-    lager:notice("fs sync complete"),
-    ok.
+    lager:notice("fs sync complete").
 
 -spec maybe_add_capability(atom(), kz_json:object()) -> any().
 maybe_add_capability(Node, Capability) ->
@@ -653,14 +622,14 @@ node_interfaces(Node, CurrInterfaces) ->
         Interfaces -> Interfaces
     end.
 
--spec interfaces(atom() | binary()) -> api_object().
+-spec interfaces(atom() | binary()) -> kz_term:api_object().
 interfaces(Node) ->
     gen_server:call(find_srv(Node), 'interfaces').
 
--spec interface(atom() | binary()) -> api_object().
+-spec interface(atom() | binary()) -> kz_term:api_object().
 interface(Node) ->
     interface(Node, <<?DEFAULT_FS_PROFILE>>).
 
--spec interface(atom() | binary(), ne_binary()) -> api_object().
+-spec interface(atom() | binary(), kz_term:ne_binary()) -> kz_term:api_object().
 interface(Node, Profile) ->
     gen_server:call(find_srv(Node), {'interface', Profile}).

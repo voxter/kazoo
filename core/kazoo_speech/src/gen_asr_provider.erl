@@ -1,6 +1,11 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(gen_asr_provider).
 
 -include("kazoo_speech.hrl").
 
--callback freeform(binary(), ne_binary(), ne_binary(), kz_proplist()) -> asr_resp().
--callback commands(ne_binary(), ne_binaries(), ne_binary(), ne_binary(), kz_proplist()) -> provider_return().
+-callback freeform(binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> asr_resp().
+-callback commands(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> provider_return().

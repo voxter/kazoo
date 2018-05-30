@@ -248,7 +248,7 @@ curl -v -X GET \
 }
 #+END_SRC
 *** Uploading a second ratedeck
-Now that we've populated a "default" ratedeck, let's create a new ratedeck by adding the "ratedeck_id" field to a CSV. We'll just edit "simple_rates.csv" and re-save it as "bulk_rates.csv":
+Now that we've populated a "default" ratedeck, let's create a new ratedeck by adding the =ratedeck_id= field to a CSV. We'll just edit "simple_rates.csv" and re-save it as "bulk_rates.csv":
 
 #+BEGIN_SRC csv :tangle "bulk_rates.csv"
 "rate_cost","description","name","prefix","ratedeck_id"

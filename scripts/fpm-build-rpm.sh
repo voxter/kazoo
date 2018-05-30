@@ -11,7 +11,7 @@ fpm -s dir \
     --iteration $ITTERATION \
     -a $ARCH \
     --prefix /opt/kazoo \
-    -d "kazoo-configs-core >= 4.1.20-1" \
+    -d "kazoo-configs-core >= 4.2.3-1" \
     -d "kazoo-sounds" \
     -d "bash-completion" \
     -d "esl-erlang >= 19.3" \

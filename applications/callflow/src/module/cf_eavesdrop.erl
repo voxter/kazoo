@@ -1,25 +1,28 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz, INC
-%%% @doc
-%%% Eacesdrop
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
+%%% @doc Eavesdrop feature.
 %%%
-%%% data: {
-%%%   "user_id":"_user_id_"
-%%%   ,"device_id":"_device_id_"
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`user_id'</dt>
+%%%   <dd>User ID.</dd>
 %%%
-%%% One of the two - user_id, or device_id - must be defined on
-%%% the data payload. Preference is given by most restrictive option set,
-%%% so device_id is checked for first, then user_id.
+%%%   <dt>`device_id'</dt>
+%%%   <dd>Device ID.</dd>
+%%% </dl>
 %%%
-%%% device_id will only connect to a channel of a specific device,
-%%% user_id will only connect to channel on any of the user's devices*
+%%% One of the two, `user_id' or `device_id', must be defined on the data payload.
+%%% Preference is given by most restrictive option set, so `device_id' is checked
+%%% for first, then `user_id'.
 %%%
+%%% `device_id' will only connect to a channel of a specific device,
+%%% `user_id' will only connect to channel on any of the user's devices.
+%%%
+%%%
+%%% @author SIPLABS LLC (Mikhail Rodionov)
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Mikhail Rodionov)
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_eavesdrop).
 
 -behaviour(gen_cf_action).
@@ -30,13 +33,11 @@
         ,no_permission_to_eavesdrop/1
         ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module sends an arbitrary response back to the
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module sends an arbitrary response back to the
 %% call originator.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> any().
 handle(Data, Call) ->
     _ = case maybe_allowed_to_eavesdrop(Data, Call) of
@@ -49,7 +50,7 @@ handle(Data, Call) ->
         end,
     cf_exe:stop(Call).
 
--spec fields_to_check() -> kz_proplist().
+-spec fields_to_check() -> kz_term:proplist().
 fields_to_check() ->
     [{<<"approved_device_id">>, fun(Id, Call) -> Id == kapps_call:authorizing_id(Call) end}
     ,{<<"approved_user_id">>, fun cf_util:caller_belongs_to_user/2}
@@ -61,7 +62,7 @@ fields_to_check() ->
 maybe_allowed_to_eavesdrop(Data, Call) ->
     cf_util:check_value_of_fields(fields_to_check(), 'false', Data, Call).
 
--spec eavesdrop_channel(ne_binaries(), kapps_call:call()) -> 'ok'.
+-spec eavesdrop_channel(kz_term:ne_binaries(), kapps_call:call()) -> 'ok'.
 eavesdrop_channel(Usernames, Call) ->
     case cf_util:find_channels(Usernames, Call) of
         [] -> no_channels(Call);
@@ -91,7 +92,7 @@ eavesdrop_a_channel(Channels, Call) ->
     end.
 
 -type channels() :: {kz_json:objects(), kz_json:objects()}.
--type channel_sort_acc() :: {ne_binary(), ne_binary(), channels()}.
+-type channel_sort_acc() :: {kz_term:ne_binary(), kz_term:ne_binary(), channels()}.
 
 -spec channels_sort(kz_json:object(), channel_sort_acc()) -> channel_sort_acc().
 channels_sort(Channel, {MyUUID, MyMediaServer, {Local, Remote}} = Acc) ->
@@ -142,7 +143,7 @@ verify_call_is_active(Call) ->
             lager:debug("failed to get status: ~p", [_E])
     end.
 
--spec eavesdrop_cmd(ne_binary()) -> kz_proplist().
+-spec eavesdrop_cmd(kz_term:ne_binary()) -> kz_term:proplist().
 eavesdrop_cmd(TargetCallId) ->
     [{<<"Application-Name">>, <<"eavesdrop">>}
     ,{<<"Target-Call-ID">>, TargetCallId}
@@ -150,7 +151,7 @@ eavesdrop_cmd(TargetCallId) ->
     ].
 
 -spec find_sip_endpoints(kz_json:object(), kapps_call:call()) ->
-                                ne_binaries().
+                                kz_term:ne_binaries().
 find_sip_endpoints(Data, Call) ->
     case kz_json:get_ne_binary_value(<<"device_id">>, Data) of
         'undefined' ->
@@ -161,8 +162,8 @@ find_sip_endpoints(Data, Call) ->
             sip_users_from_endpoints([DeviceId], Call)
     end.
 
--spec sip_users_from_endpoints(ne_binaries(), kapps_call:call()) ->
-                                      ne_binaries().
+-spec sip_users_from_endpoints(kz_term:ne_binaries(), kapps_call:call()) ->
+                                      kz_term:ne_binaries().
 sip_users_from_endpoints(EndpointIds, Call) ->
     lists:foldl(fun(EndpointId, Acc) ->
                         case sip_user_of_endpoint(EndpointId, Call) of
@@ -171,12 +172,12 @@ sip_users_from_endpoints(EndpointIds, Call) ->
                         end
                 end, [], EndpointIds).
 
--spec sip_user_of_endpoint(ne_binary(), kapps_call:call()) -> api_binary().
+-spec sip_user_of_endpoint(kz_term:ne_binary(), kapps_call:call()) -> kz_term:api_binary().
 sip_user_of_endpoint(EndpointId, Call) ->
     case kz_endpoint:get(EndpointId, Call) of
         {'error', _} -> 'undefined';
         {'ok', Endpoint} ->
-            kz_device:sip_username(Endpoint)
+            kzd_devices:sip_username(Endpoint)
     end.
 
 -spec no_users(kapps_call:call()) -> any().

@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_sup).
 -behaviour(supervisor).
 
@@ -16,7 +21,7 @@
 %% Public functions
 %%
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
@@ -31,7 +36,7 @@ start_listeners(ListenSocket, Count) ->
     'ok'.
 
 %% Launch a client handler process listening on the given socket
--spec start_listener(gen_tcp:socket(), pos_integer()) -> sup_startchild_ret().
+-spec start_listener(gen_tcp:socket(), pos_integer()) -> kz_types:sup_startchild_ret().
 start_listener(ListenSocket, Num) ->
     supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ kz_term:to_list(Num)
                                     ,{'amimulator_socket_listener', 'start_link', [ListenSocket]}
@@ -41,7 +46,7 @@ start_listener(ListenSocket, Num) ->
                                     ,['amimulator_socket_listener']
                                     }).
 
--spec register_event_listener(ne_binary(), pid()) -> 'ok'.
+-spec register_event_listener(kz_term:ne_binary(), pid()) -> 'ok'.
 register_event_listener(AccountId, Consumer) ->
     ListenerPid = case find_event_listener(AccountId) of
                       'undefined' ->
@@ -51,7 +56,7 @@ register_event_listener(AccountId, Consumer) ->
                   end,
     amimulator_event_listener:register(ListenerPid, Consumer).
 
--spec unregister_event_listener(ne_binary(), pid()) -> 'ok'.
+-spec unregister_event_listener(kz_term:ne_binary(), pid()) -> 'ok'.
 unregister_event_listener(AccountId, Consumer) ->
     case find_event_listener(AccountId) of
         'undefined' -> 'ok';
@@ -59,7 +64,7 @@ unregister_event_listener(AccountId, Consumer) ->
     end.
 
 %% Launch an event consumer for a specific kazoo account
--spec start_event_listener(ne_binary()) -> supervisor:startchild_ret().
+-spec start_event_listener(kz_term:ne_binary()) -> supervisor:startchild_ret().
 start_event_listener(AccountId) ->
     supervisor:start_child(?MODULE, {"amimulator_event_listener-" ++ kz_term:to_list(AccountId)
                                     ,{'amimulator_event_listener', 'start_link', [AccountId]}
@@ -69,12 +74,12 @@ start_event_listener(AccountId) ->
                                     ,['amimulator_event_listener']
                                     }).
 
--spec stop_event_listener(ne_binary(), atom()) -> 'ok' | tuple().
--spec stop_event_listener(ne_binary(), api_pid(), atom()) -> 'ok' | tuple().
+-spec stop_event_listener(kz_term:ne_binary(), atom()) -> 'ok' | tuple().
 stop_event_listener(AccountId, Reason) ->
     ami_sm:purge_state(AccountId),
     stop_event_listener(AccountId, find_event_listener(AccountId), Reason).
 
+-spec stop_event_listener(kz_term:ne_binary(), kz_term:api_pid(), atom()) -> 'ok' | tuple().
 stop_event_listener(AccountId, 'undefined', _) ->
     lager:debug("could not find event listener for account ~p to prune", [AccountId]),
     {'error', 'not_found'};
@@ -93,7 +98,7 @@ stop_event_listener(_, {_, WorkerName}, _) ->
 %% supervisor callbacks
 %%
 
--spec init([]) -> sup_init_ret().
+-spec init([]) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 3,
@@ -115,11 +120,11 @@ init([]) ->
 event_listeners() ->
     [{Pid, WorkerName} || {WorkerName, Pid, 'worker', ['amimulator_event_listener']} <- supervisor:which_children(?MODULE)].
 
--spec find_event_listener(ne_binary()) -> {pid(), term()} | 'undefined'.
--spec find_event_listener(ne_binary(), [{pid(), term()},...] | []) -> {pid(), term()} | 'undefined'.
+-spec find_event_listener(kz_term:ne_binary()) -> {pid(), term()} | 'undefined'.
 find_event_listener(AccountId) ->
     find_event_listener(AccountId, event_listeners()).
 
+-spec find_event_listener(kz_term:ne_binary(), [{pid(), term()},...] | []) -> {pid(), term()} | 'undefined'.
 find_event_listener(_, []) ->
     'undefined';
 find_event_listener(AccountId, [{Pid, WorkerName}|Listeners]) ->

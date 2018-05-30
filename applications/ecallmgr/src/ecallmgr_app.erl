@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_app).
 
 -behaviour(application).
@@ -20,9 +18,8 @@
 
 %% Application callbacks
 
-%% @public
-%% @doc Implement the application start behaviour
--spec start(application:start_type(), any()) -> startapp_ret().
+%% @doc Implement the application start behaviour.
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     _ = declare_exchanges(),
     _ = node_bindings(),
@@ -41,12 +38,12 @@ request(Acc) ->
               ],
     [{'media_servers', Servers}
     ,{'channels', ecallmgr_fs_channels:count()}
+    ,{'conferences', ecallmgr_fs_conferences:count()}
     ,{'registrations', ecallmgr_registrar:count()}
      | Acc
     ].
 
-%% @public
-%% @doc Implement the application stop behaviour
+%% @doc Implement the application stop behaviour.
 -spec stop(any()) -> any().
 stop(_State) ->
     _ = freeswitch_nodesup_unbind(),
@@ -87,6 +84,6 @@ freeswitch_nodesup_unbind() ->
     _ = kazoo_bindings:unbind(<<"freeswitch.node.modules">>, ?MODULE, 'freeswitch_node_modules'),
     'ok'.
 
--spec freeswitch_node_modules() -> ne_binaries().
+-spec freeswitch_node_modules() -> kz_term:ne_binaries().
 freeswitch_node_modules() ->
     application:get_env(?APP, 'node_modules', ?NODE_MODULES).

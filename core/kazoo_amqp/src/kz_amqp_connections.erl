@@ -1,11 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributions
-%%%
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_amqp_connections).
 -behaviour(gen_server).
 
@@ -49,26 +46,28 @@
 
 -define(TAB, ?MODULE).
 
--record(state, {watchers = sets:new()
+-record(state, {watchers = sets:new() :: sets:set(pid())
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
--spec new(kz_amqp_connection() | text()) ->
+-spec new(kz_amqp_connection() | kz_term:text()) ->
                  kz_amqp_connection() |
                  {'error', any()}.
 new(Broker) -> new(Broker, 'local').
 
--spec new(kz_amqp_connection() | text(), text()) ->
+-spec new(kz_amqp_connection() | kz_term:text(), kz_term:text()) ->
                  kz_amqp_connection() |
                  {'error', any()}.
 new(<<_/binary>> = Broker, Zone) ->
@@ -79,18 +78,15 @@ new(<<_/binary>> = Broker, Zone) ->
 new(Broker, Zone) ->
     new(kz_term:to_binary(Broker), Zone).
 
--spec add(kz_amqp_connection() | text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
--spec add(kz_amqp_connection() | text(), text()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
--spec add(kz_amqp_connection() | text(), text(), list()) ->
-                 kz_amqp_connection() |
-                 {'error', any()}.
 
+-spec add(kz_amqp_connection() | kz_term:text()) ->
+                 kz_amqp_connection() |
+                 {'error', any()}.
 add(Broker) -> add(Broker, 'local').
 
+-spec add(kz_amqp_connection() | kz_term:text(), kz_term:text()) ->
+                 kz_amqp_connection() |
+                 {'error', any()}.
 add(#kz_amqp_connection{broker=Broker, tags=Tags}=Connection, Zone) ->
     case kz_amqp_connection_sup:add(Connection) of
         {'ok', Pid} ->
@@ -109,6 +105,9 @@ add(Broker, Zone) when not is_atom(Zone) ->
 add(Broker, Zone) ->
     add(Broker, Zone, []).
 
+-spec add(kz_amqp_connection() | kz_term:text(), kz_term:text(), list()) ->
+                 kz_amqp_connection() |
+                 {'error', any()}.
 add(Broker, Zone, Tags) ->
     case catch amqp_uri:parse(kz_term:to_list(Broker)) of
         {'EXIT', _R} ->
@@ -135,7 +134,7 @@ add(Broker, Zone, Tags) ->
                )
     end.
 
--spec remove(pids() | pid() | text()) -> 'ok'.
+-spec remove(kz_term:pids() | pid() | kz_term:text()) -> 'ok'.
 remove([]) -> 'ok';
 remove([Connection|Connections]) when is_pid(Connection) ->
     _ = kz_amqp_connection_sup:remove(Connection),
@@ -159,7 +158,7 @@ available(Connection) when is_pid(Connection) ->
 unavailable(Connection) when is_pid(Connection) ->
     gen_server:cast(?SERVER, {'connection_unavailable', Connection}).
 
--spec arbitrator_broker() -> api_binary().
+-spec arbitrator_broker() -> kz_term:api_binary().
 arbitrator_broker() ->
     MatchSpec = [{#kz_amqp_connections{broker='$1'
                                       ,available='true'
@@ -174,7 +173,7 @@ arbitrator_broker() ->
         [Arbitrator|_] -> Arbitrator
     end.
 
--spec broker_connections(ne_binary()) -> non_neg_integer().
+-spec broker_connections(kz_term:ne_binary()) -> non_neg_integer().
 broker_connections(Broker) ->
     MatchSpec = [{#kz_amqp_connections{broker=Broker
                                       ,_='_'
@@ -184,7 +183,7 @@ broker_connections(Broker) ->
                 ],
     ets:select_count(?TAB, MatchSpec).
 
--spec broker_available_connections(ne_binary()) -> non_neg_integer().
+-spec broker_available_connections(kz_term:ne_binary()) -> non_neg_integer().
 broker_available_connections(Broker) ->
     MatchSpec = [{#kz_amqp_connections{broker=Broker
                                       ,available='true'
@@ -195,7 +194,7 @@ broker_available_connections(Broker) ->
                 ],
     ets:select_count(?TAB, MatchSpec).
 
--spec primary_broker() -> api_binary().
+-spec primary_broker() -> kz_term:api_binary().
 primary_broker() ->
     Pattern = #kz_amqp_connections{available='true'
                                   ,zone='local'
@@ -211,7 +210,7 @@ primary_broker() ->
         [Broker|_] -> Broker
     end.
 
--spec federated_brokers() -> ne_binaries().
+-spec federated_brokers() -> kz_term:ne_binaries().
 federated_brokers() ->
     MatchSpec = [{#kz_amqp_connections{zone='$1'
                                       ,broker='$2'
@@ -231,7 +230,7 @@ federated_brokers() ->
        )
      ).
 
--spec broker_zone(ne_binary()) -> atom().
+-spec broker_zone(kz_term:ne_binary()) -> atom().
 broker_zone(Broker) ->
     Pattern = #kz_amqp_connections{broker=Broker
                                   ,zone='$1'
@@ -261,24 +260,17 @@ wait_for_available(Fun, Timeout) ->
             wait_for_notification(Timeout)
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {'stop', Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
-    kz_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
     _ = ets:new(?TAB, ['named_table'
                       ,{'keypos', #kz_amqp_connections.connection}
                       ,'protected'
@@ -286,35 +278,19 @@ init([]) ->
                       ]),
     {'ok', #state{}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {'reply', Reply, State} |
-%%                                   {'reply', Reply, State, Timeout} |
-%%                                   {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, Reply, State} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Msg, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {'noreply', State} |
-%%                                  {'noreply', State, Timeout} |
-%%                                  {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'new_connection', Connection, Broker, Zone, Tags}, State) ->
     Ref = erlang:monitor('process', Connection),
     _ = ets:insert(?TAB, #kz_amqp_connections{connection=Connection
@@ -339,23 +315,17 @@ handle_cast({'add_watcher', Fun, Watcher}, State) ->
     case Fun() of
         'false' -> {'noreply', add_watcher(Watcher, State), 'hibernate'};
         'true' ->
-            _ = notify_watcher(Watcher),
+            notify_watcher(Watcher),
             {'noreply', State, 'hibernate'}
     end;
 handle_cast(_Msg, State) ->
     {'noreply', State, 'hibernate'}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'DOWN', Ref, 'process', Connection, _Reason}, State) ->
     lager:warning("connection ~p went down: ~p"
                  ,[Connection, _Reason]),
@@ -366,60 +336,49 @@ handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State, 'hibernate'}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("AMQP connections terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
-%%--------------------------------------------------------------------
-%% @private
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec add_watcher(pid(), state()) -> state().
 add_watcher(Watcher, #state{watchers=Watchers}=State) ->
     State#state{watchers=sets:add_element(Watcher, Watchers)}.
 
 -spec notify_watchers(state()) -> state().
-notify_watchers(#state{watchers=[]}=State) ->
-    State#state{watchers=sets:new()};
-notify_watchers(#state{watchers=[Watcher|Watchers]}=State) ->
-    _ = notify_watcher(Watcher),
-    notify_watchers(State#state{watchers=Watchers});
-notify_watchers(#state{watchers=Watchers}=State) ->
-    notify_watchers(State#state{watchers=sets:to_list(Watchers)}).
+notify_watchers(#state{watchers = Watchers}=State) ->
+    F = fun (Watcher, _) -> notify_watcher(Watcher) end,
+    sets:fold(F, ok, Watchers),
+    State#state{watchers = sets:new()}.
 
--spec notify_watcher(pid()) -> any().
+-spec notify_watcher(pid()) -> ok.
 notify_watcher(Watcher) ->
-    Watcher ! {?MODULE, 'connection_available'}.
+    Watcher ! {?MODULE, 'connection_available'},
+    ok.
 
--spec wait_for_notification(kz_timeout()) ->
+-spec wait_for_notification(timeout()) ->
                                    'ok' |
                                    {'error', 'timeout'}.
 wait_for_notification(Timeout) ->
@@ -429,12 +388,12 @@ wait_for_notification(Timeout) ->
         Timeout -> {'error', 'timeout'}
     end.
 
--spec brokers_with_tag(ne_binary()) -> kz_amqp_connections_list().
--spec brokers_with_tag(ne_binary(), api_boolean()) -> kz_amqp_connections_list().
+-spec brokers_with_tag(kz_term:ne_binary()) -> kz_amqp_connections_list().
 brokers_with_tag(Tag) ->
     %% by default we want all the brokers
     brokers_with_tag(Tag, 'undefined').
 
+-spec brokers_with_tag(kz_term:ne_binary(), kz_term:api_boolean()) -> kz_amqp_connections_list().
 brokers_with_tag(Tag, Available) ->
     MatchSpec = [{#kz_amqp_connections{available='$1'
                                       ,_='_'
@@ -452,20 +411,20 @@ brokers_with_tag(Tag, Available) ->
         lists:member(Tag, Tags)
     ].
 
--spec broker_with_tag(ne_binary()) -> api_binary().
+-spec broker_with_tag(kz_term:ne_binary()) -> kz_term:api_binary().
 broker_with_tag(Tag) ->
     case brokers_with_tag(Tag, 'true') of
         [] -> 'undefined';
         [#kz_amqp_connections{broker=Broker}|_] -> Broker
     end.
 
--spec brokers_for_zone(atom()) -> kz_amqp_connections_list().
--spec brokers_for_zone(atom(), api_boolean()) -> kz_amqp_connections_list().
 
+-spec brokers_for_zone(atom()) -> kz_amqp_connections_list().
 brokers_for_zone(Zone) ->
     %% by default we want all the brokers
     brokers_for_zone(Zone, 'undefined').
 
+-spec brokers_for_zone(atom(), kz_term:api_boolean()) -> kz_amqp_connections_list().
 brokers_for_zone(Zone, Available) ->
     MatchSpec = [{#kz_amqp_connections{zone='$1'
                                       ,available='$2'
@@ -484,7 +443,7 @@ brokers_for_zone(Zone, Available) ->
                 ],
     ets:select(?TAB, MatchSpec).
 
--spec broker_for_zone(atom()) -> api_binary().
+-spec broker_for_zone(atom()) -> kz_term:api_binary().
 broker_for_zone(Zone) ->
     case brokers_for_zone(Zone, 'true') of
         [] -> 'undefined';
@@ -494,7 +453,7 @@ broker_for_zone(Zone) ->
 -spec is_zone_available(atom()) -> boolean().
 is_zone_available(Zone) -> broker_for_zone(Zone) =/= 'undefined'.
 
--spec is_tag_available(ne_binary()) -> boolean().
+-spec is_tag_available(kz_term:ne_binary()) -> boolean().
 is_tag_available(Tag) -> broker_with_tag(Tag) =/= 'undefined'.
 
 -spec is_hidden_broker(list()) -> boolean().

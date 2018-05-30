@@ -21,8 +21,16 @@
             },
             "type": "array"
         },
+        "flat_rate_blacklist": {
+            "description": "Regex for determining if a number should not be eligible for flat-rate trunking",
+            "type": "string"
+        },
+        "flat_rate_whitelist": {
+            "description": "Regex for determining if the number is eligible for flat-rate trunking",
+            "type": "string"
+        },
         "format_from_uri": {
-            "description": "When set to true requests to this resource will have a re-formatted SIP From Header",
+            "description": "When set to true requests to this resource will have a reformatted SIP From Header",
             "type": "boolean"
         },
         "formatters": {
@@ -131,7 +139,7 @@
                         "type": "boolean"
                     },
                     "format_from_uri": {
-                        "description": "When set to true requests to this resource gateway will have a re-formated SIP From Header",
+                        "description": "When set to true requests to this resource gateway will have a reformatted SIP From Header",
                         "type": "boolean"
                     },
                     "from_uri_realm": {
@@ -149,6 +157,75 @@
                             "1npan"
                         ],
                         "type": "string"
+                    },
+                    "invite_parameters": {
+                        "additionalProperties": false,
+                        "properties": {
+                            "dynamic": {
+                                "description": "A list of properties that, if found on the inbound call, should be added as an INVITE parameter",
+                                "items": {
+                                    "oneOf": [
+                                        {
+                                            "pattern": "custom_channel_vars\\..*",
+                                            "type": "string"
+                                        },
+                                        {
+                                            "pattern": "custom_sip_headers\\..*",
+                                            "type": "string"
+                                        },
+                                        {
+                                            "enum": [
+                                                "zone"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "key": {
+                                                    "oneOf": [
+                                                        {
+                                                            "pattern": "custom_channel_vars\\..*",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "pattern": "custom_sip_headers\\..*",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "enum": [
+                                                                "zone"
+                                                            ],
+                                                            "type": "string"
+                                                        }
+                                                    ]
+                                                },
+                                                "seperator": {
+                                                    "type": "string"
+                                                },
+                                                "tag": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "tag"
+                                            ],
+                                            "type": "object"
+                                        }
+                                    ]
+                                },
+                                "type": "array"
+                            },
+                            "static": {
+                                "description": "A list of static values that should be added as INVITE parameters",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
                     },
                     "media": {
                         "description": "The media parameters for the resource gateway",
@@ -241,80 +318,8 @@
             "type": "boolean"
         },
         "media": {
-            "default": {},
-            "description": "The default resouce media parameters applied if not present to all specified gateways",
-            "properties": {
-                "audio": {
-                    "default": {},
-                    "description": "The default audio media parameters",
-                    "properties": {
-                        "codecs": {
-                            "default": [
-                                "PCMU"
-                            ],
-                            "description": "A list of default codecs to use",
-                            "items": {
-                                "enum": [
-                                    "OPUS",
-                                    "CELT@32000h",
-                                    "G7221@32000h",
-                                    "G7221@16000h",
-                                    "G722",
-                                    "speex@32000h",
-                                    "speex@16000h",
-                                    "PCMU",
-                                    "PCMA",
-                                    "G729",
-                                    "GSM",
-                                    "CELT@48000h",
-                                    "CELT@64000h",
-                                    "G722_16",
-                                    "G722_32",
-                                    "CELT_48",
-                                    "CELT_64",
-                                    "Speex",
-                                    "speex"
-                                ],
-                                "type": "string"
-                            },
-                            "type": "array",
-                            "uniqueItems": true
-                        }
-                    },
-                    "type": "object"
-                },
-                "bypass_media": {
-                    "description": "Default bypass media mode",
-                    "type": "boolean"
-                },
-                "fax_option": {
-                    "description": "Is T.38 Supported?",
-                    "type": "boolean"
-                },
-                "video": {
-                    "default": {},
-                    "description": "The default video media parameters",
-                    "properties": {
-                        "codecs": {
-                            "default": [],
-                            "description": "A list of default codecs to use",
-                            "items": {
-                                "enum": [
-                                    "H261",
-                                    "H263",
-                                    "H264",
-                                    "VP8"
-                                ],
-                                "type": "string"
-                            },
-                            "type": "array",
-                            "uniqueItems": true
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "type": "object"
+            "$ref": "endpoint.media",
+            "description": "Media options for resources"
         },
         "name": {
             "description": "A friendly name for the resource",

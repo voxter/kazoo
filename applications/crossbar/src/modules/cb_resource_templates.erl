@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle client requests for local resource documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle client requests for local resource documents
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_resource_templates).
 
 -export([init/0
@@ -26,10 +22,14 @@
 -define(CB_LIST, <<"resources/resource_templates">>).
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".resource_templates">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.resource_templates">>, ?MODULE, 'allowed_methods'),
@@ -41,44 +41,41 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.delete.resource_templates">>, ?MODULE, 'delete'),
     ok.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_ResourceTemplateId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     C = determine_template_database(Context),
@@ -129,15 +126,14 @@ put(Context) -> crossbar_doc:save(Context).
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, _) -> crossbar_doc:delete(Context).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
-%%--------------------------------------------------------------------
-%% @private
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec determine_template_database(cb_context:context()) -> cb_context:context().
 determine_template_database(Context) ->
     Props = kz_json:to_proplist(cb_context:query_string(Context)),
@@ -165,12 +161,10 @@ local_template_database(Context) ->
             cb_context:set_account_db(Context, AccountDb)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_allowed_to_update(cb_context:context()) -> boolean().
 is_allowed_to_update(Context) ->
     AccountId = cb_context:auth_account_id(Context),
@@ -179,22 +173,17 @@ is_allowed_to_update(Context) ->
 
 -spec forbidden(cb_context:context()) -> cb_context:context().
 forbidden(Context) ->
-    cb_context:add_validation_error(
-      <<"Account">>
+    cb_context:add_validation_error(<<"Account">>
                                    ,<<"forbidden">>
-                                   ,kz_json:from_list([
-                                                       {<<"message">>, <<"You are not authorized to modify the resource templates">>}
-                                                      ])
+                                   ,kz_json:from_list([{<<"message">>, <<"You are not authorized to modify the resource templates">>}])
                                    ,Context
-     ).
+                                   ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec validate_request(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec validate_request(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_request(ResourceId, Context) ->
     Context1 = check_template_name(Context),
     case cb_context:has_errors(Context1) of
@@ -202,13 +191,11 @@ validate_request(ResourceId, Context) ->
         'false' -> on_successful_validation(ResourceId,Context1)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec validate_patch(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec validate_patch(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(ResourceId, Context) ->
     crossbar_doc:patch_and_validate(ResourceId, Context, fun validate_request/2).
 
@@ -216,18 +203,15 @@ validate_patch(ResourceId, Context) ->
 check_template_name(Context) ->
     case kz_json:get_ne_value(<<"template_name">>, cb_context:req_data(Context)) of
         'undefined' ->
-            cb_context:add_validation_error(
-              <<"template_name">>
+            cb_context:add_validation_error(<<"template_name">>
                                            ,<<"required">>
-                                           ,kz_json:from_list([
-                                                               {<<"message">>, <<"Template name is required">>}
-                                                              ])
+                                           ,kz_json:from_list([{<<"message">>, <<"Template name is required">>}])
                                            ,Context
-             );
+                                           );
         _Name -> cb_context:set_resp_status(Context, 'success')
     end.
 
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+-spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     JObj = kz_doc:set_type(cb_context:req_data(Context), <<"resource_template">>),
     cb_context:set_resp_status(cb_context:set_doc(Context, JObj), 'success');
@@ -244,12 +228,10 @@ merge(Context) ->
     Doc = kz_doc:private_fields(cb_context:doc(Context)),
     cb_context:set_doc(Context, kz_json:merge_jobjs(Doc, ReqData)).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].

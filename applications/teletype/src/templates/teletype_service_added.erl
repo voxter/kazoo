@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%   Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_service_added).
 -behaviour(teletype_gen_email_template).
 
@@ -15,13 +13,13 @@
         ,subject/0
         ,category/0
         ,friendly_name/0
-        ,to/1, from/1, cc/1, bcc/1, reply_to/1
+        ,to/0, from/0, cc/0, bcc/0, reply_to/0
         ]).
 -export([handle_req/1]).
 
 -include("teletype.hrl").
 
--spec id() -> ne_binary().
+-spec id() -> kz_term:ne_binary().
 id() -> <<"service_added">>.
 
 -spec macros() -> kz_json:object().
@@ -37,29 +35,29 @@ macros() ->
        ++ ?COMMON_TEMPLATE_MACROS
       ]).
 
--spec subject() -> ne_binary().
+-spec subject() -> kz_term:ne_binary().
 subject() -> <<"New VoIP services were added to sub-account '{{sub_account.name}}'">>.
 
--spec category() -> ne_binary().
+-spec category() -> kz_term:ne_binary().
 category() -> <<"account">>.
 
--spec friendly_name() -> ne_binary().
+-spec friendly_name() -> kz_term:ne_binary().
 friendly_name() -> <<"New Service Addition">>.
 
--spec to(ne_binary()) -> kz_json:object().
-to(_) -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
+-spec to() -> kz_json:object().
+to() -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
 
--spec from(ne_binary()) -> api_ne_binary().
-from(ModConfigCat) -> teletype_util:default_from_address(ModConfigCat).
+-spec from() -> kz_term:api_ne_binary().
+from() -> teletype_util:default_from_address().
 
--spec cc(ne_binary()) -> kz_json:object().
-cc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec cc() -> kz_json:object().
+cc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec bcc(ne_binary()) -> kz_json:object().
-bcc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec bcc() -> kz_json:object().
+bcc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec reply_to(ne_binary()) -> api_ne_binary().
-reply_to(ModConfigCat) -> teletype_util:default_reply_to(ModConfigCat).
+-spec reply_to() -> kz_term:api_ne_binary().
+reply_to() -> teletype_util:default_reply_to().
 
 -spec init() -> 'ok'.
 init() ->
@@ -67,14 +65,14 @@ init() ->
     teletype_templates:init(?MODULE),
     teletype_bindings:bind(id(), ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:service_added_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [id()]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(id(), <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [id()]),
 
@@ -87,7 +85,7 @@ handle_req(JObj, 'true') ->
         'true' -> process_req(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
     Macros = macros(DataJObj),
 
@@ -98,29 +96,30 @@ process_req(DataJObj) ->
     {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(id(), AccountId),
     Subject0 = kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj]),
     Subject = teletype_util:render_subject(Subject0, Macros),
-    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, teletype_util:mod_config_cat(id())),
+    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, id()),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(id());
+        {'error', Reason} -> teletype_util:notification_failed(id(), Reason)
     end.
 
--spec macros(kz_json:object()) -> kz_proplist().
+-spec macros(kz_json:object()) -> kz_term:proplist().
 macros(DataJObj) ->
     [{<<"system">>, teletype_util:system_params()}
     ,{<<"account">>, reseller_info_data(DataJObj)}
     ,{<<"sub_account">>, sub_account_data(DataJObj)}
     ,{<<"service_changes">>, service_added_data(DataJObj)}
     ,{<<"user">>, auth_user_data(DataJObj)}
-    ,{<<"time_stamp">>, time_stamp(DataJObj)}
+    ,{<<"timestamp">>, timestamp(DataJObj)}
+    ,{<<"time_stamp">>, timestamp(DataJObj)} %% backward compatibility
     ].
 
--spec time_stamp(kz_json:object()) -> kz_proplist().
-time_stamp(DataJObj) ->
-    TS = kz_json:get_integer_value(<<"time_stamp">>, DataJObj),
+-spec timestamp(kz_json:object()) -> kz_term:proplist().
+timestamp(DataJObj) ->
+    TS = kz_json:get_integer_value(<<"timestamp">>, DataJObj),
     teletype_util:fix_timestamp(TS, DataJObj).
 
--spec reseller_info_data(kz_json:object()) -> kz_proplist().
+-spec reseller_info_data(kz_json:object()) -> kz_term:proplist().
 reseller_info_data(DataJObj) ->
     Audit = kz_json:get_value(<<"audit_log">>, DataJObj),
     case teletype_util:is_preview(DataJObj) of
@@ -131,7 +130,7 @@ reseller_info_data(DataJObj) ->
             teletype_util:find_account_params(ResellerId)
     end.
 
--spec sub_account_data(kz_json:object()) -> kz_proplist().
+-spec sub_account_data(kz_json:object()) -> kz_term:proplist().
 sub_account_data(DataJObj) ->
     Audit = kz_json:get_value(<<"audit_log">>, DataJObj),
     case teletype_util:is_preview(DataJObj) of
@@ -141,7 +140,7 @@ sub_account_data(DataJObj) ->
             teletype_util:find_account_params(AccountId)
     end.
 
--spec service_added_data(kz_json:object()) -> kz_proplist().
+-spec service_added_data(kz_json:object()) -> kz_term:proplist().
 service_added_data(DataJObj) ->
     Audit = kz_json:get_value(<<"audit_log">>, DataJObj),
     case teletype_util:is_preview(DataJObj) of
@@ -152,7 +151,7 @@ service_added_data(DataJObj) ->
             kz_json:recursive_to_proplist(Diff)
     end.
 
--spec auth_user_data(kz_json:object()) -> kz_proplist().
+-spec auth_user_data(kz_json:object()) -> kz_term:proplist().
 auth_user_data(DataJObj) ->
     Audit = kz_json:get_value(<<"audit_log">>, DataJObj),
     case teletype_util:is_preview(DataJObj) of
@@ -164,15 +163,8 @@ auth_user_data(DataJObj) ->
         'false' ->
             AccountId = kzd_audit_log:authenticating_user_account_id(Audit),
             UserId = kz_json:get_value([<<"authenticating_user">>, <<"auth_user_id">>], Audit),
-            case fetch_user(AccountId, UserId) of
+            case kzd_user:fetch(AccountId, UserId) of
                 {'ok', UserJObj} -> teletype_util:user_params(UserJObj);
                 {'error', _} -> []
             end
     end.
-
--ifdef(TEST).
-fetch_user(?AN_ACCOUNT_ID, ?AN_ACCOUNT_USER_ID) ->
-    {ok, teletype_util:fixture("an_account_user.json")}.
--else.
-fetch_user(AccountId, UserId) -> kzd_user:fetch(AccountId, UserId).
--endif.

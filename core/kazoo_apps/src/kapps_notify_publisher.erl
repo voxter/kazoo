@@ -1,9 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2017-2018, 2600Hz
 %%% @doc
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kapps_notify_publisher).
 
 -export([call_collect/2
@@ -21,40 +20,45 @@
 -define(TIMEOUT, kapps_config:get_pos_integer(?NOTIFY_CAT, <<"notify_publisher_timeout_ms">>, ?DEFAULT_TIMEOUT)).
 
 -define(DEFAULT_PUBLISHER_ENABLED,
-        kapps_config:get_is_true(?NOTIFY_CAT, <<"notify_presist_enabled">>, true)
+        kapps_config:get_is_true(?NOTIFY_CAT, <<"notify_persist_enabled">>, true)
        ).
 -define(ACCOUNT_SHOULD_PRESIST(AccountId),
-        kapps_account_config:get_global(AccountId, ?NOTIFY_CAT, <<"should_presist_for_retry">>, true)
+        kapps_account_config:get_global(AccountId, ?NOTIFY_CAT, <<"should_persist_for_retry">>, true)
        ).
 
 -define(DEFAULT_TYPE_EXCEPTION, [<<"system_alert">>
                                 ,<<"voicemail_save">>
                                 ,<<"register">>
+                                ,<<"webhook">>
                                 ]).
 -define(GLOBAL_FORCE_NOTIFY_TYPE_EXCEPTION,
-        kapps_config:get_ne_binaries(?NOTIFY_CAT, <<"notify_presist_temprorary_force_exceptions">>, [])
+        kapps_config:get_ne_binaries(?NOTIFY_CAT, <<"notify_persist_temporary_force_exceptions">>, [])
        ).
 -define(NOTIFY_TYPE_EXCEPTION(AccountId),
-        kapps_account_config:get_global(AccountId, ?NOTIFY_CAT, <<"notify_presist_exceptions">>, ?DEFAULT_TYPE_EXCEPTION)
+        kapps_account_config:get_global(AccountId, ?NOTIFY_CAT, <<"notify_persist_exceptions">>, ?DEFAULT_TYPE_EXCEPTION)
        ).
 
-%%--------------------------------------------------------------------
+-type failure_reason() :: {kz_term:ne_binary(), kz_term:api_object()}.
+
+%%------------------------------------------------------------------------------
 %% @doc Publish notification and collect notify update messages from
-%%      teletype, useful if you want to make sure teletype processed
-%%      the notification completely (e.g. new voicemail)
-%%--------------------------------------------------------------------
--spec call_collect(api_terms(), kz_amqp_worker:publish_fun()) -> kz_amqp_worker:request_return().
+%% teletype. Useful if you want to make sure teletype processed
+%% the notification completely (e.g. new voicemail).
+%% @end
+%%------------------------------------------------------------------------------
+-spec call_collect(kz_term:api_terms(), kz_amqp_worker:publish_fun()) -> kz_amqp_worker:request_return().
 call_collect(Req, PublishFun) ->
     NotifyType = notify_type(PublishFun),
     CallResp = kz_amqp_worker:call_collect(Req, PublishFun, fun collecting/1, ?TIMEOUT),
     handle_resp(NotifyType, Req, CallResp),
     CallResp.
 
-%%--------------------------------------------------------------------
-%% @doc Publish notification asynchronous, and save it to db if
-%%      it failed to retry later.
-%%--------------------------------------------------------------------
--spec cast(api_terms(), kz_amqp_worker:publish_fun()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @doc Publish notification asynchronous, and save the payload to db
+%% if it failed.
+%% @end
+%%------------------------------------------------------------------------------
+-spec cast(kz_term:api_terms(), kz_amqp_worker:publish_fun()) -> 'ok'.
 cast(Req, PublishFun) ->
     CallId = kz_util:get_callid(),
     Fun = fun() ->
@@ -67,64 +71,89 @@ cast(Req, PublishFun) ->
     _ = erlang:spawn(Fun),
     'ok'.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%% @private
-%% @doc handle amqp worker responses
--spec handle_resp(api_ne_binary(), api_terms(), kz_amqp_worker:request_return()) -> 'ok'.
-handle_resp(NotifyType, Req, {'ok', _}=Resp) -> check_for_failure(NotifyType, Req, Resp);
-handle_resp(NotifyType, Req, {'error', Error}) -> maybe_handle_error(NotifyType, Req, error_to_failure_reason(Error));
-handle_resp(NotifyType, Req, {'returned', _, Resp}) -> check_for_failure(NotifyType, Req, {'returned', [Resp]});
-handle_resp(NotifyType, Req, {'timeout', _}=Resp) -> check_for_failure(NotifyType, Req, Resp).
+%%------------------------------------------------------------------------------
+%% @doc Handle AMQP worker responses.
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_resp(kz_term:api_ne_binary(), kz_term:api_terms(), kz_amqp_worker:request_return()) -> 'ok'.
+handle_resp(NotifyType, Req, {'ok', _}=Resp) ->
+    check_for_failure(NotifyType, Req, Resp);
 
-%% @private
-%% @doc check for notify update messages from teletype/notify apps
--spec check_for_failure(api_ne_binary(), api_terms(), {'ok' | 'returned' | 'timeout', kz_json:objects()}) -> 'ok'.
+handle_resp(NotifyType, Req, {'error', Error}) ->
+    maybe_handle_error(NotifyType, Req, handle_amqp_worker_error(Error));
+
+handle_resp(NotifyType, Req, {'returned', _, Resp}) ->
+    check_for_failure(NotifyType, Req, {'returned', [Resp]});
+
+handle_resp(NotifyType, Req, {'timeout', _}=Resp) ->
+    check_for_failure(NotifyType, Req, Resp).
+
+%%------------------------------------------------------------------------------
+%% @doc Check for notify update messages from teletype/notify applications.
+%% @end
+%%------------------------------------------------------------------------------
+-spec check_for_failure(kz_term:api_ne_binary(), kz_term:api_terms(), {'ok' | 'returned' | 'timeout', kz_json:object() | kz_json:objects()}) -> 'ok'.
 check_for_failure(NotifyType, Req, {_ErrorType, Responses}=Resp) ->
+    Reason = json_to_reason(Resp),
     case is_completed(Responses) of
-        'true' -> 'ok';
-        'false' -> maybe_handle_error(NotifyType, Req, json_to_failure_reason(Resp))
+        'true' -> maybe_log_metadata(NotifyType, Reason);
+        'false' -> maybe_handle_error(NotifyType, Req, Reason)
     end.
 
--spec maybe_handle_error(api_binary(), api_terms(), any()) -> 'ok'.
-maybe_handle_error('undefined', _Req, _Error) ->
-    lager:warning("not saving undefined notification");
-maybe_handle_error(NotifyType, Req, Error) ->
-    AccountId = find_account_id(Req),
-    should_presist_notify(AccountId)
-        andalso should_handle_notify_type(NotifyType, AccountId)
-        andalso handle_error(NotifyType, Req, Error).
+-spec maybe_log_metadata(kz_term:api_ne_binary(), failure_reason()) -> 'ok'.
+maybe_log_metadata('undefined', _) -> 'ok';
+maybe_log_metadata(_, {<<"completed">>, 'undefined'}) -> 'ok';
+maybe_log_metadata(NotifyType, {<<"completed">>=Reason, Metadata}) ->
+    lager:debug("publishing ~s resulted in ~s. full result: ~p", [NotifyType, Reason, Metadata]);
+maybe_log_metadata(_, _) -> 'ok'.
 
-%% @private
-%% @doc save pay load to db to retry later
--spec handle_error(ne_binary(), api_terms(), any()) -> 'ok'.
-handle_error(NotifyType, Req, Error) ->
-    lager:warning("attempt for publishing notification ~s was unsuccessful: ~p", [NotifyType, Error]),
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_handle_error(kz_term:api_binary(), kz_term:api_terms(), failure_reason()) -> 'ok'.
+maybe_handle_error('undefined', _, _) ->
+    lager:warning("not saving unknown notification type");
+maybe_handle_error(NotifyType, Req, Reason) ->
+    AccountId = kapi_notifications:account_id(Req),
+    should_persist_notify(AccountId)
+        andalso should_handle_notify_type(NotifyType, AccountId)
+        andalso handle_error(NotifyType, Req, Reason).
+
+%%------------------------------------------------------------------------------
+%% @doc create document with notification payload to save in db.
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_error(kz_term:ne_binary(), kz_term:api_terms(), failure_reason()) -> 'ok'.
+handle_error(NotifyType, Req, {Reason, Metadata}) ->
+    lager:warning("attempt to publishing notification ~s was unsuccessful: ~p", [NotifyType, Reason]),
     Props = props:filter_undefined(
               [{<<"description">>, <<"failed to publish notification">>}
-              ,{<<"failure_reason">>, error_to_failure_reason(Error)}
+              ,{<<"failure_reason">>, Reason}
+              ,{<<"metadata">>, Metadata}
               ,{<<"notification_type">>, NotifyType}
               ,{<<"payload">>, Req}
               ,{<<"attempts">>, 1}
               ]),
-    JObj = kz_doc:update_pvt_parameters(kz_json:from_list_recursive(Props)
-                                       ,'undefined'
-                                       , [{'type', <<"failed_notify">>}
-                                         ,{'account_id', find_account_id(Req)}
-                                         ,{'account_db', ?KZ_PENDING_NOTIFY_DB}
-                                         ]
-                                       ),
+    PvtOptions = [{'type', <<"failed_notify">>}
+                 ,{'account_id', kapi_notifications:account_id(Req)}
+                 ,{'account_db', ?KZ_PENDING_NOTIFY_DB}
+                 ],
+    JObj = kz_doc:update_pvt_parameters(kz_json:from_list_recursive(Props), 'undefined', PvtOptions),
     save_pending_notification(NotifyType, JObj, 2).
 
--spec save_pending_notification(ne_binary(), kz_json:object(), integer()) -> 'ok'.
+-spec save_pending_notification(kz_term:ne_binary(), kz_json:object(), integer()) -> 'ok'.
 save_pending_notification(_NotifyType, _JObj, Loop) when Loop < 0 ->
     lager:error("max try to save payload for notification ~s publish attempt", [_NotifyType]);
 save_pending_notification(NotifyType, JObj, Loop) ->
     case kz_datamgr:save_doc(?KZ_PENDING_NOTIFY_DB, JObj) of
-        {'ok', Saved} ->
-            lager:warning("payload for failed notification ~s publish attempt was saved to ~s", [NotifyType, kz_doc:id(Saved)]);
+        {'ok', _SavedJObj} ->
+            lager:warning("payload for failed ~s publish attempt is saved to ~s", [NotifyType, kz_doc:id(_SavedJObj)]);
         {'error', 'not_found'} ->
             kapps_maintenance:refresh(?KZ_PENDING_NOTIFY_DB),
             save_pending_notification(NotifyType, JObj, Loop - 1);
@@ -133,11 +162,13 @@ save_pending_notification(NotifyType, JObj, Loop) ->
         {'error', 'conflict'} ->
             save_pending_notification(NotifyType, JObj, Loop - 1);
         {'error', _E} ->
-            lager:error("failed to save payload for notification ~s publish attempt: ~p", [NotifyType, _E])
+            lager:error("failed to save payload for ~s publish attempt: ~p", [NotifyType, _E])
     end.
 
-%% @private
-%% @doc only stop if failed or completed messages are received
+%%------------------------------------------------------------------------------
+%% @doc Collect responses until failed or completed messages are received.
+%% @end
+%%------------------------------------------------------------------------------
 -spec collecting(kz_json:objects()) -> boolean().
 collecting([JObj|_]) ->
     case kapi_notifications:notify_update_v(JObj)
@@ -145,41 +176,46 @@ collecting([JObj|_]) ->
     of
         <<"completed">> -> 'true';
         <<"disabled">> -> 'true';
-        <<"ignored">> -> 'true';
         <<"failed">> -> 'true';
+        <<"ignored">> -> 'true';
         _ -> 'false'
     end.
 
-%% @private
-%% @doc whether or not the publish is completed by teletype
+%%------------------------------------------------------------------------------
+%% @doc Check responses from teletype and see if request is completed or not.
+%% If it failed check the reason to see should it be handled.
+%% @end
+%%------------------------------------------------------------------------------
 -spec is_completed(kz_json:object() | kz_json:objects()) -> boolean().
 is_completed([]) -> 'false';
 is_completed([JObj|_]) ->
     case kapi_notifications:notify_update_v(JObj)
         andalso kz_json:get_ne_binary_value(<<"Status">>, JObj)
     of
-        <<"completed">> -> 'true';
-        <<"disabled">> ->
-            Reason = kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj, <<>>),
-            lager:debug("notification is disabled ~p", [Reason]),
+        <<"completed">> ->
             'true';
-        <<"ignored">> ->
-            Reason = kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj, <<>>),
-            lager:debug("teletype has ignored the notification ~p", [Reason]),
+        <<"disabled">> ->
+            lager:debug("notification is disabled"),
             'true';
         <<"failed">> ->
             FailureMsg = kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj),
             ShouldIgnore = should_ignore_failure(FailureMsg),
             lager:debug("teletype failed with reason ~s, ignoring: ~s", [FailureMsg, ShouldIgnore]),
             ShouldIgnore;
-        %% FIXME: Is pending enough to consider publish was successful? at least teletype received the notification!
-        %% <<"pending">> -> 'true';
-        _ -> 'false'
+        <<"ignored">> ->
+            lager:debug("teletype has ignored the notification"),
+            'true';
+        _ ->
+            'false'
     end;
 is_completed(JObj) ->
     is_completed([JObj]).
 
--spec should_ignore_failure(api_ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+%% @doc Check the reason to see if this failure should be saved or not.
+%% @end
+%%------------------------------------------------------------------------------
+-spec should_ignore_failure(kz_term:api_ne_binary()) -> boolean().
 should_ignore_failure(<<"missing_from">>) -> 'true';
 should_ignore_failure(<<"invalid_to_addresses">>) -> 'true';
 should_ignore_failure(<<"no_to_addresses">>) -> 'true';
@@ -197,75 +233,86 @@ should_ignore_failure(<<"no_attachment">>) -> 'false'; %% probably fax or voicem
 should_ignore_failure(<<"badmatch">>) -> 'false'; %% not ignoring it yet (voicemail_new)
 should_ignore_failure(_) -> 'false'.
 
-%% @private
-%% @doc try to find account id in different part of payload(copied from teletype_util)
--spec find_account_id(api_terms()) -> api_ne_binary().
-find_account_id(Req) when is_list(Req) ->
-    find_account_id(Req, fun props:get_first_defined/2);
-find_account_id(Req) ->
-    find_account_id(Req, fun kz_json:get_first_defined/2).
-
-find_account_id(Req, Get) ->
-    Get([<<"account_id">>
-        ,[<<"account">>, <<"_id">>]
-        ,<<"pvt_account_id">>
-        ,<<"_id">>, <<"id">>
-        ,<<"Account-ID">>
-        ,[<<"details">>, <<"account_id">>]
-        ,[<<"Details">>, <<"Account-ID">>]
-        ,[<<"details">>, <<"custom_channel_vars">>, <<"account_id">>]
-        ,[<<"Details">>, <<"Custom-Channel-Vars">>, <<"Account-ID">>]
-        ]
-       ,Req
-       ).
-
-%% @private
-%% @doc convert error to human understandable string
--spec error_to_failure_reason(any()) -> ne_binary().
-error_to_failure_reason({'badmatch', {'error', BadMatch}}) ->
+%%------------------------------------------------------------------------------
+%% @doc Convert `kz_amqp_worker' errors to friendly string.
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_amqp_worker_error(any()) -> failure_reason().
+handle_amqp_worker_error({'badmatch', {'error', BadMatch}}) ->
     %% maybe it's validation error
-    error_to_failure_reason(BadMatch);
-error_to_failure_reason({'function_clause', _}) ->
-    <<"function clause error">>;
-error_to_failure_reason({'badarg', _}) ->
-    <<"badarg error">>;
-error_to_failure_reason(Error) ->
+    handle_amqp_worker_error(BadMatch);
+handle_amqp_worker_error({'function_clause', _}) ->
+    <<"sending the amqp resulted in failure: function clause error">>;
+handle_amqp_worker_error({'badarg', _}) ->
+    <<"sending the amqp resulted in failure: badarg error">>;
+handle_amqp_worker_error(Error) ->
     case kz_json:is_json_object(Error) of
-        'true' -> json_to_failure_reason(Error);
-        'false' -> cast_to_binary(Error)
+        'true' -> json_to_reason(Error);
+        'false' ->
+            {<<"sending the amqp resulted in failure: ", (cast_to_binary(Error))/binary>>, 'undefined'}
     end.
 
-%% @private
-%% @doc same as above for json (response from teletype)
--spec json_to_failure_reason(any()) -> ne_binary().
-json_to_failure_reason({ErrorType, JObjs}) when is_list(JObjs) ->
-    case kz_json:find(<<"Status">>, JObjs) of
-        <<"failed">> -> <<"teletype failed with reason "
-                         ,(kz_json:get_ne_binary_value(<<"Failure-Message">>, hd(JObjs), <<"unknown_reason">>))/binary
-                        >>;
-        <<"pending">> -> <<"timeout during publishing, last message from teletype is 'pending'">>;
-        <<"completed">> -> <<"it shouldn't be here">>;
-        _ -> <<"received ", (cast_to_binary(ErrorType))/binary, " without any response from teletype">>
-    end;
-json_to_failure_reason({'error', JObj}) ->
-    json_to_failure_reason({'error', [JObj]});
-json_to_failure_reason(JObjs) when is_list(JObjs) ->
-    json_to_failure_reason({'error', JObjs});
-json_to_failure_reason(JObj) ->
-    json_to_failure_reason({'error', [JObj]}).
+%%------------------------------------------------------------------------------
+%% @doc Convert JObj errors to friendly string (responses from teletype or
+%% `kz_amqp_worker' errors in JObj).
+%%
+%% For now we just only get the first failed response.
+%% @end
+%%------------------------------------------------------------------------------
+-spec json_to_reason(any()) -> failure_reason().
+json_to_reason({'returned', JObjs}) when is_list(JObjs) ->
+    kz_json:find(<<"message">>, JObjs, <<"unknown broker error">>);
 
-%% @private
--spec cast_to_binary(any()) -> ne_binary().
+json_to_reason({ErrorType, JObjs}) when is_list(JObjs) ->
+    Reasons = [<<"failed">>, <<"pending">>, <<"completed">>],
+    Fun = fun(Reason, Acc) -> find_reason_from_jsons(Reason, JObjs, Acc) end,
+
+    case lists:foldl(Fun, maps:new(), Reasons) of
+        #{<<"completed">> := [JObj|_]} ->
+            {<<"completed">>, kz_json:get_value(<<"Metadata">>, JObj)};
+        #{<<"failed">> := [JObj|_]} ->
+            FailureMsg = kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj, <<"unknown_reason">>),
+            {<<"teletype failed with reason ", FailureMsg/binary>>, kz_json:get_value(<<"Metadata">>, JObj)};
+        #{<<"pending">> := [JObj|_]} ->
+            FailureMsg = <<"timeout during publishing, last message from teletype is 'pending'">>,
+            {FailureMsg, kz_json:get_value(<<"Metadata">>, JObj)};
+        _ ->
+            {<<"received ", (cast_to_binary(ErrorType))/binary, " without any response from teletype">>, 'undefined'}
+    end;
+
+json_to_reason({ErrorType, JObj}) ->
+    json_to_reason({ErrorType, [JObj]});
+
+json_to_reason(JObjs) when is_list(JObjs) ->
+    json_to_reason({'error', JObjs});
+
+json_to_reason(JObj) ->
+    json_to_reason({'error', [JObj]}).
+
+%%------------------------------------------------------------------------------
+%% @doc Categorize Responses based on status.
+%% @end
+%%------------------------------------------------------------------------------
+find_reason_from_jsons(Reason, JObjs, Map) ->
+    case kz_json:find_value(<<"Status">>, Reason, JObjs, 'undefined') of
+        'undefined' -> Map;
+        Val -> maps:update_with(Reason, fun(List) -> [Val|List] end, [Val], Map)
+    end.
+
+-spec cast_to_binary(any()) -> kz_term:ne_binary().
 cast_to_binary(Error) ->
     try kz_term:to_binary(Error)
     catch
-        _:_ -> <<"unknown_reason">>
+        _:_ ->
+            lager:debug("failed to convert notification failure reason to binary: ~p", [Error]),
+            <<"unknown_reason">>
     end.
 
-%% @private
-%% @doc detect notification type from publish function
-%%      clever way for lazy developer who wants to type/remember less
--spec notify_type(kz_amqp_worker:publish_fun() | ne_binary()) -> api_ne_binary().
+%%------------------------------------------------------------------------------
+%% @doc Find notification type from the publish function.
+%% @end
+%%------------------------------------------------------------------------------
+-spec notify_type(kz_amqp_worker:publish_fun() | kz_term:ne_binary()) -> kz_term:api_ne_binary().
 notify_type(<<"publish_", NotifyType/binary>>) ->
     NotifyType;
 notify_type(NotifyType) when is_binary(NotifyType) ->
@@ -279,12 +326,12 @@ notify_type(PublishFun) ->
             'undefined'
     end.
 
--spec should_presist_notify(api_binary()) -> boolean().
-should_presist_notify(AccountId) ->
+-spec should_persist_notify(kz_term:api_binary()) -> boolean().
+should_persist_notify(AccountId) ->
     ?DEFAULT_PUBLISHER_ENABLED
         andalso ?ACCOUNT_SHOULD_PRESIST(AccountId).
 
--spec should_handle_notify_type(ne_binary(), api_binary()) -> boolean().
+-spec should_handle_notify_type(kz_term:ne_binary(), kz_term:api_binary()) -> boolean().
 should_handle_notify_type(NotifyType, AccountId) ->
     not lists:member(NotifyType, ?GLOBAL_FORCE_NOTIFY_TYPE_EXCEPTION)
         andalso not lists:member(NotifyType, ?NOTIFY_TYPE_EXCEPTION(AccountId)).

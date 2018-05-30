@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
 %%% @doc
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_port_request_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -15,7 +14,7 @@ base() ->
     [{assign_to, ?RESELLER_ACCOUNT_ID}
     ,{dry_run, false}
     ,{<<"auth_by_account">>
-     ,kz_account:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, false)
+     ,kzd_accounts:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, false)
      }
     ].
 

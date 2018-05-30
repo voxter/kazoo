@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Upload a rate deck, query rates for a given DID
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Upload a rate deck, query rates for a given DID
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_rates).
 
 -export([init/0
@@ -28,10 +26,6 @@
 -define(NUMBER, <<"number">>).
 -define(CB_LIST, <<"rates/crossbar_listing">>).
 
--define(UPLOAD_MIME_TYPES, [{<<"text">>, <<"csv">>}
-                           ,{<<"text">>, <<"comma-separated-values">>}
-                           ]).
-
 -define(NUMBER_RESP_FIELDS, [<<"Base-Cost">>
                             ,<<"E164-Number">>
                             ,<<"Prefix">>
@@ -44,10 +38,14 @@
                             ,<<"Surcharge">>
                             ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = init_db(),
@@ -65,7 +63,7 @@ init() ->
 
 init_db() ->
     _ = kz_datamgr:db_create(?KZ_RATES_DB),
-    kz_datamgr:revise_doc_from_file(?KZ_RATES_DB, 'crossbar', "views/rates.json").
+    kz_datamgr:revise_doc_from_file(?KZ_RATES_DB, ?APP, "views/rates.json").
 
 -spec authorize(cb_context:context()) -> boolean().
 authorize(Context) ->
@@ -77,15 +75,13 @@ authorize(_Context, [{<<"rates">>, [?NUMBER, _NumberToRate]}]) ->
 authorize(_Context, _Nouns) ->
     'false'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST].
@@ -98,14 +94,11 @@ allowed_methods(_RateId) ->
 allowed_methods(?NUMBER, _PhoneNumber) ->
     [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
 
@@ -121,7 +114,7 @@ content_types_accepted(Context) ->
 
 -spec content_types_accepted_by_verb(cb_context:context(), http_method()) -> cb_context:context().
 content_types_accepted_by_verb(Context, ?HTTP_POST) ->
-    cb_context:set_content_types_accepted(Context, [{'from_binary', ?UPLOAD_MIME_TYPES}]);
+    cb_context:set_content_types_accepted(Context, [{'from_binary', ?CSV_CONTENT_TYPES}]);
 content_types_accepted_by_verb(Context, _) -> Context.
 
 -spec content_types_provided(cb_context:context()) -> cb_context:context().
@@ -137,22 +130,23 @@ content_types_provided_by_verb(Context, ?HTTP_GET) ->
 content_types_provided_by_verb(Context, _Verb) ->
     Context.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_rates(Context, cb_context:req_verb(Context)).
+
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, Id) ->
     validate_rate(Context, Id, cb_context:req_verb(Context)).
+
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context, ?NUMBER, Phonenumber) ->
     validate_number(Phonenumber, Context).
 
@@ -174,17 +168,18 @@ validate_rate(Context, Id, ?HTTP_PATCH) ->
 validate_rate(Context, Id, ?HTTP_DELETE) ->
     read(Id, cb_context:set_account_db(Context, ratedeck_db(Context))).
 
--spec ratedeck_db(cb_context:context()) -> ne_binary().
+-spec ratedeck_db(cb_context:context()) -> kz_term:ne_binary().
 ratedeck_db(Context) ->
     RatedeckId = cb_context:req_value(Context, <<"ratedeck_id">>, ?KZ_RATES_DB),
     kzd_ratedeck:format_ratedeck_db(RatedeckId).
 
 -spec post(cb_context:context()) -> cb_context:context().
--spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context) ->
     _ = init_db(),
     _ = kz_util:spawn(fun upload_csv/1, [Context]),
     crossbar_util:response_202(<<"attempting to insert rates from the uploaded document">>, Context).
+
+-spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _RateId) ->
     crossbar_doc:save(Context).
 
@@ -200,7 +195,7 @@ put(Context) ->
 delete(Context, _RateId) ->
     crossbar_doc:delete(Context).
 
--spec validate_number(ne_binary(), cb_context:context()) -> cb_context:context().
+-spec validate_number(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 validate_number(Phonenumber, Context) ->
     case knm_converters:is_reconcilable(Phonenumber) of
         'true' ->
@@ -213,60 +208,51 @@ validate_number(Phonenumber, Context) ->
                                            )
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Create a new instance with the data provided, if it is valid
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Create a new instance with the data provided, if it is valid
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create(cb_context:context()) -> cb_context:context().
 create(Context) ->
     OnSuccess = fun(C) -> on_successful_validation('undefined', C) end,
     cb_context:validate_request_data(<<"rates">>, Context, OnSuccess).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load an instance from the database
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
--spec read(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"rate">>)).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Update an existing menu document with the data provided, if it is
+%%------------------------------------------------------------------------------
+%% @doc Update an existing menu document with the data provided, if it is
 %% valid
 %% @end
-%%--------------------------------------------------------------------
--spec update(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec update(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 update(Id, Context) ->
     OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
     cb_context:validate_request_data(<<"rates">>, Context, OnSuccess).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Update-merge an existing menu document with the data provided, if it is
+%%------------------------------------------------------------------------------
+%% @doc Update-merge an existing menu document with the data provided, if it is
 %% valid
 %% @end
-%%--------------------------------------------------------------------
--spec validate_patch(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec validate_patch(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(Id, Context) ->
     crossbar_doc:patch_and_validate(Id, Context, fun update/2).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Doc = lists:foldl(fun doc_updates/2
                      ,cb_context:doc(Context)
@@ -278,7 +264,7 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(Id, Context) ->
     crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"rate">>)).
 
--spec doc_updates({fun(), ne_binary()} | fun(), kz_json:object()) ->
+-spec doc_updates({fun(), kz_term:ne_binary()} | fun(), kz_json:object()) ->
                          kz_json:object().
 doc_updates({Fun, Value}, Doc) when is_function(Fun, 2) ->
     Fun(Doc, Value);
@@ -286,10 +272,10 @@ doc_updates(Fun, Doc) when is_function(Fun, 1) ->
     Fun(Doc).
 
 -spec ensure_routes_set(kz_json:object()) -> kz_json:object().
--spec ensure_routes_set(kz_json:object(), api_binaries()) -> kz_json:object().
 ensure_routes_set(Doc) ->
     ensure_routes_set(Doc, kz_json:get_value(<<"routes">>, Doc)).
 
+-spec ensure_routes_set(kz_json:object(), kz_term:api_binaries()) -> kz_json:object().
 ensure_routes_set(Doc, 'undefined') ->
     add_default_route(Doc, kz_json:get_value(<<"prefix">>, Doc));
 ensure_routes_set(Doc, []) ->
@@ -297,28 +283,24 @@ ensure_routes_set(Doc, []) ->
 ensure_routes_set(Doc, _) ->
     Doc.
 
--spec add_default_route(kz_json:object(), ne_binary()) -> kz_json:object().
+-spec add_default_route(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
 add_default_route(Doc, Prefix) ->
     kz_json:set_value(<<"routes">>, [<<"^\\+?", Prefix/binary, ".+$">>], Doc).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check the uploaded file for CSV
+%%------------------------------------------------------------------------------
+%% @doc Check the uploaded file for CSV
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec check_uploaded_file(cb_context:context()) -> cb_context:context().
 check_uploaded_file(Context) ->
     check_uploaded_file(Context, cb_context:req_files(Context)).
@@ -343,22 +325,18 @@ error_no_file(Context) ->
                                    ,Context
                                    ).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert the file, based on content-type, to rate documents
+%%------------------------------------------------------------------------------
+%% @doc Convert the file, based on content-type, to rate documents
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec upload_csv(cb_context:context()) -> 'ok'.
 upload_csv(Context) ->
     _ = cb_context:put_reqid(Context),
@@ -381,17 +359,20 @@ process_upload_file(Context, [{_Name, File}|_]) ->
 process_upload_file(Context, _ReqFiles) ->
     error_no_file(Context).
 
--spec convert_file(ne_binary(), ne_binary(), cb_context:context()) ->
+-spec convert_file(kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) ->
                           {'ok', {non_neg_integer(), kz_json:objects()}}.
 convert_file(<<"text/csv">>, FileContents, Context) ->
     csv_to_rates(FileContents, Context);
 convert_file(<<"text/comma-separated-values">>, FileContents, Context) ->
     csv_to_rates(FileContents, Context);
+convert_file(<<"application/octet-stream">>, FileContents, Context) ->
+    lager:debug("content type is 'application/octet-stream', assuming it's csv"),
+    csv_to_rates(FileContents, Context);
 convert_file(ContentType, _, _) ->
     lager:debug("unknown content type: ~s", [ContentType]),
     throw({'unknown_content_type', ContentType}).
 
--spec csv_to_rates(ne_binary(), cb_context:context()) ->
+-spec csv_to_rates(kz_term:ne_binary(), cb_context:context()) ->
                           {'ok', {integer(), kz_json:objects()}}.
 csv_to_rates(CSV, Context) ->
     BulkInsert = kz_datamgr:max_bulk_insert(),
@@ -402,7 +383,10 @@ csv_to_rates(CSV, Context) ->
                                 ,{0, []}
                                 ).
 
-%% NOTE: Support row formats-
+
+-type rate_row() :: [string(),...] | string().
+%% <div class="notice">Support row formats:
+%% ```
 %%    [Prefix, ISO, Desc, Rate]
 %%    [Prefix, ISO, Desc, InternalRate, Rate]
 %%    [Prefix, ISO, Desc, Surcharge, InternalRate, Rate]
@@ -410,8 +394,7 @@ csv_to_rates(CSV, Context) ->
 %%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum]
 %%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum, Increment]
 %%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum, Increment, Direction]
-
--type rate_row() :: [string(),...] | string().
+%% '''</div>
 -type rate_row_acc() :: {integer(), kz_json:objects()}.
 
 -spec process_row(cb_context:context(), rate_row(), integer(), kz_json:objects(), integer()) ->
@@ -437,35 +420,35 @@ process_row(Row, {Count, JObjs}=Acc) ->
             %% The idea here is the more expensive rate will have a higher CostF
             %% and decrement it from the weight so it has a lower weight #
             %% meaning it should be more likely used
-            Weight = kzd_rate:constrain_weight(byte_size(kz_term:to_binary(Prefix)) * 10
-                                               - trunc(InternalRate * 100)
-                                              ),
+            Weight = kzd_rates:constrain_weight(byte_size(kz_term:to_binary(Prefix)) * 10
+                                                - trunc(InternalRate * 100)
+                                               ),
             Id = <<ISO/binary, "-", (kz_term:to_binary(Prefix))/binary>>,
             Setters = props:filter_undefined(
                         [{fun kz_doc:set_id/2, Id}
-                        ,{fun kzd_rate:set_prefix/2, kz_term:to_binary(Prefix)}
-                        ,{fun kzd_rate:set_weight/2, Weight}
-                        ,{fun kzd_rate:set_description/2, Description}
-                        ,{fun kzd_rate:set_name/2, Id}
-                        ,{fun kzd_rate:set_iso_country_code/2, ISO}
-                        ,{fun kzd_rate:set_private_cost/2, InternalRate}
-                        ,{fun kzd_rate:set_carrier/2, <<"default">>}
-                        ,fun kzd_rate:set_type/1
-                        ,{fun kzd_rate:set_routes/2, get_row_routes(Row)}
-                        ,{fun kzd_rate:set_increment/2, get_row_increment(Row)}
-                        ,{fun kzd_rate:set_minimum/2, get_row_minimum(Row)}
-                        ,{fun kzd_rate:set_surcharge/2, get_row_surcharge(Row)}
-                        ,{fun kzd_rate:set_rate_cost/2, get_row_rate(Row)}
-                        ,{fun kzd_rate:set_direction/2, get_row_direction(Row)}
-                        ,{fun kzd_rate:set_private_surcharge/2, get_row_internal_surcharge(Row)}
-                        ,{fun kzd_rate:set_routes/2, [<<"^\\+", (kz_term:to_binary(Prefix))/binary, "(\\d*)\$">>]}
-                        ,{fun kzd_rate:set_options/2, []}
+                        ,{fun kzd_rates:set_prefix/2, kz_term:to_binary(Prefix)}
+                        ,{fun kzd_rates:set_weight/2, Weight}
+                        ,{fun kzd_rates:set_description/2, Description}
+                        ,{fun kzd_rates:set_rate_name/2, Id}
+                        ,{fun kzd_rates:set_iso_country_code/2, ISO}
+                        ,{fun kzd_rates:set_private_cost/2, InternalRate}
+                        ,{fun kzd_rates:set_carrier/2, <<"default">>}
+                        ,fun kzd_rates:set_type/1
+                        ,{fun kzd_rates:set_routes/2, get_row_routes(Row)}
+                        ,{fun kzd_rates:set_rate_increment/2, get_row_increment(Row)}
+                        ,{fun kzd_rates:set_rate_minimum/2, get_row_minimum(Row)}
+                        ,{fun kzd_rates:set_rate_surcharge/2, get_row_surcharge(Row)}
+                        ,{fun kzd_rates:set_rate_cost/2, get_row_rate(Row)}
+                        ,{fun kzd_rates:set_direction/2, get_row_direction(Row)}
+                        ,{fun kzd_rates:set_private_surcharge/2, get_row_internal_surcharge(Row)}
+                        ,{fun kzd_rates:set_routes/2, [<<"^\\+", (kz_term:to_binary(Prefix))/binary, "(\\d*)\$">>]}
+                        ,{fun kzd_rates:set_options/2, []}
                         ]),
 
             {Count + 1, [kz_json:set_values(Setters, kz_json:new()) | JObjs]}
     end.
 
--spec get_row_prefix(rate_row()) -> api_binary().
+-spec get_row_prefix(rate_row()) -> kz_term:api_binary().
 get_row_prefix([Prefix | _]=_R) ->
     try kz_term:to_integer(Prefix)
     catch
@@ -477,27 +460,27 @@ get_row_prefix(_R) ->
     lager:info("prefix not found on row: ~p", [_R]),
     'undefined'.
 
--spec get_row_iso(rate_row()) -> ne_binary().
+-spec get_row_iso(rate_row()) -> kz_term:ne_binary().
 get_row_iso([_, ISO | _]) -> strip_quotes(kz_term:to_binary(ISO));
 get_row_iso(_R) ->
     lager:info("iso not found on row: ~p", [_R]),
     <<"XX">>.
 
--spec get_row_description(rate_row()) -> api_binary().
+-spec get_row_description(rate_row()) -> kz_term:api_binary().
 get_row_description([_, _, Description | _]) ->
     strip_quotes(kz_term:to_binary(Description));
 get_row_description(_R) ->
     lager:info("description not found on row: ~p", [_R]),
     'undefined'.
 
--spec get_row_internal_surcharge(rate_row()) -> api_float().
+-spec get_row_internal_surcharge(rate_row()) -> kz_term:api_float().
 get_row_internal_surcharge([_, _, _, InternalSurcharge, _, _ | _]) ->
     kz_term:to_float(InternalSurcharge);
 get_row_internal_surcharge(_R) ->
     lager:info("internal surcharge not found on row: ~p", [_R]),
     'undefined'.
 
--spec get_row_surcharge(rate_row()) -> api_float().
+-spec get_row_surcharge(rate_row()) -> kz_term:api_float().
 get_row_surcharge([_, _, _, Surcharge, _, _]) ->
     kz_term:to_float(Surcharge);
 get_row_surcharge([_, _, _, _, Surcharge, _ | _]) ->
@@ -506,7 +489,7 @@ get_row_surcharge([_|_]=_R) ->
     lager:info("surcharge not found on row: ~p", [_R]),
     'undefined'.
 
--spec get_row_internal_rate(rate_row()) -> api_float().
+-spec get_row_internal_rate(rate_row()) -> kz_term:api_float().
 get_row_internal_rate([_, _, _, Rate]) ->
     kz_term:to_float(Rate);
 get_row_internal_rate([_, _, _, InternalRate, _]) ->
@@ -519,7 +502,7 @@ get_row_internal_rate([_|_]=_R) ->
     lager:info("internal rate not found on row: ~p", [_R]),
     'undefined'.
 
--spec get_row_rate(rate_row()) -> api_float().
+-spec get_row_rate(rate_row()) -> kz_term:api_float().
 get_row_rate([_, _, _, Rate]) -> kz_term:to_float(Rate);
 get_row_rate([_, _, _, _, Rate]) -> kz_term:to_float(Rate);
 get_row_rate([_, _, _, _, _, Rate]) -> kz_term:to_float(Rate);
@@ -554,7 +537,7 @@ get_row_direction([_, _, _, _, _, _, _, _, _, _, Direction | _]) ->
 get_row_direction([_|_]) ->
     'undefined'.
 
--spec strip_quotes(ne_binary()) -> ne_binary().
+-spec strip_quotes(kz_term:ne_binary()) -> kz_term:ne_binary().
 strip_quotes(Bin) ->
     binary:replace(Bin, [<<"\"">>, <<"\'">>], <<>>, ['global']).
 
@@ -568,7 +551,7 @@ save_processed_rates(Context, Count) ->
               lager:debug("saved up to ~b docs (took ~b ms)", [Count, kz_time:elapsed_ms(Now)])
       end).
 
--spec rate_for_number(ne_binary(), cb_context:context()) -> cb_context:context().
+-spec rate_for_number(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 rate_for_number(Phonenumber, Context) ->
     Request = props:filter_undefined(
                 [{<<"To-DID">>, Phonenumber}
@@ -593,7 +576,7 @@ rate_for_number(Phonenumber, Context) ->
             cb_context:add_system_error(<<"No rate found for this number">>, Context)
     end.
 
--spec maybe_handle_rate(ne_binary(), cb_context:context(), kz_json:object()) ->
+-spec maybe_handle_rate(kz_term:ne_binary(), cb_context:context(), kz_json:object()) ->
                                cb_context:context().
 maybe_handle_rate(Phonenumber, Context, Rate) ->
     case kz_json:get_value(<<"Base-Cost">>, Rate) of
@@ -626,9 +609,5 @@ normalize_fields(Rate) ->
                              {kz_json:path(), kz_json:json_term()}.
 normalize_field(<<"Base-Cost">> = K, BaseCost) ->
     {K, wht_util:units_to_dollars(BaseCost)};
-normalize_field(<<"Rate">> = K, Rate) ->
-    {K, wht_util:units_to_dollars(Rate)};
-normalize_field(<<"Surcharge">> = K, Surcharge) ->
-    {K, wht_util:units_to_dollars(Surcharge)};
 normalize_field(K, V) ->
     {K, V}.

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_media_tts_cache).
 -behaviour(gen_server).
 
@@ -34,53 +32,47 @@
 
 -define(TIMEOUT_MESSAGE, {'$kz_media_tts_cache', 'tts_timeout'}).
 
--record(state, {text :: api_ne_binary()
+-record(state, {text :: kz_term:api_ne_binary()
                ,contents = <<>> :: binary()
                ,status :: 'streaming' | 'ready'
                ,kz_http_req_id :: kz_http:req_id()
                ,reqs :: [{pid(), reference()}]
                ,meta :: kz_json:object()
                ,timer_ref :: reference()
-               ,id :: ne_binary() %% used in publishing doc_deleted
+               ,id :: kz_term:ne_binary() %% used in publishing doc_deleted
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(ne_binary(), kz_json:object()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(kz_term:ne_binary(), kz_json:object()) -> kz_types:startlink_ret().
 start_link(Id, JObj) ->
     gen_server:start_link(?SERVER, [Id, JObj], []).
 
--spec single(pid()) -> {kz_json:object(), ne_binary()}.
+-spec single(pid()) -> {kz_json:object(), kz_term:ne_binary()}.
 single(Srv) -> gen_server:call(Srv, 'single').
 
--spec continuous(pid()) -> {kz_json:object(), ne_binary()}.
+-spec continuous(pid()) -> {kz_json:object(), kz_term:ne_binary()}.
 continuous(Srv) -> gen_server:call(Srv, 'continuous').
 
 -spec stop(pid()) -> 'ok'.
 stop(Srv) ->
     gen_server:cast(Srv, 'stop').
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([Id, JObj]) ->
     kz_util:put_callid(Id),
@@ -110,33 +102,23 @@ init([Id, JObj]) ->
                  ,id = Id
                  }}.
 
--spec get_language(ne_binary()) -> ne_binary().
+-spec get_language(kz_term:ne_binary()) -> kz_term:ne_binary().
 get_language(<<"en">>) -> <<"en-us">>;
 get_language(<<L:2/binary>>) -> <<L/binary, "-", L/binary>>;
 get_language(Language) -> Language.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call('single', _From, #state{meta=Meta
                                    ,contents=Contents
                                    ,status=ready
                                    ,timer_ref=TRef
                                    }=State) ->
     %% doesn't currently check whether we're still streaming in from the DB
-    lager:debug("returning media contents"),
+    lager:debug("returning media contents ~p", [kz_util:pretty_print_bytes(byte_size(Contents))]),
     _ = stop_timer(TRef),
     {'reply', {Meta, Contents}, State#state{timer_ref=start_timer()}};
 handle_call('single', From, #state{reqs=Reqs
@@ -147,34 +129,22 @@ handle_call('single', From, #state{reqs=Reqs
 handle_call('continuous', _From, #state{}=State) ->
     {'reply', 'ok', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('stop', State) ->
     lager:debug("asked to stop, going down"),
     {'stop', 'normal', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'timeout', TRef, ?TIMEOUT_MESSAGE}, #state{timer_ref=TRef}=State) ->
     lager:debug("timeout expired, going down"),
     {'stop', 'normal', State};
@@ -182,7 +152,7 @@ handle_info({'timeout', TRef, ?TIMEOUT_MESSAGE}, #state{timer_ref=TRef}=State) -
 handle_info({'http', {ReqID, 'stream_start', Hdrs}}, #state{kz_http_req_id=ReqID
                                                            ,timer_ref=TRef
                                                            }=State) ->
-    lager:debug("start retrieving audio file for tts"),
+    lager:debug("start retrieving audio file for tts: ~p", [Hdrs]),
     _ = stop_timer(TRef),
     {'noreply', State#state{meta=kz_json:normalize(kz_json:from_list(kv_to_bin(Hdrs)))
                            ,timer_ref=start_timer()
@@ -195,7 +165,8 @@ handle_info({'http', {ReqID, 'stream', Bin}}, #state{kz_http_req_id=ReqID
                                                     }=State) ->
     _ = stop_timer(TRef),
     case kz_json:get_value(<<"content_type">>, Meta) of
-        <<"audio/", _/binary>> ->
+        <<"audio/", _/binary>>=_CT ->
+            lager:debug("adding ~p bytes of ~s", [byte_size(Bin), _CT]),
             {'noreply', State#state{contents = <<Contents/binary, Bin/binary>>
                                    ,timer_ref=start_timer()
                                    }};
@@ -221,7 +192,7 @@ handle_info({'http', {ReqID, 'stream_end', _FinalHeaders}}, #state{kz_http_req_i
     Res = {Meta, Contents},
     _ = [gen_server:reply(From, Res) || From <- Reqs],
 
-    lager:debug("finished receiving file contents"),
+    lager:debug("finished receiving file contents: ~p", [kz_util:pretty_print_bytes(byte_size(Contents))]),
     {'noreply', State#state{status=ready
                            ,timer_ref=start_timer()
                            }
@@ -250,45 +221,50 @@ handle_info({'http', {ReqID, {'error', Error}}}, #state{kz_http_req_id=ReqID
                                                        ,timer_ref=TRef
                                                        }=State) ->
     _ = stop_timer(TRef),
-    lager:info("recv error ~p : collected: ~p", [Error, Contents]),
+    log_error(Error, Contents),
     {'stop', 'normal', State};
 
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State, 'hibernate'}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+-spec log_error(any(), binary()) -> 'ok'.
+log_error({'failed_connect',[{'to_address',{_Server, _Port}},{'inet',['inet'],'econnrefused'}]}, _) ->
+    lager:error("server ~s:~p refusing connections", [_Server, _Port]);
+log_error(_Error, _Contents) ->
+    lager:info("recv error ~p : collected: ~p", [_Error, _Contents]).
+
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
-terminate(_Reason, #state{id=Id}) ->
+terminate(_Reason, #state{id=Id, reqs=Reqs}) ->
     publish_doc_update(Id),
+    _ = [gen_server:reply(From, {'error', 'shutdown'}) || From <- Reqs],
     lager:debug("media tts ~s going down: ~p", [Id, _Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec kv_to_bin(kz_proplist()) -> kz_proplist().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec kv_to_bin(kz_term:proplist()) -> kz_term:proplist().
 kv_to_bin(L) ->
     [{kz_term:to_binary(K), kz_term:to_binary(V)} || {K,V} <- L].
 
@@ -301,7 +277,7 @@ stop_timer(Ref) when is_reference(Ref) ->
     _ = erlang:cancel_timer(Ref),
     'ok'.
 
--spec publish_doc_update(ne_binary()) -> 'ok'.
+-spec publish_doc_update(kz_term:ne_binary()) -> 'ok'.
 publish_doc_update(Id) ->
     API =
         [{<<"ID">>, Id}

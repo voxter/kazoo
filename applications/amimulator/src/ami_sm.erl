@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(ami_sm).
 -behaviour(gen_server).
 
@@ -25,37 +30,37 @@
 %% Public functions
 %%
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     lager:debug("Starting state master"),
     gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 %% Fetches the existing calls, queue state, etc and puts in ETS
--spec init_state(ne_binary()) -> 'ok'.
+-spec init_state(kz_term:ne_binary()) -> 'ok'.
 init_state(AccountId) ->
     gen_server:cast(?MODULE, {'init_state', AccountId}).
 
--spec purge_state(ne_binary()) -> 'ok'.
+-spec purge_state(kz_term:ne_binary()) -> 'ok'.
 purge_state(AccountId) ->
     gen_server:cast(?MODULE, {'purge_state', AccountId}).
 
--spec registration(ne_binary(), ne_binary()) -> term().
+-spec registration(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 registration(AccountId, EndpointId) ->
     gen_server:call(?MODULE, {'get_registration', AccountId, EndpointId}).
 
--spec add_registration(ne_binary(), ne_binary(), ne_binary(), pos_integer()) -> 'ok'.
+-spec add_registration(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), pos_integer()) -> 'ok'.
 add_registration(AccountId, EndpointId, ContactIP, ContactPort) ->
     gen_server:cast(?MODULE, {'add_registration', AccountId, EndpointId, ContactIP, ContactPort}).
 
--spec delete_registration(ne_binary()) -> 'ok'.
+-spec delete_registration(kz_term:ne_binary()) -> 'ok'.
 delete_registration(EndpointId) ->
     gen_server:cast(?MODULE, {'delete_registration', EndpointId}).
 
--spec call(ne_binary()) -> term().
+-spec call(kz_term:ne_binary()) -> term().
 call(CallId) ->
     gen_server:call(?MODULE, {'get_call', CallId}, 'infinity').
 
--spec call_by_channel(ne_binary()) -> term().
+-spec call_by_channel(kz_term:ne_binary()) -> term().
 call_by_channel(Channel) ->
     gen_server:call(?MODULE, {'get_call_by_channel', Channel}).
 
@@ -67,80 +72,80 @@ new_call(Call) ->
 update_call(Call) ->
     gen_server:cast(?MODULE, {'update_call', Call}).
 
--spec delete_call(ne_binary()) -> 'ok'.
+-spec delete_call(kz_term:ne_binary()) -> 'ok'.
 delete_call(CallId) ->
     gen_server:cast(?MODULE, {'delete_call', CallId}).
 
--spec queue_call(ne_binary(), ne_binary(), amimulator_call:call()) -> term().
+-spec queue_call(kz_term:ne_binary(), kz_term:ne_binary(), amimulator_call:call()) -> term().
 queue_call(QueueId, CallId, Call) ->
     gen_server:call(?MODULE, {'queue_call', QueueId, CallId, Call}).
 
--spec queue_calls(ne_binary()) -> term().
+-spec queue_calls(kz_term:ne_binary()) -> term().
 queue_calls(QueueId) ->
     gen_server:call(?MODULE, {'queue_calls', QueueId}).
 
--spec queue_pos(ne_binary(), ne_binary()) -> term().
+-spec queue_pos(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 queue_pos(QueueId, CallId) ->
     gen_server:call(?MODULE, {'queue_pos', QueueId, CallId}).
 
--spec fetch_queue_call_data(ne_binary(), ne_binary()) -> term().
+-spec fetch_queue_call_data(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 fetch_queue_call_data(QueueId, CallId) ->
     gen_server:call(?MODULE, {'get_queue_call', QueueId, CallId}).
 
--spec queue_leave(ne_binary(), ne_binary()) -> 'ok'.
+-spec queue_leave(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 queue_leave(QueueId, CallId) ->
     gen_server:cast(?MODULE, {'queue_leave', QueueId, CallId}).
 
--spec conf_cache(ne_binary()) -> term().
+-spec conf_cache(kz_term:ne_binary()) -> term().
 conf_cache(CallId) ->
     gen_server:call(?MODULE, {'conf_cache', CallId}).
 
--spec cache_conf_part(ne_binary(), kz_proplist()) -> 'ok'.
+-spec cache_conf_part(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 cache_conf_part(CallId, Data) ->
     gen_server:cast(?MODULE, {'cache_conf_part', CallId, Data}).
 
--spec delete_cached_conf_part(ne_binary()) -> 'ok'.
+-spec delete_cached_conf_part(kz_term:ne_binary()) -> 'ok'.
 delete_cached_conf_part(CallId) ->
     gen_server:cast(?MODULE, {'delete_cached_conf_part', CallId}).
 
--spec calls(ne_binary()) -> term().
+-spec calls(kz_term:ne_binary()) -> term().
 calls(AccountId) ->
     gen_server:call(?MODULE, {'get_calls', AccountId}, 'infinity').
 
--spec channel_call_ids(ne_binary()) -> term().
+-spec channel_call_ids(kz_term:ne_binary()) -> term().
 channel_call_ids(Channel) ->
     gen_server:call(?MODULE, {'get_call_ids_by_channel', Channel}).
 
--spec add_channel_call_id(ne_binary(), ne_binary()) -> 'ok'.
+-spec add_channel_call_id(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 add_channel_call_id(Channel, CallId) ->
     gen_server:cast(?MODULE, {'add_channel_call_id', Channel, CallId}).
 
--spec call_id_in_channel(ne_binary(), ne_binary()) -> term().
+-spec call_id_in_channel(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 call_id_in_channel(CallId, Channel) ->
     gen_server:call(?MODULE, {'call_id_in_channel', CallId, Channel}).
 
--spec maybe_ringing(ne_binary(), ne_binary()) -> term().
+-spec maybe_ringing(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 maybe_ringing(Channel, CallId) ->
     gen_server:call(?MODULE, {'maybe_ringing', Channel, CallId}).
 
--spec answer(ne_binary(), ne_binary()) -> 'ok'.
+-spec answer(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 answer(Channel, CallId) ->
     gen_server:cast(?MODULE, {'answer', Channel, CallId}).
 
--spec answered_or_ignored(ne_binary(), ne_binary()) -> term().
+-spec answered_or_ignored(kz_term:ne_binary(), kz_term:ne_binary()) -> term().
 answered_or_ignored(Channel, CallId) ->
     gen_server:call(?MODULE, {'answered_or_ignored', Channel, CallId}).
 
 %% TODO hopefully we can remove this later
--spec flag_early_answer(ne_binary()) -> 'ok'.
+-spec flag_early_answer(kz_term:ne_binary()) -> 'ok'.
 flag_early_answer(CallId) ->
     gen_server:cast(?MODULE, {'flag_early_answer', CallId}).
 
--spec db_put(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec db_put(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 db_put(AccountId, Family, Key, Value) ->
     gen_server:cast(?MODULE, {'db_put', AccountId, Family, Key, Value}).
 
--spec db_del(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec db_del(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 db_del(AccountId, Family, Key) ->
     gen_server:cast(?MODULE, {'db_del', AccountId, Family, Key}).
 
@@ -148,7 +153,7 @@ db_del(AccountId, Family, Key) ->
 debug(TableName) ->
     gen_server:call(?MODULE, {'debug', TableName}).
 
--spec debug_clear_call(ne_binary()) -> 'ok'.
+-spec debug_clear_call(kz_term:ne_binary()) -> 'ok'.
 debug_clear_call(_CallId) ->
     io:format("Function not yet implemented~n").
                                                 % gen_server:call(?MODULE, {debug_clear_call, CallId}).
@@ -171,7 +176,7 @@ init([]) ->
     _ = ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
     Reply = case ets:match('registrations', {EndpointId, AccountId, '$1', '$2'}) of
                 [] ->
@@ -297,7 +302,7 @@ handle_call({'debug', TableName}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'init_state', AccountId}, State) ->
     lager:debug("initializing account ~s state", [AccountId]),
     pvt_init_state(AccountId),
@@ -425,7 +430,7 @@ handle_cast({'db_del', AccountId, Family, Key}, State) ->
 handle_cast(_Request, State) ->
     {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     {'noreply', State}.
 
@@ -503,13 +508,13 @@ pvt_purge_state(AccountId) ->
                           %% TODO conference_participants
                   end, ets:select('calls', [{Spec#call{account_id=AccountId}, [], ['$_']}])).
 
--spec ringing_on_init(api_boolean(), amimulator_call()) -> boolean().
+-spec ringing_on_init(kz_term:api_boolean(), amimulator_call()) -> boolean().
 ringing_on_init('true', _) ->
     'false';
 ringing_on_init('false', Call) ->
     ets:insert('ringing_channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)}).
 
--spec answered_on_init(api_boolean(), amimulator_call()) -> boolean().
+-spec answered_on_init(kz_term:api_boolean(), amimulator_call()) -> boolean().
 answered_on_init('true', Call) ->
     ets:insert('answered_channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)});
 answered_on_init('false', _) ->
@@ -526,7 +531,7 @@ queue_on_init(_, _, _) ->
 conf_on_init(_, _) ->
     'false'.
 
--spec maybe_purge_queue_call(api_binary(), amimulator_call:call()) -> boolean().
+-spec maybe_purge_queue_call(kz_term:api_binary(), amimulator_call:call()) -> boolean().
 maybe_purge_queue_call('undefined', _) ->
     'false';
 maybe_purge_queue_call(QueueId, Call) ->
@@ -569,6 +574,3 @@ initial_registrations(AccountId) ->
                                                 end, kz_json:get_value(<<"Fields">>, JObj))
                           end, JObjs)
     end.
-
-
-

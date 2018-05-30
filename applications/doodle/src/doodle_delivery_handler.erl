@@ -1,18 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Handlers for various AMQP payloads
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handlers for various AMQP payloads
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(doodle_delivery_handler).
 
 -export([handle_req/2]).
 
 -include("doodle.hrl").
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
     'true' = kapi_sms:delivery_v(JObj),
     _ = kz_util:put_callid(JObj),
@@ -30,7 +28,7 @@ maybe_update_doc(JObj) ->
             end,
     update_doc(JObj, Value).
 
--spec update_doc(kz_json:object(), ne_binary()) -> any().
+-spec update_doc(kz_json:object(), kz_term:ne_binary()) -> any().
 update_doc(JObj, Value) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj),

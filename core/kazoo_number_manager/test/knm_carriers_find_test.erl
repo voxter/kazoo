@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
 %%% @doc
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_carriers_find_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -124,10 +123,12 @@ find_numbers(Options0) ->
     Options = [{'phonebook_url', ?NUMBER_PHONEBOOK_URL}
               ,{'account_id', ?MASTER_ACCOUNT_ID}
               ,{'quantity', 10}
-              ,{prefix, Prefix}
+              ,{'prefix', Prefix}
                | Options0
               ],
+    ?LOG_DEBUG("knm_search:find(~p)", [Options]),
     Results = knm_search:find(Options),
+    ?LOG_DEBUG("results: ~p", [Results]),
     [{"Verify results returned is the expected amount"
      ,?_assertEqual(Limit, length(Results))
      }

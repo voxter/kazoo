@@ -1,5 +1,8 @@
-%% @author root
-%% @doc @todo Add description to kazoo_oauth_util.
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(kazoo_oauth_util).
 
 -include("kazoo_oauth.hrl").
@@ -19,12 +22,12 @@
 -export([maybe_oauth_headers/3]).
 -export([oauth_header/6]).
 
--spec authorization_header(oauth_token()) -> api_binary().
+-spec authorization_header(oauth_token()) -> kz_term:api_binary().
 authorization_header(#oauth_token{type=Type,token=Token}) ->
     <<Type/binary, " ", Token/binary>>.
 
--spec get_oauth_provider(ne_binary()) -> {'ok', oauth_provider()} |
-                                         {'error', ne_binary()}.
+-spec get_oauth_provider(kz_term:ne_binary()) -> {'ok', oauth_provider()} |
+                                                 {'error', kz_term:ne_binary()}.
 get_oauth_provider(ProviderId) ->
     case kz_datamgr:open_doc(?KZ_OAUTH_DB, ProviderId) of
         {'ok', JObj} -> {'ok', oauth_provider_from_jobj(ProviderId, JObj)};
@@ -32,23 +35,16 @@ get_oauth_provider(ProviderId) ->
     end.
 
 oauth_provider_from_jobj(ProviderId, JObj) ->
-    case kz_json:get_value(<<"oauth_version">>, JObj, <<"2.0">>) of
-        <<"2.0">> ->
-            #oauth_provider{name=ProviderId
-                           ,auth_url= kz_json:get_value(<<"oauth_url">>, JObj)
-                           ,tokeninfo_url= kz_json:get_value(<<"tokeninfo_url">>, JObj)
-                           ,profile_url= kz_json:get_value(<<"profile_url">>, JObj)
-                           ,servers= kz_json:get_value(<<"servers">>, JObj)
-                           ,scopes= kz_json:get_value(<<"scopes">>, JObj)
-                           };
-        <<"1.0a">> ->
-            #oauth_provider{name=ProviderId
-                           ,auth_url= kz_json:get_value(<<"oauth_url">>, JObj)
-                           }
-    end.
+    #oauth_provider{name=ProviderId
+                   ,auth_url= kz_json:get_value(<<"oauth_url">>, JObj)
+                   ,tokeninfo_url= kz_json:get_value(<<"tokeninfo_url">>, JObj)
+                   ,profile_url= kz_json:get_value(<<"profile_url">>, JObj)
+                   ,servers= kz_json:get_value(<<"servers">>, JObj)
+                   ,scopes= kz_json:get_value(<<"scopes">>, JObj)
+                   }.
 
--spec get_oauth_app(ne_binary()) -> {'ok', oauth_provider()} |
-                                    {'error', ne_binary()}.
+-spec get_oauth_app(kz_term:ne_binary()) -> {'ok', oauth_provider()} |
+                                            {'error', kz_term:ne_binary()}.
 get_oauth_app(AppId) ->
     case kz_datamgr:open_doc(?KZ_OAUTH_DB, AppId) of
         {'ok', JObj} ->
@@ -67,7 +63,7 @@ oauth_app_from_jobj(AppId, Provider, JObj) ->
               ,user_prefix = kz_json:get_value(<<"pvt_user_prefix">>, JObj)
               ,provider = Provider}.
 
--spec get_oauth_service_app(ne_binary()) ->
+-spec get_oauth_service_app(kz_term:ne_binary()) ->
                                    {'ok', oauth_service_app()} |
                                    {'error', any()}.
 get_oauth_service_app(AppId) ->
@@ -121,11 +117,11 @@ pem_to_rsa(PemFileContents) ->
     [RSAEntry] = public_key:pem_decode(PemFileContents),
     public_key:pem_entry_decode(RSAEntry).
 
--spec jwt(oauth_service_app(), kz_json:json_term()) -> ne_binary().
--spec jwt(oauth_service_app(), kz_json:json_term(), ne_binary()) -> ne_binary().
+-spec jwt(oauth_service_app(), kz_json:json_term()) -> kz_term:ne_binary().
 jwt(#oauth_service_app{email=AccountEmail}=App, Scope) ->
     jwt(App, Scope, AccountEmail).
 
+-spec jwt(oauth_service_app(), kz_json:json_term(), kz_term:ne_binary()) -> kz_term:ne_binary().
 jwt(#oauth_service_app{private_key=PrivateKey
                       ,public_key=PublicKey
                       ,provider=#oauth_provider{auth_url=URL}
@@ -149,7 +145,7 @@ jwt(#oauth_service_app{private_key=PrivateKey
     _Verify = public_key:verify(JWT_FOR_SIGN, 'sha256', JWT_SIGNATURE, PublicKey),
     Assertion.
 
--spec token(ne_binary()) -> {'ok', oauth_token()} | {'error', any()}.
+-spec token(kz_term:ne_binary()) -> {'ok', oauth_token()} | {'error', any()}.
 token(DocId) when is_binary(DocId) ->
     case kz_datamgr:open_cache_doc(?KZ_OAUTH_DB, DocId) of
         {'ok', JObj} ->
@@ -161,7 +157,7 @@ token(DocId) when is_binary(DocId) ->
             Error
     end.
 
--spec token(api_binary() | oauth_app(), api_binary() | oauth_refresh_token()) ->
+-spec token(kz_term:api_binary() | oauth_app(), kz_term:api_binary() | oauth_refresh_token()) ->
                    {'ok', oauth_token()} |
                    {'error', any()}.
 token(AppId, UserId) when is_binary(AppId) ->
@@ -201,7 +197,7 @@ token(#oauth_app{name=AppId
             {'ok', #oauth_token{token=Token
                                ,type=Type
                                ,expires=Expires
-                               ,issued=kz_time:current_tstamp()
+                               ,issued=kz_time:now_s()
                                }
             };
         Else ->
@@ -209,9 +205,9 @@ token(#oauth_app{name=AppId
             {'error', Else}
     end.
 
--spec verify_token(api_binary() | oauth_provider(), api_binary()) ->
-                          {'ok', api_object()} |
-                          {'error', api_binary()}.
+-spec verify_token(kz_term:api_binary() | oauth_provider(), kz_term:api_binary()) ->
+                          {'ok', kz_term:api_object()} |
+                          {'error', kz_term:api_binary()}.
 verify_token(ProviderId, AccessToken) when is_binary(ProviderId) ->
     case get_oauth_provider(ProviderId) of
         {'ok', Provider} -> verify_token(Provider, AccessToken);
@@ -231,12 +227,12 @@ verify_token(#oauth_provider{tokeninfo_url=TokenInfoUrl}, AccessToken) ->
             {'error', Else}
     end.
 
--spec refresh_token(ne_binary()) -> oauth_refresh_token().
+-spec refresh_token(kz_term:ne_binary()) -> oauth_refresh_token().
 refresh_token(Token) ->
     #oauth_refresh_token{token=Token}.
 
--spec refresh_token(api_binary() | oauth_app(), api_binary(), api_binary(), kz_proplist() ) ->
-                           {'ok', api_object()} |
+-spec refresh_token(kz_term:api_binary() | oauth_app(), kz_term:api_binary(), kz_term:api_binary(), kz_term:proplist() ) ->
+                           {'ok', kz_term:api_object()} |
                            {'error', any()}.
 refresh_token(AppId, Scope, AuthorizationCode, ExtraHeaders)
   when is_binary(AppId) ->
@@ -248,8 +244,8 @@ refresh_token(AppId, Scope, AuthorizationCode, ExtraHeaders)
 refresh_token(App, Scope, AuthorizationCode, ExtraHeaders) ->
     refresh_token(App, Scope, AuthorizationCode, ExtraHeaders, <<"postmessage">>).
 
--spec refresh_token(oauth_app(), api_binary(), api_binary(), kz_proplist(), api_binary()) ->
-                           {'ok', api_object()} |
+-spec refresh_token(oauth_app(), kz_term:api_binary(), kz_term:api_binary(), kz_term:proplist(), kz_term:api_binary()) ->
+                           {'ok', kz_term:api_object()} |
                            {'error', any()}.
 refresh_token(#oauth_app{name=ClientId
                         ,secret=Secret
@@ -274,7 +270,7 @@ refresh_token(#oauth_app{name=ClientId
             {'error', Else}
     end.
 
--spec maybe_oauth_headers(ne_binary(), ne_binary(), kz_proplist()) -> kz_proplist().
+-spec maybe_oauth_headers(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 maybe_oauth_headers(AccountId, URL, Params) ->
     {'ok', AccountDoc} = kz_datamgr:open_cache_doc(<<"accounts">>, AccountId),
 
@@ -294,14 +290,14 @@ maybe_oauth_headers(AccountId, URL, Params) ->
         OAuthJObj -> get_oauth_for_url(OAuthJObj, URL, Params)
     end.
 
--spec get_oauth_for_url(kz_json:object(), ne_binary(), kz_proplist()) -> kz_proplist().
+-spec get_oauth_for_url(kz_json:object(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 get_oauth_for_url(OAuthJObj, URL, Params) ->
     case re:run(URL, <<"^(?<SCHEME>https?|ftp)?(?<SEP>:\/\/)?(?<BASEURL>.+?)(?=[?\/]|$)">>, [{'capture', ['BASEURL'], 'binary'}]) of
         'nomatch' -> [];
         {'match', [BaseUrl]} -> baseurl_oauth(OAuthJObj, URL, BaseUrl, Params)
     end.
 
--spec baseurl_oauth(kz_json:object(), ne_binary(), ne_binary(), kz_proplist()) -> kz_proplist().
+-spec baseurl_oauth(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 baseurl_oauth(OAuthJObj, URL, BaseUrl, Params) ->
     case kz_json:get_value(BaseUrl, OAuthJObj) of
         'undefined' -> [];
@@ -313,12 +309,12 @@ baseurl_oauth(OAuthJObj, URL, BaseUrl, Params) ->
             [oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)]
     end.
 
--spec oauth_header(ne_binary()
-                  ,kz_proplist()
-                  ,ne_binary()
-                  ,ne_binary()
-                  ,ne_binary()
-                  ,ne_binary()
+-spec oauth_header(kz_term:ne_binary()
+                  ,kz_term:proplist()
+                  ,kz_term:ne_binary()
+                  ,kz_term:ne_binary()
+                  ,kz_term:ne_binary()
+                  ,kz_term:ne_binary()
                   ) -> {string(), string()}.
 oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
     OAuthParams = oauth_params(ConsumerKey, ConsumerSecret, AccessToken, AccessSecret),
@@ -340,8 +336,8 @@ oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, Access
                                                     ), ","),
     {"Authorization", AuthString}.
 
--spec oauth_params(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
-                          kz_proplist().
+-spec oauth_params(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                          kz_term:proplist().
 oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
     Nonce = binary_to_list(base64:encode(crypto:strong_rand_bytes(32))),
     {MegaSecs, Secs, _} = os:timestamp(),
@@ -356,7 +352,7 @@ oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
      {"oauth_version", "1.0"}
     ].
 
--spec include_other_params(kz_proplist()) -> kz_proplist().
+-spec include_other_params(kz_term:proplist()) -> kz_term:proplist().
 include_other_params(OtherParams) ->
     lists:foldl(fun(Key, Acc) ->
                         Value = kz_json:get_value(Key, OtherParams),
@@ -368,7 +364,7 @@ include_other_params(OtherParams) ->
                         end
                 end, [], kz_json:get_keys(OtherParams)).
 
--spec url_param_array(ne_binary(), kz_json:object()) -> kz_proplist().
+-spec url_param_array(kz_term:ne_binary(), kz_json:object()) -> kz_term:proplist().
 url_param_array(BaseKey, JsonValue) ->
     lists:foldl(fun(Key, Acc) ->
                         Value = kz_json:get_value(Key, JsonValue),

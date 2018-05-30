@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Helpers for mod_flite
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Helpers for mod_flite
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_flite).
 
 -include("ecallmgr.hrl").
@@ -14,14 +12,12 @@
         ,voice/1
         ]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% TTS command helpers
+%%------------------------------------------------------------------------------
+%% @doc TTS command helpers
 %% @end
-%%--------------------------------------------------------------------
--spec call_command(atom(), ne_binary(), kz_json:object()) ->
-                          {ne_binary(), ne_binary()}.
+%%------------------------------------------------------------------------------
+-spec call_command(atom(), kz_term:ne_binary(), kz_json:object()) ->
+                          {kz_term:ne_binary(), kz_term:ne_binary()}.
 call_command(Node, UUID, JObj) ->
     _ = ecallmgr_fs_command:set(Node, UUID
                                ,[{<<"tts_engine">>, <<"flite">>}
@@ -29,7 +25,7 @@ call_command(Node, UUID, JObj) ->
                                 ]),
     {<<"speak">>, kz_json:get_value(<<"Text">>, JObj)}.
 
--spec voice(api_binary() | kz_json:object()) -> ne_binary().
+-spec voice(kz_term:api_binary() | kz_json:object()) -> kz_term:ne_binary().
 voice('undefined') -> <<"slt">>;
 voice(<<"male">>) -> <<"rms">>;
 voice(<<"female">>) -> <<"slt">>;

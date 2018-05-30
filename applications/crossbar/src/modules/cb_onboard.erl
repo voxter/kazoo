@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%%
-%%% Handle client requests for onboard documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handle client requests for onboard documents
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_onboard).
 
 -export([init/0
@@ -25,10 +21,14 @@
 -define(OB_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".onboard">>).
 -define(DEFAULT_FLOW, <<"{\"data\": { \"id\": \"~s\" }, \"module\": \"user\", \"children\": { \"_\": { \"data\": { \"id\": \"~s\" }, \"module\": \"voicemail\", \"children\": {}}}}">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
@@ -52,40 +52,33 @@ authenticate(Context) ->
 authenticate(?HTTP_PUT, [{<<"onboard">>,[]}]) -> 'true';
 authenticate(_, _) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_PUT].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() ->
     'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate(Context, cb_context:req_verb(Context)).
@@ -113,15 +106,13 @@ put(Context) ->
     Context1 = populate_new_account(Data, Context),
     create_response(Context1).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will loop over all the 'extensions' and collect
+%%------------------------------------------------------------------------------
+%% @doc This function will loop over all the 'extensions' and collect
 %% valid context's for users, voicemailboxes, devices, and callflows.
 %% Any errors will also be collected.
 %% @end
-%%--------------------------------------------------------------------
--spec create_extensions(kz_json:object(), cb_context:context(), {kz_proplist(), kz_json:object()}) -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_extensions(kz_json:object(), cb_context:context(), {kz_term:proplist(), kz_json:object()}) -> {kz_term:proplist(), kz_json:object()}.
 create_extensions(JObj, Context, Results) ->
     Extensions = kz_json:get_value(<<"extensions">>, JObj, []),
     create_extensions(Extensions, 1, Context, Results).
@@ -143,16 +134,14 @@ create_extensions([Exten|Extens], Iteration, Context, {PassAcc, FailAcc}) ->
             create_extensions(Extens, Iteration + 1, Context, {[P|PassAcc], Failures})
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate an account.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_account(kz_json:object(), cb_context:context(), {kz_proplist(), kz_json:object()}) ->
-                            {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_account(kz_json:object(), cb_context:context(), {kz_term:proplist(), kz_json:object()}) ->
+                            {kz_term:proplist(), kz_json:object()}.
 create_account(JObj, Context, {Pass, Fail}) ->
     Account = kz_json:get_value(<<"account">>, JObj, kz_json:new()),
     Generators = [fun(J) -> kz_doc:set_id(J, kz_datamgr:get_uuid()) end
@@ -168,16 +157,14 @@ create_account(JObj, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"account">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate an account.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_phone_numbers(kz_json:object(), cb_context:context(), {kz_proplist(), kz_json:object()}) ->
-                                  {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_phone_numbers(kz_json:object(), cb_context:context(), {kz_term:proplist(), kz_json:object()}) ->
+                                  {kz_term:proplist(), kz_json:object()}.
 create_phone_numbers(JObj, Context, Results) ->
     PhoneNumbers = kz_json:get_value(<<"phone_numbers">>, JObj),
     lists:foldr(fun(Number, R) ->
@@ -199,15 +186,13 @@ create_phone_number(Number, Properties, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"phone_numbers">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate an braintree_customer.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_braintree_cards(kz_json:object(), cb_context:context(), {kz_proplist(), kz_json:object()}) -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_braintree_cards(kz_json:object(), cb_context:context(), {kz_term:proplist(), kz_json:object()}) -> {kz_term:proplist(), kz_json:object()}.
 create_braintree_cards(JObj, Context, {Pass, Fail}) ->
     Account = get_context_jobj(<<"accounts">>, Pass),
     case kz_doc:id(Account) of
@@ -237,16 +222,14 @@ create_braintree_cards(JObj, Context, {Pass, Fail}) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate a user.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_user(kz_json:object(), pos_integer(), cb_context:context(), {kz_proplist(), kz_json:object()})
-                 -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_user(kz_json:object(), pos_integer(), cb_context:context(), {kz_term:proplist(), kz_json:object()})
+                 -> {kz_term:proplist(), kz_json:object()}.
 create_user(JObj, Iteration, Context, {Pass, Fail}) ->
     User = kz_json:get_value(<<"user">>, JObj, kz_json:new()),
     Generators = [fun(J) -> kz_doc:set_id(J, kz_datamgr:get_uuid()) end
@@ -289,16 +272,14 @@ create_user(JObj, Iteration, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"users">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate a device.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_device(kz_json:object(), pos_integer(), cb_context:context(), {kz_proplist(), kz_json:object()})
-                   -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_device(kz_json:object(), pos_integer(), cb_context:context(), {kz_term:proplist(), kz_json:object()})
+                   -> {kz_term:proplist(), kz_json:object()}.
 create_device(JObj, Iteration, Context, {Pass, Fail}) ->
     Device = kz_json:get_value(<<"device">>, JObj, kz_json:new()),
     Generators = [fun(J) -> kz_doc:set_id(J, kz_datamgr:get_uuid()) end
@@ -322,19 +303,19 @@ create_device(JObj, Iteration, Context, {Pass, Fail}) ->
                           end
                   end
                  ,fun(J) ->
-                          case kz_device:sip_username(J) of
+                          case kzd_devices:sip_username(J) of
                               'undefined' ->
                                   Strength = kapps_config:get_integer(?OB_CONFIG_CAT, <<"device_username_strength">>, 3),
-                                  kz_device:set_sip_username(J, list_to_binary(["user_", kz_binary:rand_hex(Strength)]));
+                                  kzd_devices:set_sip_username(J, list_to_binary(["user_", kz_binary:rand_hex(Strength)]));
                               _ ->
                                   J
                           end
                   end
                  ,fun(J) ->
-                          case kz_device:sip_password(J) of
+                          case kzd_devices:sip_password(J) of
                               'undefined' ->
                                   Strength = kapps_config:get_integer(?OB_CONFIG_CAT, <<"device_pwd_strength">>, 6),
-                                  kz_device:set_sip_password(J, kz_binary:rand_hex(Strength));
+                                  kzd_devices:set_sip_password(J, kz_binary:rand_hex(Strength));
                               _ ->
                                   J
                           end
@@ -348,16 +329,14 @@ create_device(JObj, Iteration, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"devices">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate a vmbox.  Any failure will be added to the error
 %% json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_vmbox(kz_json:object(), pos_integer(), cb_context:context(), {kz_proplist(), kz_json:object()})
-                  -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_vmbox(kz_json:object(), pos_integer(), cb_context:context(), {kz_term:proplist(), kz_json:object()})
+                  -> {kz_term:proplist(), kz_json:object()}.
 create_vmbox(JObj, Iteration, Context, {Pass, Fail}) ->
     VMBox = kz_json:get_value(<<"vmbox">>, JObj, kz_json:new()),
     Generators = [fun(J) -> kz_doc:set_id(J, kz_datamgr:get_uuid()) end
@@ -398,16 +377,14 @@ create_vmbox(JObj, Iteration, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"vmboxes">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will use the bindings to validate and create a context
+%%------------------------------------------------------------------------------
+%% @doc This function will use the bindings to validate and create a context
 %% record to generate a extension callflow.  Any failure will be added
 %% to the error json object.
 %% @end
-%%--------------------------------------------------------------------
--spec create_exten_callflow(kz_json:object(), pos_integer(), cb_context:context(), {kz_proplist(), kz_json:object()})
-                           -> {kz_proplist(), kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec create_exten_callflow(kz_json:object(), pos_integer(), cb_context:context(), {kz_term:proplist(), kz_json:object()})
+                           -> {kz_term:proplist(), kz_json:object()}.
 create_exten_callflow(JObj, Iteration, Context, {Pass, Fail}) ->
     Callflow = kz_json:get_value(<<"callflow">>, JObj, kz_json:new()),
     Generators = [fun(J) ->
@@ -441,17 +418,14 @@ create_exten_callflow(JObj, Iteration, Context, {Pass, Fail}) ->
         {'error', {_, _, Errors}} -> {Pass, kz_json:set_value(<<"callflows">>, Errors, Fail)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will loop over the prevously generated context records
+%%------------------------------------------------------------------------------
+%% @doc This function will loop over the prevously generated context records
 %% providing each to the respective 'put' binding in order to create
 %% the objects.  Starts with the account :)
 %% @end
-%%--------------------------------------------------------------------
--spec populate_new_account(kz_proplist(), cb_context:context()) -> cb_context:context().
--spec populate_new_account(kz_proplist(), ne_binary(), kz_json:object()) -> kz_json:object().
+%%------------------------------------------------------------------------------
 
+-spec populate_new_account(kz_term:proplist(), cb_context:context()) -> cb_context:context().
 populate_new_account(Props, _) ->
     Context = props:get_value(?KZ_ACCOUNTS_DB, Props),
     Context1 = crossbar_bindings:fold(<<"*.execute.put.accounts">>, [cb_context:set_resp_status(Context, 'error')]),
@@ -481,6 +455,7 @@ populate_new_account(Props, _) ->
             end
     end.
 
+-spec populate_new_account(kz_term:proplist(), kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 populate_new_account([], _, Results) ->
     Results;
 
@@ -546,26 +521,22 @@ prepare_props(Props) ->
                   (_, _) -> 'false'
                end, props:delete(?KZ_ACCOUNTS_DB, Props)).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Helper function to get the create object out of the successful
+%%------------------------------------------------------------------------------
+%% @doc Helper function to get the create object out of the successful
 %% context records for a specific key.
 %% @end
-%%--------------------------------------------------------------------
--spec get_context_jobj(ne_binary(), kz_proplist()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec get_context_jobj(kz_term:ne_binary(), kz_term:proplist()) -> kz_json:object().
 get_context_jobj(Key, Pass) ->
     case props:get_value(Key, Pass) of
         Context when is_tuple(Context) -> cb_context:doc(Context);
         _ -> kz_json:new()
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to create a token and save it to the token db
+%%------------------------------------------------------------------------------
+%% @doc Attempt to create a token and save it to the token db
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create_response(cb_context:context()) -> cb_context:context().
 create_response(Context) ->
     JObj = cb_context:doc(Context),
@@ -573,7 +544,7 @@ create_response(Context) ->
         'undefined' ->
             crossbar_util:response_invalid_data(JObj, Context);
         AccountId ->
-            TS = kz_time:current_tstamp(),
+            TS = kz_time:now_s(),
             Token = [{<<"account_id">>, AccountId}
                     ,{<<"owner_id">>, kz_json:get_value(<<"owner_id">>, JObj)}
                     ,{<<"created">>, TS}
@@ -594,25 +565,23 @@ create_response(Context) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to create a token and save it to the token db
+%%------------------------------------------------------------------------------
+%% @doc Attempt to create a token and save it to the token db
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec notfy_new_account(kz_json:object()) -> 'ok'.
 notfy_new_account(JObj) ->
-    Notify = [{<<"Account-Name">>, kz_account:name(JObj)}
-             ,{<<"Account-Realm">>, kz_account:realm(JObj)}
-             ,{<<"Account-API-Key">>, kz_account:api_key(JObj)}
+    Notify = [{<<"Account-Name">>, kzd_accounts:name(JObj)}
+             ,{<<"Account-Realm">>, kzd_accounts:realm(JObj)}
+             ,{<<"Account-API-Key">>, kzd_accounts:api_key(JObj)}
              ,{<<"Account-ID">>, kz_doc:account_id(JObj)}
              ,{<<"Account-DB">>, kz_doc:account_db(JObj)}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kapps_notify_publisher:cast(Notify, fun kapi_notifications:publish_new_account/1).
 
--spec generate_username(api_binary(), api_binary(), api_binary()) ->
-                               ne_binary().
+-spec generate_username(kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) ->
+                               kz_term:ne_binary().
 generate_username('undefined', 'undefined', _) ->
     kz_binary:rand_hex(3);
 generate_username('undefined', _, 'undefined') ->

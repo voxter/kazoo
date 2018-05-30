@@ -1,14 +1,12 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle client requests for phone_number documents
 %%%
-%%% Handle client requests for phone_number documents
 %%%
+%%% @author Karl Anderson
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_wikibuli).
 
 -export([is_local/0]).
@@ -20,24 +18,20 @@
 
 -include("../knm.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
 %% Note: a non-local (foreign) carrier module makes HTTP requests.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the local system for a quanity of available numbers
+%%------------------------------------------------------------------------------
+%% @doc Query the local system for a quanity of available numbers
 %% in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_carriers:options()) ->
                           {'error', 'not_available'}.
 find_numbers(Number, Quanity, Opts) when size(Number) < 5 ->
     find_numbers(<<"+1", Number/binary>>, Quanity, Opts);
@@ -46,12 +40,10 @@ find_numbers(_Number, _Quanity, _Opts) ->
     %%       available but managed by accendants of the account.
     {'error', 'not_available'}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
@@ -60,20 +52,17 @@ acquire_number(Number) ->
         'false' -> Number
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) -> Number.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'true'.
 

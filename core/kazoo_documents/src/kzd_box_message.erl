@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Mailbox message document manipulation
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Mailbox message document manipulation
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%   Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kzd_box_message).
 
 -export([new/2, build_metadata_object/6
@@ -63,35 +61,47 @@
 -define(PVT_TYPE, <<"mailbox_message">>).
 -define(PVT_LEGACY_TYPE, <<"private_media">>).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Generate a mailbox message doc with the given properties
-%% expected options in Props:
-%%    [<<"Attachment-Name">>
-%%    ,<<"Box-Id">>
-%%    ,<<"Box-Num">>
-%%    ,<<"Timezone">>
-%%    ]
+%%------------------------------------------------------------------------------
+%% @doc Generate a mailbox message doc with the given properties.
+%% Options are:
 %%
-%% Optional options(useful for migrating from AccountDB to MODB)
-%%    [<<"Media-Id">>
-%%    ,<<"Message-Timestamp">>
-%%    ,<<"Document-Timestamp">>
-%%    ]
+%% <dl>
+%%    <dt>`{<<"Attachment-Name">>, '{@link kz_term:ne_binary()}`}'</dt>
+%%    <dd>Media file name</dd>
+%%    <dt>`{<<"Box-Id">>, '{@link kz_term:ne_binary()}`}'</dt>
+%%    <dd>The mailbox ID the message is belong to</dd>
+%%    <dt>`{<<"OwnerId">>, '{@link kz_term:ne_binary()}`}'</dt>
+%%    <dd>The owner ID of the mailbox</dd>
+%%    <dt>`{<<"Length">>, integer()}'</dt>
+%%    <dd>Media file size (or audio duration?)</dd>
+%%    <dt>`{<<"Transcribe-Voicemail">>, boolean()}'</dt>
+%%    <dd>Should try to transcribe the message with external service</dd>
+%%    <dt>`{<<"After-Notify-Action">>, '{@link notify_action()}`}'</dt>
+%%    <dd>The action to execute if sending notification was successful</dd>
+%%    <dt>`{<<"Box-Num">>, '{@link kz_term:ne_binary()}`}'</dt>
+%%    <dd>Extension or phone number of the mailbox</dd>
+%%    <dt>`{<<"Timezone">>, '{@link kz_term:api_binary()}`}'</dt>
+%%    <dd>Configured timezone of the mailbox or device or user or account. If it
+%%    is `undefined' system default timezone will be used instead.</dd>
+%% </dl>
 %%
-%% Note: If <<"Media-Id">> option is passed, it'll use for preserving
-%% current message_id during migration, so if for any reason migration failed
+%% Optional options `<<"Media-Id">>', `<<"Message-Timestamp">>' and `<<"Document-Timestamp">>'
+%% are useful for migrating from account's database to account's MODB.
+%%
+%% <div class="notice">If `<<"Media-Id">>' option is passed, it'll use for preserving
+%% current `message_id' during migration, so if for any reason migration failed
 %% and we run it again, it would try to write to same doc with same id
-%% which result in {'error', 'conflict'} which in this case is safe to ignore.
+%% which result in `{error, conflict}' which in this case is safe to ignore.</div>
 %%
-%% <<"Message-Timestamp">>: is used to preserved previous message's utc_seconds.
-%% <<"Document-Timestamp">>: is then used to set pvt_created, pvt_modified when
+%% Option `<<"Message-Timestamp">>' is used to preserved previous message's utc_seconds.
+%%
+%% Options `<<"Document-Timestamp">>' is then used to set pvt_created, pvt_modified when
 %% we are moving the message to MODB.
 %% @end
-%%--------------------------------------------------------------------
--spec new(ne_binary(), kz_proplist()) -> doc().
+%%------------------------------------------------------------------------------
+-spec new(kz_term:ne_binary(), kz_term:proplist()) -> doc().
 new(AccountId, Props) ->
-    UtcSeconds = props:get_integer_value(<<"Message-Timestamp">>, Props, kz_time:current_tstamp()),
+    UtcSeconds = props:get_integer_value(<<"Message-Timestamp">>, Props, kz_time:now_s()),
     Timestamp  = props:get_integer_value(<<"Document-Timestamp">>, Props, UtcSeconds),
     {{Year, Month, _}, _} = calendar:gregorian_seconds_to_datetime(Timestamp),
 
@@ -122,14 +132,13 @@ new(AccountId, Props) ->
                                        ]
      ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec create_message_name(ne_binary(), api_binary(), gregorian_seconds()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec create_message_name(kz_term:ne_binary(), kz_term:api_binary(), kz_time:gregorian_seconds()) -> kz_term:ne_binary().
 create_message_name(BoxNum, 'undefined', UtcSeconds) ->
-    create_message_name(BoxNum, kz_account:default_timezone(), UtcSeconds);
+    create_message_name(BoxNum, kzd_accounts:default_timezone(), UtcSeconds);
 create_message_name(BoxNum, Timezone, UtcSeconds) ->
     UtcDateTime = calendar:gregorian_seconds_to_datetime(kz_term:to_integer(UtcSeconds)),
     case localtime:utc_to_local(UtcDateTime, Timezone) of
@@ -142,7 +151,7 @@ create_message_name(BoxNum, Timezone, UtcSeconds) ->
             message_name(BoxNum, LocalDateTime, "")
     end.
 
--spec message_name(ne_binary(), kz_datetime(), string()) -> ne_binary().
+-spec message_name(kz_term:ne_binary(), kz_time:datetime(), string()) -> kz_term:ne_binary().
 message_name(BoxNum, {{Y,M,D},{H,I,S}}, TZ) ->
     list_to_binary(["mailbox ", BoxNum, " message "
                    ,kz_term:to_binary(M), "-"
@@ -153,12 +162,11 @@ message_name(BoxNum, {{Y,M,D},{H,I,S}}, TZ) ->
                    ,kz_term:to_binary(S), TZ
                    ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Build message metadata
+%%------------------------------------------------------------------------------
+%% @doc Build message metadata.
 %% @end
-%%--------------------------------------------------------------------
--spec build_metadata_object(pos_integer(), kapps_call:call(), ne_binary(), ne_binary(), ne_binary(), gregorian_seconds()) ->
+%%------------------------------------------------------------------------------
+-spec build_metadata_object(pos_integer(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_time:gregorian_seconds()) ->
                                    doc().
 build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp) ->
     kz_json:from_list(
@@ -173,7 +181,7 @@ build_metadata_object(Length, Call, MediaId, CIDNumber, CIDName, Timestamp) ->
       ,{?KEY_MEDIA_ID, MediaId}
       ]).
 
--spec get_msg_id(kz_json:object()) -> api_ne_binary().
+-spec get_msg_id(kz_json:object()) -> kz_term:api_ne_binary().
 get_msg_id(JObj) ->
     Paths = [<<"_id">>
             ,<<"media_id">>
@@ -181,15 +189,14 @@ get_msg_id(JObj) ->
             ],
     kz_json:get_first_defined(Paths, JObj).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Accessors methods
+%%------------------------------------------------------------------------------
+%% @doc Accessors methods.
 %% @end
-%%--------------------------------------------------------------------
--spec type() -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec type() -> kz_term:ne_binary().
 type() -> ?PVT_TYPE.
 
--spec folder(doc()) -> api_object().
+-spec folder(doc()) -> kz_term:api_ne_binary().
 folder(Metadata) ->
     folder(Metadata, 'undefined').
 
@@ -197,7 +204,7 @@ folder(Metadata) ->
 folder(Metadata, Default) ->
     kz_json:get_first_defined([[?KEY_METADATA, ?VM_KEY_FOLDER], ?VM_KEY_FOLDER], Metadata, Default).
 
--spec set_folder(api_binary(), doc()) -> doc().
+-spec set_folder(kz_term:api_ne_binary(), doc()) -> doc().
 set_folder(Folder, Metadata) ->
     kz_json:set_value(?VM_KEY_FOLDER, Folder, Metadata).
 
@@ -213,12 +220,12 @@ set_folder_saved(Metadata) ->
 set_folder_deleted(Metadata) ->
     kz_json:set_value(?VM_KEY_FOLDER, ?VM_FOLDER_DELETED, Metadata).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%   Note: Doc here is the whole message doc
+%%------------------------------------------------------------------------------
+%% @doc Set folder in metadata of message's document.
+%% Folder can be `{kz_term:ne_binary(), boolean()}' which the `boolean()'
+%% controls whether documents should marked as soft-deleted or not.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec apply_folder(kvm_message:vm_folder(), doc()) -> doc().
 apply_folder({?VM_FOLDER_DELETED, 'false'}, Doc) ->
     %% only move to deleted folder not actually soft-delete it
@@ -234,35 +241,35 @@ apply_folder(Folder, Doc) ->
     Metadata = set_folder(Folder, metadata(Doc)),
     set_metadata(Metadata, Doc).
 
--spec message_history(doc()) -> ne_binaries().
+-spec message_history(doc()) -> kz_term:ne_binaries().
 message_history(JObj) ->
     kz_json:get_value(?KEY_HISTORY, JObj, []).
 
--spec add_message_history(ne_binary(), doc()) -> doc().
+-spec add_message_history(kz_term:ne_binary(), doc()) -> doc().
 add_message_history(History, JObj) ->
     kz_json:set_value(?KEY_HISTORY, message_history(JObj) ++ [History], JObj).
 
--spec message_name(doc()) -> api_binary().
+-spec message_name(doc()) -> kz_term:api_binary().
 message_name(JObj) ->
     message_name(JObj, 'undefined').
 
--spec message_name(doc(), Default) -> api_binary() | Default.
+-spec message_name(doc(), Default) -> kz_term:api_binary() | Default.
 message_name(JObj, Default) ->
     kz_json:get_value(?KEY_NAME, JObj, Default).
 
--spec set_message_name(api_binary(), doc()) -> doc().
+-spec set_message_name(kz_term:api_binary(), doc()) -> doc().
 set_message_name(Name, JObj) ->
     kz_json:set_value(?KEY_NAME, Name, JObj).
 
--spec media_id(doc()) -> api_binary().
+-spec media_id(doc()) -> kz_term:api_binary().
 media_id(Metadata) ->
     kz_json:get_value(?KEY_MEDIA_ID, Metadata).
 
--spec set_media_id(ne_binary(), doc()) -> doc().
+-spec set_media_id(kz_term:ne_binary(), doc()) -> doc().
 set_media_id(MediaId, Metadata) ->
     kz_json:set_value(?KEY_MEDIA_ID, MediaId, Metadata).
 
--spec update_media_id(ne_binary(), doc()) -> doc().
+-spec update_media_id(kz_term:ne_binary(), doc()) -> doc().
 update_media_id(MediaId, JObj) ->
     Metadata = set_media_id(MediaId, metadata(JObj)),
     set_metadata(Metadata, JObj).
@@ -279,15 +286,15 @@ metadata(JObj, Default) ->
 set_metadata(Metadata, JObj) ->
     kz_json:set_value(?KEY_METADATA, Metadata, JObj).
 
--spec to_sip(doc()) -> api_binary().
+-spec to_sip(doc()) -> kz_term:api_binary().
 to_sip(JObj) ->
     to_sip(JObj, 'undefined').
 
--spec to_sip(doc(), Default) -> api_binary() | Default.
+-spec to_sip(doc(), Default) -> kz_term:api_binary() | Default.
 to_sip(JObj, Default) ->
     kz_json:get_first_defined([[?KEY_METADATA, ?KEY_META_TO], ?KEY_META_TO], JObj, Default).
 
--spec set_to_sip(api_binary(), doc()) -> doc().
+-spec set_to_sip(kz_term:api_binary(), doc()) -> doc().
 set_to_sip(To, Metadata) ->
     kz_json:set_value(?KEY_META_TO, To, Metadata).
 
@@ -295,29 +302,27 @@ set_to_sip(To, Metadata) ->
 utc_seconds(JObj) ->
     kz_json:get_integer_value(?KEY_UTC_SEC, JObj, 0).
 
--spec source_id(doc()) -> api_ne_binary().
+-spec source_id(doc()) -> kz_term:api_ne_binary().
 source_id(JObj) ->
     kz_json:get_ne_binary_value(?KEY_SOURCE_ID, JObj).
 
--spec set_source_id(api_ne_binary(), doc()) -> doc().
+-spec set_source_id(kz_term:api_ne_binary(), doc()) -> doc().
 set_source_id(SourceId, JObj) ->
     kz_json:set_value(?KEY_SOURCE_ID, SourceId, JObj).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Filter messages based on specific folder
+%%------------------------------------------------------------------------------
+%% @doc Filter messages based on specific folder.
 %% @end
-%%--------------------------------------------------------------------
--spec filter_folder(kz_json:objects(), ne_binary()) -> kz_json:objects().
+%%------------------------------------------------------------------------------
+-spec filter_folder(kz_json:objects(), kz_term:ne_binary()) -> kz_json:objects().
 filter_folder(Messages, Folder) ->
     [M || M <- Messages, folder(M) =:= Folder].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Count message list in specific folder(s)
+%%------------------------------------------------------------------------------
+%% @doc Count message list in specific folder(s).
 %% @end
-%%--------------------------------------------------------------------
--spec count_folder(kz_json:objects(), ne_binary() | ne_binaries()) -> non_neg_integer().
+%%------------------------------------------------------------------------------
+-spec count_folder(kz_json:objects(), kz_term:ne_binary() | kz_term:ne_binaries()) -> non_neg_integer().
 count_folder(Messages, Folders) when is_list(Folders) ->
     lists:sum([1 || Message <- Messages,
                     begin
@@ -328,11 +333,10 @@ count_folder(Messages, Folders) when is_list(Folders) ->
 count_folder(Messages, Folder) ->
     count_folder(Messages, [Folder]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec change_message_name(doc(), doc()) -> doc().
 change_message_name(NBoxJ, MsgJObj) ->
     BoxNum = kzd_voicemail_box:mailbox_number(NBoxJ),
@@ -342,16 +346,14 @@ change_message_name(NBoxJ, MsgJObj) ->
     NewName = create_message_name(BoxNum, Timezone, UtcSeconds),
     set_message_name(NewName, MsgJObj).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec change_to_sip_field(ne_binary(), doc(), doc()) -> doc().
+%%------------------------------------------------------------------------------
+-spec change_to_sip_field(kz_term:ne_binary(), doc(), doc()) -> doc().
 change_to_sip_field(AccountId, NBoxJ, MsgJObj) ->
-    Realm = kz_util:get_account_realm(AccountId),
+    Realm = kzd_accounts:fetch_realm(AccountId),
     BoxNum = kzd_voicemail_box:mailbox_number(NBoxJ),
-
     Metadata = metadata(MsgJObj),
     To = <<BoxNum/binary, "@", Realm/binary>>,
     set_metadata(set_to_sip(To, Metadata), MsgJObj).

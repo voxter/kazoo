@@ -1,29 +1,25 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%%
-%%% When implementing template modules, these callbacks are a must!
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc When implementing template modules, these callbacks are a must!
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_gen_email_template).
 
 -include_lib("teletype.hrl").
 
 
--callback id() -> ne_binary().
+-callback id() -> kz_term:ne_binary().
 
 -callback init() -> ok.
 
--callback macros(kz_json:object()) -> kz_proplist().
+-callback macros(kz_json:object()) -> kz_term:proplist().
 
 
 -callback macros() -> kz_json:object().
 
--callback subject() -> ne_binary().
+-callback subject() -> kz_term:ne_binary().
 
--callback category() -> ne_binary().
+-callback category() -> kz_term:ne_binary().
 
--callback friendly_name() -> ne_binary().
+-callback friendly_name() -> kz_term:ne_binary().

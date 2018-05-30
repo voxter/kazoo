@@ -1,25 +1,21 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_sms_device).
 
 -include("doodle.hrl").
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call1) ->
     EndpointId = kz_doc:id(Data),
@@ -42,7 +38,7 @@ handle_result(JObj, Call) ->
     Call1 = doodle_util:set_flow_status(Status, Call),
     handle_result_status(Call1, Status).
 
--spec handle_result_status(kapps_call:call(), ne_binary()) -> 'ok'.
+-spec handle_result_status(kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 handle_result_status(Call, <<"pending">>) ->
     doodle_util:maybe_reschedule_sms(Call);
 handle_result_status(Call, _Status) ->
@@ -58,15 +54,13 @@ maybe_handle_bridge_failure({_ , R}=Reason, Call) ->
         'ok' -> 'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempts to build the endpoints to reach this device
+%%------------------------------------------------------------------------------
+%% @doc Attempts to build the endpoints to reach this device
 %% @end
-%%--------------------------------------------------------------------
--spec build_endpoint(ne_binary(), kz_json:object(), kapps_call:call()) ->
+%%------------------------------------------------------------------------------
+-spec build_endpoint(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) ->
                             {'error', atom() | kz_json:object()} |
-                            {'fail', ne_binary() | kz_json:object()} |
+                            {'fail', kz_term:ne_binary() | kz_json:object()} |
                             {'ok', kz_json:object()}.
 build_endpoint(EndpointId, Data, Call) ->
     Params = kz_json:set_value(<<"source">>, kz_term:to_binary(?MODULE), Data),

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Simple-One-For-One strategy for restarting call event processes
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Simple-One-For-One strategy for restarting call event processes
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_call_event_sup).
 
 -behaviour(supervisor).
@@ -20,18 +18,19 @@
 
 -define(CHILDREN, [?WORKER_TYPE('ecallmgr_call_events', 'transient')]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec start_proc(list()) -> sup_startchild_ret().
+-spec start_proc(list()) -> kz_types:sup_startchild_ret().
 start_proc([Node, CallId|_]=Args) ->
     case gproc:lookup_values(?FS_CALL_EVENTS_PROCESS_REG(Node, CallId)) of
         [] ->
@@ -46,20 +45,18 @@ start_proc([Node, CallId|_]=Args) ->
             {'error', 'multiple_handlers'}
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 5,
@@ -67,6 +64,6 @@ init([]) ->
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

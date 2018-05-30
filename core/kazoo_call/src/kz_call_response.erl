@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_call_response).
 
 -export([send/3, send/4, send/5]).
@@ -18,30 +16,25 @@
 
 -define(CALL_RESPONSE_CONF, <<"call_response">>).
 
--spec config_doc_id() -> ne_binary().
+-spec config_doc_id() -> kz_term:ne_binary().
 config_doc_id() ->
     ?CALL_RESPONSE_CONF.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Create a call response, as a queue of events when media should be
+%%------------------------------------------------------------------------------
+%% @doc Create a call response, as a queue of events when media should be
 %% played as part of the error.
 %% @end
-%%--------------------------------------------------------------------
--spec send(ne_binary(), ne_binary(), api_binary()) ->
-                  {'ok', ne_binary()} |
-                  {'error', 'no_response'}.
--spec send(ne_binary() | kapps_call:call(), ne_binary(), api_binary(), api_binary()) ->
-                  {'ok', ne_binary()} |
-                  {'error', 'no_response'}.
--spec send(ne_binary(), ne_binary(), api_binary(), api_binary(), api_binary()) ->
-                  {'ok', ne_binary()} |
-                  {'error', 'no_response'}.
+%%------------------------------------------------------------------------------
 
+-spec send(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) ->
+                  {'ok', kz_term:ne_binary()} |
+                  {'error', 'no_response'}.
 send(CallId, CtrlQ, Code) ->
     send(CallId, CtrlQ, Code, 'undefined').
 
+-spec send(kz_term:ne_binary() | kapps_call:call(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary()) ->
+                  {'ok', kz_term:ne_binary()} |
+                  {'error', 'no_response'}.
 send(<<_/binary>> = CallId, CtrlQ, Code, Cause) ->
     send(CallId, CtrlQ, Code, Cause, 'undefined');
 send(Call, Code, Cause, Media) ->
@@ -49,6 +42,9 @@ send(Call, Code, Cause, Media) ->
     CtrlQ = kapps_call:control_queue(Call),
     send(CallId, CtrlQ, Code, Cause, Media).
 
+-spec send(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()) ->
+                  {'ok', kz_term:ne_binary()} |
+                  {'error', 'no_response'}.
 send(_, _, 'undefined', 'undefined', 'undefined') ->
     {'error', 'no_response'};
 send(CallId, CtrlQ, 'undefined', 'undefined', Media) ->
@@ -109,7 +105,7 @@ send(CallId, CtrlQ, Code, Cause, Media) ->
     do_send(CallId, CtrlQ, Commands),
     {'ok', NoopId}.
 
--spec do_send(ne_binary(), ne_binary(), kz_json:objects()) -> 'ok'.
+-spec do_send(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:objects()) -> 'ok'.
 do_send(CallId, CtrlQ, Commands) ->
     Command = [{<<"Application-Name">>, <<"queue">>}
               ,{<<"Call-ID">>, CallId}
@@ -124,14 +120,12 @@ do_send(CallId, CtrlQ, Commands) ->
                         end
                        ).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec send_default(kapps_call:call(), api_binary()) ->
-                          {'ok', ne_binary()} |
+%%------------------------------------------------------------------------------
+-spec send_default(kapps_call:call(), kz_term:api_binary()) ->
+                          {'ok', kz_term:ne_binary()} |
                           {'error', 'no_response'}.
 send_default(_Call, 'undefined') ->
     {'error', 'no_response'};
@@ -146,7 +140,7 @@ send_default(Call, Cause) ->
     end.
 
 -spec send_default_response(kapps_call:call(), kz_json:object()) ->
-                                   {'ok', ne_binary()} |
+                                   {'ok', kz_term:ne_binary()} |
                                    {'error', 'no_response'}.
 send_default_response(Call, Response) ->
     Media = kz_json:get_value(<<"Media">>, Response),
@@ -158,13 +152,11 @@ send_default_response(Call, Response) ->
         ,kapps_call:get_prompt(Call, Media)
         ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% returns the configured response proplist
+%%------------------------------------------------------------------------------
+%% @doc Returns the configured response proplist.
 %% @end
-%%--------------------------------------------------------------------
--spec get_response(ne_binary(), kapps_call:call()) -> api_object().
+%%------------------------------------------------------------------------------
+-spec get_response(kz_term:ne_binary(), kapps_call:call()) -> kz_term:api_object().
 get_response(Cause, Call) ->
     Default = case default_response(Cause) of
                   'undefined' -> 'undefined';
@@ -173,13 +165,11 @@ get_response(Cause, Call) ->
     AccountId = kapps_call:account_id(Call),
     kapps_account_config:get_global(AccountId, ?CALL_RESPONSE_CONF, Cause, Default).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% returns the default action given the error
+%%------------------------------------------------------------------------------
+%% @doc Returns the default action given the error.
 %% @end
-%%--------------------------------------------------------------------
--spec default_response(ne_binary()) -> 'undefined' | kz_proplist().
+%%------------------------------------------------------------------------------
+-spec default_response(kz_term:ne_binary()) -> 'undefined' | kz_term:proplist().
 default_response(<<"RESPONSE_TO_STATUS_ENQUIRY">>) -> 'undefined';
 default_response(<<"FACILITY_NOT_SUBSCRIBED">>) -> 'undefined';
 default_response(<<"INVALID_MSG_UNSPECIFIED">>) -> 'undefined';

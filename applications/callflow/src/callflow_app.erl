@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(callflow_app).
 
 -behaviour(application).
@@ -14,22 +12,23 @@
 
 -export([start/2, stop/1]).
 
-%% ===================================================================
+%%==============================================================================
 %% Application callbacks
-%% ===================================================================
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application start behaviour
-%%--------------------------------------------------------------------
--spec start(application:start_type(), any()) -> startapp_ret().
+%%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Implement the application start behaviour.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_Type, _Args) ->
     _ = declare_exchanges(),
     callflow_sup:start_link().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application stop behaviour
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Implement the application stop behaviour.
+%% @end
+%%------------------------------------------------------------------------------
 -spec stop(any()) -> any().
 stop(_State) ->
     'ok'.
@@ -37,8 +36,6 @@ stop(_State) ->
 
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    _ = kapi_acdc_agent:declare_exchanges(), %% TODO: decouple
-    _ = kapi_acdc_queue:declare_exchanges(), %% TODO: decouple
     _ = kapi_call:declare_exchanges(),
     _ = kapi_callflow:declare_exchanges(),
     _ = kapi_conf:declare_exchanges(),

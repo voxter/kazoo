@@ -85,7 +85,7 @@ correct_parallel() ->
               )
            ).
 
--type cache() :: [{ne_binary(), {ne_binary(), gregorian_seconds()}}].
+-type cache() :: [{kz_term:ne_binary(), {kz_term:ne_binary(), kz_time:gregorian_seconds()}}].
 initial_state() ->
     #model{}.
 
@@ -184,7 +184,7 @@ cache_rates(Cache, NowMs, RateDocs) ->
 
 cache_rate(Rate, {Cache, NowMs}) ->
     Id = kz_doc:id(Rate),
-    Prefix = kz_term:to_list(kzd_rate:prefix(Rate)),
+    Prefix = kz_term:to_list(kzd_rates:prefix(Rate)),
 
     Rates = props:get_value(Prefix, Cache, []),
     NewRates = props:insert_value(Id, NowMs, Rates),

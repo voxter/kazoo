@@ -1,26 +1,12 @@
-{application, amimulator,
- [
-  {description, "AMI event/action translator for Kazoo"},
-  {vsn, "1"},
-  {modules, []},
-  {registered, []},
-  {applications, [ kernel
-                 , stdlib
-                 , crypto
-                 , inets
-                 , public_key
-                 , ssl
-
-                 , kazoo
-                 , kazoo_amqp
-                 , kazoo_apps
-                 , kazoo_bindings
-                 , kazoo_data
-
-                 , cowboy
-                 , lager
-                 , ranch
-                 ]},
-  {mod, {amimulator_app, []}},
-  {env, []}
- ]}.
+{application,amimulator,
+             [{applications,[acdc,crossbar,crypto,kazoo,kazoo_amqp,kazoo_apps,
+                             kazoo_call,kazoo_config,kazoo_data,
+                             kazoo_documents,kazoo_endpoint,
+                             kazoo_number_manager,kazoo_sip,kazoo_stdlib,
+                             kernel,lager,stdlib]},
+              {description,"AMI event/action translator for Kazoo"},
+              {vsn,"1"},
+              {modules,[]},
+              {registered,[]},
+              {mod,{amimulator_app,[]}},
+              {env,[]}]}.

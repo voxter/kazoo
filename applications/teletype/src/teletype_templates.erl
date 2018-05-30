@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_templates).
 
 -include("teletype.hrl").
@@ -24,45 +22,43 @@
 -export([master_content_types/1]).
 -endif.
 
--type macro() :: {ne_binary(), ne_binary() | number() | macros()}.
+-type macro() :: {kz_term:ne_binary(), kz_term:ne_binary() | number() | macros()}.
 -type macros() :: [macro()].
 
 -define(TEMPLATE_FAILURE_KEY(TemplateId, AccountId)
        ,{?MODULE, TemplateId, AccountId}
        ).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init(module()) -> ok.
 init(Module)
   when is_atom(Module) ->
     init(Module:id(), params(Module)).
 
--spec params(module() | ne_binary()) -> kz_proplist().
+-spec params(module() | kz_term:ne_binary()) -> kz_term:proplist().
 params(TemplateId=?NE_BINARY) ->
     Module = kz_term:to_atom(<<(?APP_NAME)/binary, "_", TemplateId/binary>>, true),
     params(Module);
 params(Module)
   when is_atom(Module) ->
     TemplateId = Module:id(),
-    ModConfigCat = teletype_util:mod_config_cat(TemplateId),
     [{macros, Module:macros()}
     ,{subject, Module:subject()}
     ,{category, Module:category()}
     ,{friendly_name, Module:friendly_name()}
-    ,{to, Module:to(ModConfigCat)}
-    ,{from, Module:from(ModConfigCat)}
-    ,{cc, Module:cc(ModConfigCat)}
-    ,{bcc, Module:bcc(ModConfigCat)}
-    ,{reply_to, Module:reply_to(ModConfigCat)}
+    ,{to, Module:to()}
+    ,{from, Module:from()}
+    ,{cc, Module:cc()}
+    ,{bcc, Module:bcc()}
+    ,{reply_to, Module:reply_to()}
     ,{html, TemplateId}
     ,{text, TemplateId}
     ].
 
--spec init(ne_binary(), init_params()) -> 'ok'.
+-spec init(kz_term:ne_binary(), init_params()) -> 'ok'.
 init(TemplateId, Params) ->
     UpdatedParams = props:set_values([{'html', TemplateId}
                                      ,{'text', TemplateId}
@@ -81,31 +77,32 @@ init(TemplateId, Params) ->
     end,
     compile_master_renderers(TemplateId).
 
--spec compile_master_renderers(ne_binary()) -> 'ok'.
+-spec compile_master_renderers(kz_term:ne_binary()) -> 'ok'.
 compile_master_renderers(TemplateId) ->
     _ = [build_renderer(TemplateId, ContentType, Template)
          || {ContentType, Template} <- fetch_master_attachments(TemplateId)
         ],
-    lager:debug("built master renderers for ~s", [TemplateId]).
+    %% ?LOG_DEBUG("built master renderer modules for ~s", [TemplateId]).
+    lager:debug("built master renderer modules for ~s", [TemplateId]).
 
--spec build_renderer(ne_binary(), ne_binary(), binary()) -> 'ok'.
+-spec build_renderer(kz_term:ne_binary(), kz_term:ne_binary(), binary()) -> 'ok'.
 build_renderer(TemplateId, ContentType, Template) ->
     ModuleName = renderer_name(TemplateId, ContentType),
     case kz_template:compile(Template, ModuleName,[{'auto_escape', 'false'}]) of
         {'ok', _} -> 'ok';
         {'error', _E} ->
-            lager:debug("failed to render '~s': ~p", [TemplateId, _E]),
+            ?LOG_DEBUG("failed to render '~s': ~p", [TemplateId, _E]),
             throw({'error', 'failed_template', ModuleName})
     end.
 
--type template_attachment() :: {ne_binary(), binary()}.
+-type template_attachment() :: {kz_term:ne_binary(), binary()}.
 -type template_attachments() :: [template_attachment()].
 
--spec fetch_master_attachments(ne_binary()) -> template_attachments().
+-spec fetch_master_attachments(kz_term:ne_binary()) -> template_attachments().
 fetch_master_attachments(TemplateId) ->
     fetch_attachments(TemplateId, ?KZ_CONFIG_DB).
 
--spec fetch_attachments(ne_binary(), ne_binary()) -> template_attachments().
+-spec fetch_attachments(kz_term:ne_binary(), kz_term:ne_binary()) -> template_attachments().
 fetch_attachments(TemplateId, Account) ->
     AccountDb = case ?KZ_CONFIG_DB =:= Account of
                     true -> ?KZ_CONFIG_DB;
@@ -125,7 +122,7 @@ fetch_attachments(TemplateId, Account) ->
             []
     end.
 
--spec fetch_attachment(ne_binary(), kz_json:object(), template_attachments(), ne_binary(), ne_binary()) ->
+-spec fetch_attachment(kz_term:ne_binary(), kz_json:object(), template_attachments(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                               template_attachments().
 fetch_attachment(AttachmentName, AttachmentProps, Acc, AccountDb, DocId) ->
     ContentType = kz_json:get_value(<<"content_type">>, AttachmentProps),
@@ -139,25 +136,25 @@ fetch_attachment(AttachmentName, AttachmentProps, Acc, AccountDb, DocId) ->
             Acc
     end.
 
--spec preview(ne_binary(), macros(), kz_json:object()) -> kz_proplist().
+-spec preview(kz_term:ne_binary(), macros(), kz_json:object()) -> kz_term:proplist().
 preview(TemplateId, Macros, DataJObj) ->
     render_farm(TemplateId
                ,Macros
                ,load_preview_templates(DataJObj)
                ).
 
--spec render(ne_binary(), macros()) -> kz_proplist().
--spec render(ne_binary(), macros(), kz_json:object()) -> kz_proplist().
--spec render(ne_binary(), macros(), kz_json:object(), boolean()) -> kz_proplist().
+-spec render(kz_term:ne_binary(), macros()) -> kz_term:proplist().
 render(TemplateId, Macros) ->
     render(TemplateId, Macros, kz_json:new()).
 
+-spec render(kz_term:ne_binary(), macros(), kz_json:object()) -> kz_term:proplist().
 render(TemplateId, Macros, DataJObj) ->
     put('template_id', TemplateId),
     JMacros = kz_json:from_list_recursive(Macros),
     put('macros', JMacros),
     render(TemplateId, Macros, DataJObj, teletype_util:is_preview(DataJObj)).
 
+-spec render(kz_term:ne_binary(), macros(), kz_json:object(), boolean()) -> kz_term:proplist().
 render(TemplateId, Macros, DataJObj, 'false') ->
     case templates_source(TemplateId, DataJObj) of
         'undefined' ->
@@ -174,15 +171,15 @@ render(TemplateId, Macros, DataJObj, 'false') ->
 render(TemplateId, Macros, DataJObj, 'true') ->
     preview(TemplateId, Macros, DataJObj).
 
--spec templates_source(ne_binary(), api_binary() | kz_json:object()) -> api_binary().
--spec templates_source(ne_binary(), api_binary(), ne_binary()) -> api_binary().
+-spec templates_source(kz_term:ne_binary(), kz_term:api_binary() | kz_json:object()) -> kz_term:api_binary().
 templates_source(_TemplateId, 'undefined') ->
     lager:warning("no account id for template ~s, no template to process", [_TemplateId]),
     'undefined';
 templates_source(_TemplateId, ?KZ_CONFIG_DB) ->
     ?KZ_CONFIG_DB;
 templates_source(TemplateId, ?MATCH_ACCOUNT_RAW(AccountId)) ->
-    ?LOG_DEBUG("trying to fetch template ~s for ~s", [TemplateId, AccountId]),
+    %% ?LOG_DEBUG("trying to fetch template ~s for ~s", [TemplateId, AccountId]),
+    lager:debug("trying to fetch template ~s for ~s", [TemplateId, AccountId]),
     ResellerId = teletype_util:find_reseller_id(AccountId),
     templates_source(TemplateId, AccountId, ResellerId);
 templates_source(TemplateId, DataJObj) ->
@@ -191,6 +188,7 @@ templates_source(TemplateId, DataJObj) ->
         AccountId -> templates_source(TemplateId, AccountId)
     end.
 
+-spec templates_source(kz_term:ne_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> kz_term:api_binary().
 templates_source(_TemplateId, 'undefined', _ResellerId) ->
     lager:warning("failed to find parent account for template ~s", [_TemplateId]),
     'undefined';
@@ -202,12 +200,6 @@ templates_source(TemplateId, AccountId, AccountId) ->
         {'error', _E} -> 'undefined'
     end;
 templates_source(TemplateId, AccountId, ResellerId) ->
-    bypass_templates_source(TemplateId, AccountId, ResellerId).
-
--ifdef(TEST).
-bypass_templates_source(?NE_BINARY, ?MATCH_ACCOUNT_RAW(_), ?MATCH_ACCOUNT_RAW(_)) -> ?KZ_CONFIG_DB.
--else.
-bypass_templates_source(TemplateId, AccountId, ResellerId) ->
     case fetch_notification(TemplateId, AccountId) of
         {'error', 'not_found'} ->
             parent_templates_source(TemplateId, AccountId, ResellerId);
@@ -215,25 +207,24 @@ bypass_templates_source(TemplateId, AccountId, ResellerId) ->
             templates_source_has_attachments(TemplateId, AccountId, ResellerId, Template);
         {'error', _E} -> 'undefined'
     end.
--endif.
 
--spec templates_source_has_attachments(ne_binary(), ne_binary(), ne_binary(), kz_json:object()) ->
-                                              api_binary().
+-spec templates_source_has_attachments(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+                                              kz_term:api_binary().
 templates_source_has_attachments(TemplateId, AccountId, ResellerId, Template) ->
     case kz_doc:attachments(Template) of
         'undefined' -> parent_templates_source(TemplateId, AccountId, ResellerId);
         _ -> kz_doc:account_id(Template)
     end.
 
--spec parent_templates_source(ne_binary(), ne_binary(), ne_binary()) ->
-                                     api_binary().
+-spec parent_templates_source(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                     kz_term:api_binary().
 parent_templates_source(_TemplateId, AccountId, AccountId) -> ?KZ_CONFIG_DB;
 parent_templates_source(TemplateId, AccountId, ResellerId) ->
     lager:debug("failed to find template ~s in account ~s", [TemplateId, AccountId]),
     ParentId = teletype_util:get_parent_account_id(AccountId),
     templates_source(TemplateId, ParentId, ResellerId).
 
--spec fetch_notification(ne_binary(), ne_binary()) ->
+-spec fetch_notification(kz_term:ne_binary(), kz_term:ne_binary()) ->
                                 {'ok', kz_json:object()} |
                                 {'error', any()}.
 fetch_notification(TemplateId, ?KZ_CONFIG_DB) ->
@@ -262,14 +253,14 @@ fetch_notification(TemplateId, AccountId, ResellerId) ->
             fetch_notification(TemplateId, teletype_util:get_parent_account_id(AccountId), ResellerId)
     end.
 
--spec render_masters(ne_binary(), macros()) -> kz_proplist().
+-spec render_masters(kz_term:ne_binary(), macros()) -> kz_term:proplist().
 render_masters(TemplateId, Macros) ->
     [{ContentType, render_master(TemplateId, ContentType, Macros)}
      || ContentType <- master_content_types(TemplateId)
     ].
 
 master_content_types(TemplateId) ->
-    case from_system_config(TemplateId) of
+    case fetch_notification(TemplateId, ?KZ_CONFIG_DB) of
         {'ok', NotificationJObj} ->
             [kz_json:get_ne_binary_value(<<"content_type">>, AttachmentJObj)
              || {_,AttachmentJObj} <- kz_json:to_proplist(kz_doc:attachments(NotificationJObj))
@@ -279,19 +270,7 @@ master_content_types(TemplateId) ->
             []
     end.
 
--ifdef(TEST).
-from_system_config(?NE_BINARY=TemplateId) ->
-    JObj = kz_json:from_list(lists:keymap(fun kz_term:to_binary/1, 1, params(TemplateId))),
-    FakeAttachments = kz_json:from_list_recursive(
-                        [{<<"template.text/html">>, [{<<"content_type">>, <<"text/html">>}]}
-                        ,{<<"template.text/plain">>, [{<<"content_type">>, <<"text/plain">>}]}
-                        ]),
-    {ok, kz_json:set_value(<<"_attachments">>, FakeAttachments, JObj)}.
--else.
-from_system_config(TemplateId) -> fetch_notification(TemplateId, ?KZ_CONFIG_DB).
--endif.
-
--spec render_master(ne_binary(), ne_binary(), macros()) -> ne_binary().
+-spec render_master(kz_term:ne_binary(), kz_term:ne_binary(), macros()) -> kz_term:ne_binary().
 render_master(?NE_BINARY=TemplateId, ?NE_BINARY=ContentType, Macros) ->
     ModuleName = renderer_name(TemplateId, ContentType),
     case kz_template:render(ModuleName, Macros) of
@@ -302,37 +281,36 @@ render_master(?NE_BINARY=TemplateId, ?NE_BINARY=ContentType, Macros) ->
             throw({'error', 'template_error', <<"failed to render template ", TemplateId/binary>>})
     end.
 
--spec render_accounts(ne_binary(), ne_binary(), macros()) -> kz_proplist().
+-spec render_accounts(kz_term:ne_binary(), kz_term:ne_binary(), macros()) -> kz_term:proplist().
 render_accounts(TemplateId, AccountDb, Macros) ->
     render_farm(TemplateId, Macros, fetch_attachments(TemplateId, AccountDb)).
 
--spec render_farm(ne_binary(), macros(), kz_proplist()) -> kz_proplist().
+-spec render_farm(kz_term:ne_binary(), macros(), kz_term:proplist()) -> kz_term:proplist().
 render_farm(TemplateId, Macros, Templates) ->
     [{ContentType, teletype_util:render(TemplateId, Template, Macros)}
      || {ContentType, Template} <- Templates
     ].
 
--spec renderer_name(ne_binary(), ne_binary()) -> atom().
+-spec renderer_name(kz_term:ne_binary(), kz_term:ne_binary()) -> atom().
 renderer_name(TemplateId, ContentType) ->
     kz_term:to_atom(<<(TemplateId)/binary, ".", ContentType/binary>>, 'true').
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec doc_id(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec doc_id(kz_term:ne_binary()) -> kz_term:ne_binary().
 doc_id(Id) ->
     kz_notification:db_id(Id).
 
--spec load_preview_templates(kz_json:object()) -> kz_proplist().
+-spec load_preview_templates(kz_json:object()) -> kz_term:proplist().
 load_preview_templates(DataJObj) ->
     props:filter_undefined(
       [{?TEXT_HTML, maybe_decode_html(kz_json:get_value(<<"html">>, DataJObj))}
       ,{?TEXT_PLAIN, kz_json:get_value(<<"text">>, DataJObj)}
       ]).
 
--spec maybe_decode_html(api_binary()) -> api_binary().
+-spec maybe_decode_html(kz_term:api_binary()) -> kz_term:api_binary().
 maybe_decode_html('undefined') -> 'undefined';
 maybe_decode_html(HTML) ->
     try base64:decode(HTML)
@@ -344,14 +322,11 @@ maybe_decode_html(HTML) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec create(ne_binary(), init_params()) ->
-                    {'ok', kz_json:object()} |
-                    kz_datamgr:data_error().
+%%------------------------------------------------------------------------------
+-spec create(kz_term:ne_binary(), init_params()) -> 'ok'.
 create(DocId, Params) ->
     lager:debug("attempting to create template ~s", [DocId]),
     TemplateJObj =
@@ -370,11 +345,10 @@ create(DocId, Params) ->
         {'error', _E} -> lager:debug("failed template update: ~p", [_E])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_update(kz_json:object(), init_params()) -> 'ok'.
 maybe_update(TemplateJObj, Params) ->
     case kz_doc:is_soft_deleted(TemplateJObj)
@@ -393,11 +367,10 @@ maybe_update(TemplateJObj, Params) ->
 has_manual_modifications(TemplateJObj) ->
     kz_doc:document_hash(TemplateJObj) =/= kz_doc:calculate_document_hash(TemplateJObj).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update(kz_json:object(), init_params()) ->
                     'ok' | {'ok', kz_json:object()} |
                     {'error', any()}.
@@ -405,20 +378,19 @@ update(TemplateJObj, Params) ->
     case update_from_params(TemplateJObj, Params) of
         {'false', _} -> lager:debug("no updates to template");
         {'true', UpdatedTemplateJObj} ->
-            lager:debug("template has updates to save"),
+            ?LOG_DEBUG("template has updates to save"),
             save(UpdatedTemplateJObj)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec save(kz_json:object()) ->
                   {'ok', kz_json:object()} |
                   {'error', any()}.
 save(TemplateJObj) ->
-    SaveJObj = kz_doc:update_pvt_parameters(TemplateJObj, ?KZ_CONFIG_DB),
+    SaveJObj = kz_doc:update_pvt_parameters(TemplateJObj, ?KZ_CONFIG_DB, [{'type', kz_notification:pvt_type()}]),
     case kz_datamgr:save_doc(?KZ_CONFIG_DB, SaveJObj) of
         {'ok', _JObj}=OK ->
             lager:debug("saved updated template ~s(~s) to ~s"
@@ -430,11 +402,10 @@ save(TemplateJObj) ->
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type update_acc() :: {boolean(), kz_json:object()}.
 
 -spec update_from_params(kz_json:object(), init_params()) ->
@@ -442,15 +413,14 @@ save(TemplateJObj) ->
 update_from_params(TemplateJObj, Params) ->
     lists:foldl(fun update_from_param/2
                ,{'false', TemplateJObj}
-               ,Params
+               ,[{'pvt_type', kz_notification:pvt_type()} | Params]
                ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec update_from_param(init_param(), update_acc()) -> update_acc().
+%%------------------------------------------------------------------------------
+-spec update_from_param(init_param() | {'pvt_type', kz_term:ne_binary()}, update_acc()) -> update_acc().
 update_from_param({'macros', Macros}, Acc) ->
     update_macros(Macros, Acc);
 update_from_param({'text', Basename}, Acc) ->
@@ -472,14 +442,19 @@ update_from_param({'bcc', BCC}, Acc) ->
 update_from_param({'from', From}, Acc) ->
     update_from(From, Acc);
 update_from_param({'reply_to', ReplyTo}, Acc) ->
-    update_reply_to(ReplyTo, Acc).
+    update_reply_to(ReplyTo, Acc);
+update_from_param({'pvt_type', PvtType}, Acc) ->
+    update_field(PvtType
+                ,Acc
+                ,fun kz_doc:type/1
+                ,fun kz_doc:set_type/2
+                ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec update_category(ne_binary(), update_acc()) ->
+%%------------------------------------------------------------------------------
+-spec update_category(kz_term:ne_binary(), update_acc()) ->
                              update_acc().
 update_category(Category, Acc) ->
     update_field(Category
@@ -488,7 +463,7 @@ update_category(Category, Acc) ->
                 ,fun kz_notification:set_category/2
                 ).
 
--spec update_name(ne_binary(), update_acc()) ->
+-spec update_name(kz_term:ne_binary(), update_acc()) ->
                          update_acc().
 update_name(Name, Acc) ->
     update_field(Name
@@ -497,7 +472,7 @@ update_name(Name, Acc) ->
                 ,fun kz_notification:set_name/2
                 ).
 
--spec update_from(ne_binary(), update_acc()) ->
+-spec update_from(kz_term:ne_binary(), update_acc()) ->
                          update_acc().
 update_from(From, Acc) ->
     update_field(From
@@ -506,7 +481,7 @@ update_from(From, Acc) ->
                 ,fun kz_notification:set_from/2
                 ).
 
--spec update_reply_to(ne_binary(), update_acc()) ->
+-spec update_reply_to(kz_term:ne_binary(), update_acc()) ->
                              update_acc().
 update_reply_to(ReplyTo, Acc) ->
     update_field(ReplyTo
@@ -542,7 +517,7 @@ update_bcc(Bcc, Acc) ->
                 ,fun kz_notification:set_bcc/2
                 ).
 
--spec update_field(api_object() | ne_binary(), update_acc(), fun(), fun()) ->
+-spec update_field(kz_term:api_object() | kz_term:ne_binary(), update_acc(), fun(), fun()) ->
                           update_acc().
 update_field('undefined', Acc, _GetFun, _SetFun) -> Acc;
 update_field(Value, {_IsUpdated, TemplateJObj}=Acc, GetFun, SetFun) ->
@@ -556,7 +531,7 @@ update_field(Value, {_IsUpdated, TemplateJObj}=Acc, GetFun, SetFun) ->
         _V -> {'true', SetFun(TemplateJObj, Value)}
     end.
 
--spec update_subject(ne_binary(), update_acc()) ->
+-spec update_subject(kz_term:ne_binary(), update_acc()) ->
                             update_acc().
 update_subject(Subject, Acc) ->
     update_field(Subject
@@ -585,14 +560,12 @@ update_text_attachment(Basename, Acc) ->
             Acc
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec update_attachment(binary(), update_acc(), ne_binary()) ->
-                               update_acc().
--spec update_attachment(binary(), update_acc(), ne_binary(), ne_binary(), ne_binary()) ->
+%%------------------------------------------------------------------------------
+
+-spec update_attachment(binary(), update_acc(), kz_term:ne_binary()) ->
                                update_acc().
 update_attachment(Contents, {_IsUpdated, TemplateJObj}=Acc, ContentType) ->
     AttachmentName = attachment_name(ContentType),
@@ -603,24 +576,25 @@ update_attachment(Contents, {_IsUpdated, TemplateJObj}=Acc, ContentType) ->
             update_attachment(Contents, Acc, ContentType, Id, AttachmentName)
     end.
 
+-spec update_attachment(binary(), update_acc(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                               update_acc().
 update_attachment(Contents, {IsUpdated, TemplateJObj}=Acc, ContentType, Id, AName) ->
     lager:debug("attachment ~s doesn't exist for ~s", [AName, Id]),
     case save_attachment(Id, AName, ContentType, Contents) of
         {'ok', AttachmentJObj} ->
-            lager:debug("saved attachment: ~p", [AttachmentJObj]),
+            ?LOG_DEBUG("saved attachment: ~p", [AttachmentJObj]),
             {'ok', UpdatedJObj} = kz_datamgr:open_doc(?KZ_CONFIG_DB, Id),
             Merged = kz_json:merge_jobjs(UpdatedJObj, TemplateJObj),
             {IsUpdated, Merged};
         {'error', _E} ->
-            lager:debug("failed to save attachment ~s: ~p", [AName, _E]),
+            ?LOG_DEBUG("failed to save attachment ~s: ~p", [AName, _E]),
             Acc
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_macros(kz_json:object(), update_acc()) ->
                            update_acc().
 update_macros(Macros, Acc) ->
@@ -636,21 +610,19 @@ update_macro(MacroKey, MacroValue, {_IsUpdated, TemplateJObj}=Acc) ->
         _Value -> Acc
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec attachment_name(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec attachment_name(kz_term:ne_binary()) -> kz_term:ne_binary().
 attachment_name(ContentType) ->
     kz_binary:clean(<<"template.", ContentType/binary>>).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec does_attachment_exist(ne_binary(), ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec does_attachment_exist(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 does_attachment_exist(DocId, AName) ->
     case kz_datamgr:open_doc(?KZ_CONFIG_DB, DocId) of
         {'ok', JObj} ->
@@ -659,24 +631,16 @@ does_attachment_exist(DocId, AName) ->
             lager:debug("failed to open ~s to check for ~s: ~p", [DocId, AName, _E]),
             'false'
     end.
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec save_attachment(ne_binary(), ne_binary(), ne_binary(), binary()) ->
+%%------------------------------------------------------------------------------
+-spec save_attachment(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), binary()) ->
                              {'ok', kz_json:object()} |
                              {'error', any()}.
 save_attachment(DocId, AName, ContentType, Contents) ->
-    case
-        kz_datamgr:put_attachment(
-          ?KZ_CONFIG_DB
-                                 ,DocId
-                                 ,AName
-                                 ,Contents
-                                 ,[{'content_type', kz_term:to_list(ContentType)}]
-         )
-    of
+    Options = [{'content_type', kz_term:to_list(ContentType)}],
+    case kz_datamgr:put_attachment(?KZ_CONFIG_DB, DocId, AName, Contents, Options) of
         {'ok', _UpdatedJObj}=OK ->
             lager:debug("added attachment ~s to ~s", [AName, DocId]),
             OK;
@@ -694,7 +658,7 @@ save_attachment(DocId, AName, ContentType, Contents) ->
             E
     end.
 
--spec write_templates_to_disk(ne_binary(), kz_proplist()) -> 'ok'.
+-spec write_templates_to_disk(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 write_templates_to_disk(TemplateId, Params) ->
     lists:foreach(fun(Template) ->
                           write_template_to_disk(TemplateId, Template)
@@ -706,22 +670,19 @@ write_templates_to_disk(TemplateId, Params) ->
                    )
                  ).
 
--spec read_template_from_disk(ne_binary(), 'html' | 'text') ->
+-spec read_template_from_disk(kz_term:ne_binary(), 'html' | 'text') ->
                                      {'ok', binary()} |
                                      {'error', file:posix() | 'badarg' | 'terminated' | 'system_limit'}.
 read_template_from_disk(TemplateId, Type) ->
-    File = template_filename(TemplateId, Type),
-    file:read_file(File).
+    file:read_file(
+      template_filename(TemplateId, Type)).
 
--spec write_template_to_disk(ne_binary(), {'html' | 'text', binary()}) -> 'ok'.
+-spec write_template_to_disk(kz_term:ne_binary(), {'html' | 'text', binary()}) -> 'ok'.
 write_template_to_disk(TemplateId, {Type, Template}) ->
     File = template_filename(TemplateId, Type),
     'ok' = file:write_file(File, Template).
 
--spec template_filename(ne_binary(), 'html' | 'text') -> file:filename_all().
+-spec template_filename(kz_term:ne_binary(), 'html' | 'text') -> file:filename_all().
 template_filename(TemplateId, Type) ->
     Basename = iolist_to_binary([TemplateId, ".", kz_term:to_list(Type)]),
-    filename:join([code:priv_dir('teletype')
-                  ,"templates"
-                  ,Basename
-                  ]).
+    filename:join([code:priv_dir(?APP), "templates", Basename]).

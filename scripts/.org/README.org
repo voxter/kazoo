@@ -58,6 +58,12 @@ Do note: this will only check the file itself for issues. To really leverage Dia
 Creates a release, starts it, and issues some commands to test that the release starts up and appears to be running
 ** check-scripts-readme.bash
 A quick script to check that all scripts in =$(ROOT)/scripts= are documented in this file!
+** check-spelling.bash
+Takes the misspellings.txt and checks for common mistakes.
+
+Each line on the text file has the format ={correct}|{mispelt} [{misspelt} ...]=
+** check-unstaged.bash
+Checks if any unstanged changes are found in the repo and exits if so. Used in CircleCI to fail builds with unstaged changes after applying code checks, spell checking, etc.
 ** check-xref.escript
 An Erlang escript for cross referencing (xref) calls to remote modules. Set `TO_XREF` to ebin paths (or use the default):
 #+BEGIN_SRC shell
@@ -151,7 +157,7 @@ dialyzing changed files:
 done (warnings were emitted)
 #+END_SRC
 ** dialyze-usage.bash
-Given a module name, such as 'props' or 'kz_json', search core/applications for modules that make calls to the supplied module and dialyze those beam files looking for dialyzer complaints. You will likely see complaints unrelated to your supplied module - go ahead and fix those too if possilbe ;)
+Given a module name, such as 'props' or 'kz_json', search core/applications for modules that make calls to the supplied module and dialyze those beam files looking for dialyzer complaints. You will likely see complaints unrelated to your supplied module - go ahead and fix those too if possible ;)
 
 The more heavily utilized the module is, the longer this will take to run!
 
@@ -430,6 +436,18 @@ Documented but not matching any allowed_method:
 > POST /v2/resource_selectors/rules
 > POST /v2/whitelabel/domains
 #+END_EXAMPLE
+** sync_to_remote.bash
+#+BEGIN_SRC bash
+HOST="server.com" ERL_FILES="path/to/source.erl" BEAM_PATH="/tmp/beams" ./scripts/sync_to_remote.bash
+#+END_SRC
+Takes the provided Erlang files, finds their .beam and syncs those to the remote server provided.
+- =ERL_FILES=: which source files to sync (the changed files (against master) are used by default).
+- =HOST=: The Host to use for the scp command
+- =BEAM_PATH=: Where on the Host to put the beam files
+** sync_to_release.bash
+Useful in conjunction with =sync_to_remove=. Takes .beam files in a directory and moves them into a release, into the proper application ebin, and reloads them in the default VMs
+- =BEAMS=: Path to beam files, defaults to =/tmp/beams/*.beam=
+- =DEST=: Path to the release's lib/ directory, defaults to =/opt/kazoo/lib=
 ** update-the-types.sh
 Used to search the code looking for deprecated Erlang functions and types and replace them with the newer versions as appropriate
 ** validate-js.sh

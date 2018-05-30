@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_missed_call).
 
 -export([init/0
@@ -13,7 +11,6 @@
 
 -include("teletype.hrl").
 
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".missed_call">>).
 
 -define(TEMPLATE_ID, <<"missed_call">>).
 
@@ -32,10 +29,10 @@
 -define(TEMPLATE_NAME, <<"Missed Call">>).
 
 -define(TEMPLATE_TO, ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL)).
--define(TEMPLATE_FROM, teletype_util:default_from_address(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_FROM, teletype_util:default_from_address()).
 -define(TEMPLATE_CC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
 -define(TEMPLATE_BCC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
--define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to()).
 
 -spec init() -> 'ok'.
 init() ->
@@ -52,14 +49,14 @@ init() ->
                                           ]),
     teletype_bindings:bind(<<"missed_call">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:missed_call_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(?TEMPLATE_ID, <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
@@ -72,7 +69,7 @@ handle_req(JObj, 'true') ->
         'true' -> process_req(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
     teletype_util:send_update(DataJObj, <<"pending">>),
 
@@ -93,24 +90,25 @@ process_req(DataJObj) ->
           kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT), Macros
          ),
 
-    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
+    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?TEMPLATE_ID),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(?TEMPLATE_ID);
+        {'error', Reason} -> teletype_util:notification_failed(?TEMPLATE_ID, Reason)
     end.
 
--spec build_missed_call_data(kz_json:object()) -> kz_proplist().
+-spec build_missed_call_data(kz_json:object()) -> kz_term:proplist().
 build_missed_call_data(DataJObj) ->
     [{<<"reason">>, missed_call_reason(DataJObj)}
     ,{<<"is_bridged">>, kz_term:is_true(kz_json:get_value(<<"call_bridged">>, DataJObj))}
     ,{<<"is_message_left">>, kz_term:is_true(kz_json:get_value(<<"message_left">>, DataJObj))}
     ].
 
--spec missed_call_reason(kz_json:object()) -> ne_binary().
+-spec missed_call_reason(kz_json:object()) -> kz_term:ne_binary().
 missed_call_reason(DataJObj) ->
     missed_call_reason(DataJObj, kz_json:get_ne_binary_value([<<"notify">>, <<"hangup_cause">>], DataJObj)).
 
--spec missed_call_reason(kz_json:object(), api_ne_binary()) -> ne_binary().
+-spec missed_call_reason(kz_json:object(), kz_term:api_ne_binary()) -> kz_term:ne_binary().
 missed_call_reason(_DataJObj, 'undefined') -> <<"no voicemail message was left">>;
-missed_call_reason(_DataJObj, HangupCause) -> binary:replace(HangupCause, <<"_">>, <<" ">>, [global]).
+missed_call_reason(_DataJObj, HangupCause) ->
+    <<"No voicemail message was left (", HangupCause/binary, ")">>.

@@ -1,26 +1,30 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_number_manager_app).
 -behaviour(application).
 
--include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include("knm.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
 
-%% ===================================================================
+%%==============================================================================
 %% Application callbacks
-%% ===================================================================
--spec start(application:start_type(), any()) -> startapp_ret().
+%%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     declare_exchanges(),
+    _ = kz_datamgr:register_view('numbers', ?APP, "views/numbers.json"),
     kazoo_number_manager_sup:start_link().
 
 -spec stop(any()) -> any().

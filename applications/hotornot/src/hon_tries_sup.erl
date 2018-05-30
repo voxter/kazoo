@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(hon_tries_sup).
 
 -behaviour(supervisor).
@@ -28,25 +26,29 @@
                    || Ratedeck <- hotornot_config:ratedecks()
                   ]).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec start_trie(ne_binary()) -> startlink_ret().
+-spec start_trie(kz_term:ne_binary()) -> kz_types:startlink_ret().
 start_trie(Ratedeck) ->
     RatedeckDb = kzd_ratedeck:format_ratedeck_db(Ratedeck),
     supervisor:start_child(?SERVER, ?WORKER_NAME_ARGS('hon_trie', RatedeckDb, [RatedeckDb])).
 
--spec restart_trie(ne_binary()) -> startlink_ret().
+-spec restart_trie(kz_term:ne_binary()) -> kz_types:startlink_ret().
 restart_trie(Ratedeck) ->
     RatedeckDb = kzd_ratedeck:format_ratedeck_db(Ratedeck),
     supervisor:restart_child(?SERVER, RatedeckDb).
 
--spec stop_trie(server_ref()) -> 'ok' | {'error', any()}.
+-spec stop_trie(kz_types:server_ref()) -> 'ok' | {'error', any()}.
 stop_trie(Pid) when is_pid(Pid) ->
     case [Id || {Id, P, _, _} <- supervisor:which_children(?SERVER),
                 Pid =:= P
@@ -59,8 +61,7 @@ stop_trie('undefined') -> 'ok';
 stop_trie(Name) -> stop_trie(whereis(Name)).
 
 
-%% @doc
-%% Add processes if necessary.
+%% @doc Add processes if necessary.
 %% @end
 -spec upgrade() -> 'ok'.
 upgrade() ->
@@ -76,10 +77,15 @@ upgrade() ->
                   end, sets:to_list(Kill)),
     lists:foreach(fun(Spec) -> supervisor:start_child(?SERVER, Spec) end, Specs).
 
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
--spec init(any()) -> sup_init_ret().
+%%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     kz_util:set_startup(),
 

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz Inc
-%%% @doc
-%%% Supervisor for running conference participant processes
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Supervisor for running conference participant processes
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(conf_participant_sup).
 
 -behaviour(supervisor).
@@ -23,35 +21,34 @@
 
 -define(CHILDREN, [?WORKER_TYPE('conf_participant', 'temporary')]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec start_participant(kapps_call:call()) -> sup_startchild_ret().
+-spec start_participant(kapps_call:call()) -> kz_types:sup_startchild_ret().
 start_participant(Call) ->
     supervisor:start_child(?SERVER, [Call]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 0,

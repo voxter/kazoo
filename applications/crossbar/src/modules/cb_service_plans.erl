@@ -1,15 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors:
-%%%     Peter Defebvre
-%%%     Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_service_plans).
 
 -export([init/0
+        ,authorize/2
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
         ,resource_exists/0, resource_exists/1, resource_exists/2
         ,content_types_provided/1 ,content_types_provided/2, content_types_provided/3
@@ -26,21 +25,42 @@
 -define(SYNCHRONIZATION, <<"synchronization">>).
 -define(RECONCILIATION, <<"reconciliation">>).
 -define(OVERRIDE, <<"override">>).
+-define(EDITABLE, <<"editable">>).
 
-%%%===================================================================
+-define(ITEM_FIELDS,
+        kz_json:from_list(
+          [{<<"activation_charge">>, kz_json:new()}
+          ,{<<"discounts">>
+           ,kz_json:from_list(
+              [{<<"maximum">>, kz_json:new()}
+              ,{<<"rate">>, kz_json:new()}
+              ])
+           }
+          ,{<<"minimum">>, kz_json:new()}
+          ,{<<"rate">>, kz_json:new()}
+          ])
+       ).
+
+-define(UNDERSCORE_ALL_FIELDS,
+        kz_json:set_values([{<<"as">>, kz_json:new()}
+                           ,{<<"exceptions">>, kz_json:new()}
+                           ]
+                          ,?ITEM_FIELDS)
+       ).
+
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     cb_modules_util:bind(?MODULE
-                        ,[{<<"*.allowed_methods.service_plans">>, 'allowed_methods'}
+                        ,[{<<"*.authorize.service_plans">>, 'authorize'}
+                         ,{<<"*.allowed_methods.service_plans">>, 'allowed_methods'}
                          ,{<<"*.resource_exists.service_plans">>, 'resource_exists'}
                          ,{<<"*.content_types_provided.service_plans">>, 'content_types_provided'}
                          ,{<<"*.validate.service_plans">>, 'validate'}
@@ -48,18 +68,29 @@ init() ->
                          ,{<<"*.execute.delete.service_plans">>, 'delete'}
                          ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Authorizes the incoming request, returning true if the requestor is
+%% allowed to access the resource, or false if not.
+%% @end
+%%------------------------------------------------------------------------------
+-spec authorize(cb_context:context(), path_token()) -> boolean().
+authorize(Context, _) -> is_authorize(Context, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
+
+-spec is_authorize(cb_context:context(), req_verb(), req_nouns()) -> boolean() | {'halt', cb_context:context()}.
+is_authorize(_Context, ?HTTP_GET, [{<<"service_plans">>, ?EDITABLE}]) ->
+    'true'.
+
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_POST].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?SYNCHRONIZATION) ->
     [?HTTP_POST];
 allowed_methods(?RECONCILIATION) ->
@@ -70,43 +101,50 @@ allowed_methods(?OVERRIDE) ->
     [?HTTP_POST];
 allowed_methods(?AVAILABLE) ->
     [?HTTP_GET];
+allowed_methods(?EDITABLE) ->
+    [?HTTP_GET];
 allowed_methods(_PlanId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(?AVAILABLE, _PlanId) ->
     [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /service_plans => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /service_plans => []
 %%    /service_plans/foo => [<<"foo">>]
 %%    /service_plans/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, _) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /service_plans mights load a list of service_plan objects
 %% /service_plans/123 might load the service_plan object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
--spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_service_plan(Context, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?CURRENT) ->
     cb_context:setters(Context
                       ,[{fun cb_context:set_resp_status/2, 'success'}
@@ -144,6 +182,8 @@ validate(Context, ?OVERRIDE) ->
                              );
         'false' -> cb_context:add_system_error('forbidden', Context)
     end;
+validate(Context, ?EDITABLE) ->
+    summary_editable_fields(Context);
 validate(Context, PlanId) ->
     validate_service_plan(Context, PlanId, cb_context:req_verb(Context)).
 
@@ -151,11 +191,10 @@ validate(Context, PlanId) ->
 validate(Context, ?AVAILABLE, PlanId) ->
     AccountId = cb_context:account_id(Context),
     ResellerId = kz_services:find_reseller_id(AccountId),
-    ResellerDb = kz_util:format_account_id(ResellerId, 'encoded'),
-    crossbar_doc:load(PlanId, cb_context:set_account_db(Context, ResellerDb), ?TYPE_CHECK_OPTION(<<"service_plan">>)).
+    Context1 = cb_context:set_account_db(Context, kz_util:format_account_db(ResellerId)),
+    crossbar_doc:load(PlanId, Context1, ?TYPE_CHECK_OPTION(kzd_service_plan:type())).
 
 -spec validate_service_plan(cb_context:context(), http_method()) -> cb_context:context().
--spec validate_service_plan(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate_service_plan(Context, ?HTTP_GET) ->
     crossbar_doc:load_view(?CB_LIST
                           ,[]
@@ -165,6 +204,7 @@ validate_service_plan(Context, ?HTTP_GET) ->
 validate_service_plan(Context, ?HTTP_POST) ->
     maybe_allow_change(Context).
 
+-spec validate_service_plan(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate_service_plan(Context, PlanId, ?HTTP_GET) ->
     crossbar_doc:load(PlanId, Context);
 validate_service_plan(Context, PlanId, ?HTTP_POST) ->
@@ -172,33 +212,27 @@ validate_service_plan(Context, PlanId, ?HTTP_POST) ->
 validate_service_plan(Context, PlanId, ?HTTP_DELETE) ->
     maybe_allow_change(Context, PlanId).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is POST, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
-%%--------------------------------------------------------------------
--spec post(cb_context:context()) -> cb_context:context().
--spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec post(cb_context:context()) -> cb_context:context().
 post(Context) ->
-    Routines = [fun(Services) -> add_plans(Context, Services) end
-               ,fun(Services) -> delete_plans(Context, Services) end
-               ,fun kz_services:save/1
-               ],
-    Services = lists:foldl(fun apply_fun/2
-                          ,kz_services:fetch(cb_context:account_id(Context))
-                          ,Routines
-                          ),
+    Services = pipe_services(cb_context:account_id(Context)
+                            ,[fun(Services) -> add_plans(Context, Services) end
+                             ,fun(Services) -> delete_plans(Context, Services) end
+                             ,fun kz_services:save/1
+                             ]),
     cb_context:setters(Context
                       ,[{fun cb_context:set_resp_data/2, kz_services:service_plan_json(Services)}
                        ,{fun cb_context:set_resp_status/2, 'success'}
                        ]).
 
+-spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, ?SYNCHRONIZATION) ->
-    kz_service_sync:sync(cb_context:account_id(Context)),
+    _ = kz_services:sync(cb_context:account_id(Context)),
     cb_context:set_resp_status(Context, 'success');
 post(Context, ?RECONCILIATION) ->
     try kz_services:reconcile(cb_context:account_id(Context)) of
@@ -228,15 +262,16 @@ post(Context, ?OVERRIDE) ->
         _Status -> Context1
     end;
 post(Context, PlanId) ->
-    Routines = [fun(S) -> kz_services:add_service_plan(PlanId, S) end
-               ,fun kz_services:save/1
-               ],
-    Services = lists:foldl(fun apply_fun/2, kz_services:fetch(cb_context:account_id(Context)), Routines),
+    Services = pipe_services(cb_context:account_id(Context)
+                            ,[fun(S) -> kz_services:add_service_plan(PlanId, S) end
+                             ,fun kz_services:save/1
+                             ]),
     cb_context:setters(Context
                       ,[{fun cb_context:set_resp_data/2, kz_services:service_plan_json(Services)}
                        ,{fun cb_context:set_resp_status/2, 'success'}
                        ]).
 
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, PlanId, ?OVERRIDE) ->
     Doc = cb_context:doc(Context),
 
@@ -252,42 +287,36 @@ post(Context, PlanId, ?OVERRIDE) ->
     end.
 
 %%----------------------------------- ---------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%% @doc If the HTTP verib is DELETE, execute the actual action, usually a db delete
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, PlanId) ->
-    Routines = [fun(S) -> kz_services:delete_service_plan(PlanId, S) end
-               ,fun kz_services:save/1
-               ],
-    Services = lists:foldl(fun apply_fun/2
-                          ,kz_services:fetch(cb_context:account_id(Context))
-                          ,Routines
-                          ),
+    Services = pipe_services(cb_context:account_id(Context)
+                            ,[fun(S) -> kz_services:delete_service_plan(PlanId, S) end
+                             ,fun kz_services:save/1
+                             ]),
     cb_context:setters(Context
                       ,[{fun cb_context:set_resp_data/2, kz_services:service_plan_json(Services)}
                        ,{fun cb_context:set_resp_status/2, 'success'}
                        ]).
-%%--------------------------------------------------------------------
-%% @private
+
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec add_plans(cb_context:context(), kz_services:services()) -> kz_services:services().
 add_plans(Context, Services) ->
     ReqData = cb_context:req_data(Context),
     lists:foldl(fun kz_services:add_service_plan/2
                ,Services
-               ,kz_json:get_value(<<"add">>, ReqData, [])
+               ,kz_json:get_list_value(<<"add">>, ReqData, [])
                ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete_plans(cb_context:context(), kz_services:services()) -> kz_services:services().
 delete_plans(Context, Services) ->
     ReqData = cb_context:req_data(Context),
@@ -296,61 +325,56 @@ delete_plans(Context, Services) ->
                ,kz_json:get_value(<<"delete">>, ReqData, [])
                ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec apply_fun(fun((kz_services:services()) -> kz_services:services()), kz_services:services()) ->
-                       kz_services:services().
-apply_fun(F, S) -> F(S).
+%%------------------------------------------------------------------------------
+-type services_pipe() :: fun((kz_services:services()) -> kz_services:services()).
+-spec pipe_services(kz_term:ne_binary(), [services_pipe()]) -> kz_services:services().
+pipe_services(AccountId, Routines) ->
+    Services = kz_services:fetch(AccountId),
+    lists:foldl(fun (F, S) -> F(S) end, Services, Routines).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add content types accepted and provided by this module
-%%
+%%------------------------------------------------------------------------------
+%% @doc Add content types accepted and provided by this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec content_types_provided(cb_context:context()) -> cb_context:context().
--spec content_types_provided(cb_context:context(), ne_binary()) -> cb_context:context().
--spec content_types_provided(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 content_types_provided(Context) ->
     cb_context:add_content_types_provided(Context
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
                                           ]).
 
+-spec content_types_provided(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 content_types_provided(Context, _) ->
     cb_context:add_content_types_provided(Context
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
                                           ]).
 
+-spec content_types_provided(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 content_types_provided(Context, ?AVAILABLE, _) ->
     cb_context:add_content_types_provided(Context
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
                                           ]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) ->
                                     kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if you have the permission to update or delete service plans
+%%------------------------------------------------------------------------------
+%% @doc Check if you have the permission to update or delete service plans
 %% @end
-%%--------------------------------------------------------------------
--spec is_allowed(cb_context:context()) -> {'ok', ne_binary()} | 'false'.
+%%------------------------------------------------------------------------------
+-spec is_allowed(cb_context:context()) -> {'ok', kz_term:ne_binary()} | 'false'.
 is_allowed(Context) ->
     ResellerId = kz_services:find_reseller_id(cb_context:account_id(Context)),
     AuthAccountId = cb_context:auth_account_id(Context),
@@ -360,14 +384,12 @@ is_allowed(Context) ->
     )
         andalso {'ok', ResellerId}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if you have the permission to update or delete service plans
+%%------------------------------------------------------------------------------
+%% @doc Check if you have the permission to update or delete service plans
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec maybe_allow_change(cb_context:context()) -> cb_context:context().
--spec maybe_allow_change(cb_context:context(), path_token()) -> cb_context:context().
 maybe_allow_change(Context) ->
     case is_allowed(Context) of
         {'ok', ResellerId} ->
@@ -376,6 +398,7 @@ maybe_allow_change(Context) ->
             cb_context:add_system_error('forbidden', Context)
     end.
 
+-spec maybe_allow_change(cb_context:context(), path_token()) -> cb_context:context().
 maybe_allow_change(Context, PlanId) ->
     case is_allowed(Context) of
         {'ok', ResellerId} ->
@@ -384,21 +407,20 @@ maybe_allow_change(Context, PlanId) ->
             cb_context:add_system_error('forbidden', Context)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec check_plan_ids(cb_context:context(), ne_binary()) -> cb_context:context().
--spec check_plan_ids(cb_context:context(), ne_binary(), ne_binaries()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+
+-spec check_plan_ids(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 check_plan_ids(Context, ResellerId) ->
     ReqData = cb_context:req_data(Context),
     AddPlanIds = kz_json:get_value(<<"add">>, ReqData, []),
     check_plan_ids(maybe_forbid_delete(Context), ResellerId, AddPlanIds).
 
+-spec check_plan_ids(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binaries()) -> cb_context:context().
 check_plan_ids(Context, _ResellerId, []) ->
-    Context;
+    cb_context:set_resp_status(Context, 'success');
 check_plan_ids(Context, ResellerId, PlanIds) ->
     lists:foldl(fun(PlanId, Ctxt) ->
                         case cb_context:resp_status(Ctxt) of
@@ -412,17 +434,15 @@ check_plan_ids(Context, ResellerId, PlanIds) ->
                ).
 
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec check_plan_id(cb_context:context(), path_token(), ne_binary()) ->
+%%------------------------------------------------------------------------------
+-spec check_plan_id(cb_context:context(), path_token(), kz_term:ne_binary()) ->
                            cb_context:context().
 check_plan_id(Context, PlanId, ResellerId) ->
     ResellerDb = kz_util:format_account_id(ResellerId, 'encoded'),
-    crossbar_doc:load(PlanId, cb_context:set_account_db(Context, ResellerDb), ?TYPE_CHECK_OPTION(<<"service_plan">>)).
+    crossbar_doc:load(PlanId, cb_context:set_account_db(Context, ResellerDb), ?TYPE_CHECK_OPTION(kzd_service_plan:type())).
 
 -spec maybe_forbid_delete(cb_context:context()) -> cb_context:context().
 maybe_forbid_delete(Context) ->
@@ -432,9 +452,9 @@ maybe_forbid_delete(Context) ->
             maybe_forbid_delete(DeletePlansIds, Context)
     end.
 
--spec maybe_forbid_delete(ne_binaries(), cb_context:context()) -> cb_context:context().
+-spec maybe_forbid_delete(kz_term:ne_binaries(), cb_context:context()) -> cb_context:context().
 maybe_forbid_delete(DeletePlansIds, Context) ->
-    case kz_services:fetch_services_doc(cb_context:account_id(Context), 'false') of
+    case kz_services:fetch_services_doc(cb_context:account_id(Context)) of
         {'error', 'not_found'} -> Context;
         {'ok', Services} ->
             ExistingPlansIds = kzd_services:plan_ids(Services),
@@ -443,3 +463,44 @@ maybe_forbid_delete(DeletePlansIds, Context) ->
                 _ -> cb_context:add_system_error('plan_is_not_assigned', Context)
             end
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Returns fixtures of what fields in service plans is customizable
+%% @end
+%%------------------------------------------------------------------------------
+-spec summary_editable_fields(cb_context:context()) -> cb_context:context().
+summary_editable_fields(Context) ->
+    JObj = read_service_plan_editable(),
+    UIApps = kz_json:from_list(get_ui_apps(kapps_util:get_master_account_id())),
+    crossbar_doc:handle_json_success(kz_json:set_value(<<"ui_apps">>, UIApps, JObj), Context).
+
+-spec read_service_plan_editable() -> kz_json:object().
+read_service_plan_editable() ->
+    Path = filename:join([code:priv_dir(?APP), "service_plan_editable_fields.json"]),
+    case file:read_file(Path) of
+        {'ok', Bin} -> kz_json:decode(Bin);
+        {'error', _Reason} ->
+            lager:debug("failed to read file ~s: ~p", [Path, _Reason]),
+            kz_json:new()
+    end.
+
+-spec get_ui_apps({'ok', kz_term:ne_binary()} | {'error', any()}) -> kz_term:proplist().
+get_ui_apps({'ok', MasterId}) ->
+    case kzd_apps_store:fetch(MasterId) of
+        {'ok', JObj} ->
+            Apps = kzd_apps_store:apps(JObj),
+            Fun = fun(_App, AppJObj, Acc) ->
+                          case kzd_app:name(AppJObj) of
+                              ?NE_BINARY=Name ->
+                                  [{Name, ?ITEM_FIELDS}|Acc];
+                              _ -> Acc
+                          end
+                  end,
+            kz_json:foldl(Fun, [{<<"_all">>, ?UNDERSCORE_ALL_FIELDS}], Apps);
+        {'error', _Reason} ->
+            lager:debug("failed to read master's app_store: ~p", [_Reason]),
+            [{<<"_all">>, ?UNDERSCORE_ALL_FIELDS}]
+    end;
+get_ui_apps({'error', _Reason}) ->
+    lager:debug("failed to get master account_id: ~p", [_Reason]),
+    [{<<"_all">>, ?UNDERSCORE_ALL_FIELDS}].

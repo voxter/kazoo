@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_media_cache_sup).
 
 -behaviour(supervisor).
@@ -26,18 +24,19 @@
 
 -define(CHILDREN, []).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec find_file_server(ne_binary(), ne_binary(), ne_binary()) ->
+-spec find_file_server(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                               {'ok', pid()} |
                               {'error', 'no_file_server'}.
 find_file_server(Id, Doc, Attachment) ->
@@ -47,7 +46,7 @@ find_file_server(Id, Doc, Attachment) ->
         [P] -> {'ok', P}
     end.
 
--spec start_file_server(ne_binary(), ne_binary(), ne_binary()) ->
+-spec start_file_server(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                                {'ok', pid()} |
                                {'error', any()}.
 start_file_server(Id, Doc, Attachment) ->
@@ -72,7 +71,7 @@ find_tts_server(Id) ->
         [P] -> {'ok', P}
     end.
 
--spec find_tts_server(ne_binary(), kz_json:object()) ->
+-spec find_tts_server(kz_term:ne_binary(), kz_json:object()) ->
                              {'ok', pid()} |
                              {'error', any()}.
 find_tts_server(Id, JObj) ->
@@ -86,19 +85,18 @@ find_tts_server(Id, JObj) ->
         {'error', _}=E -> E
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%% @end
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 10,
@@ -108,6 +106,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

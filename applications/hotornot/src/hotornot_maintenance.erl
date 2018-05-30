@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% Helper functions for users to inspect how HotOrNot is running
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Helper functions for users to inspect how HotOrNot is running
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(hotornot_maintenance).
 
 -export([local_summary/0
@@ -33,7 +31,6 @@ local_summary() ->
     io:format("use rates_for_did/1 to see what rates would be used for a DID~n").
 
 -spec trie_rebuild() -> 'ok'.
--spec wait_for_rebuild(pid(), reference()) -> 'ok'.
 trie_rebuild() ->
     case hotornot_config:should_use_trie() of
         'true' ->
@@ -43,6 +40,7 @@ trie_rebuild() ->
             io:format("trie usage is not configured~n")
     end.
 
+-spec wait_for_rebuild(pid(), reference()) -> 'ok'.
 wait_for_rebuild(Pid, Ref) ->
     Timeout = hotornot_config:trie_build_timeout_ms() + 500,
     receive
@@ -55,16 +53,19 @@ wait_for_rebuild(Pid, Ref) ->
             io:format("trie failed to build in ~p under ~p ms~n", [Pid, Timeout])
     end.
 
--spec rates_for_did(ne_binary()) -> 'ok'.
--spec rates_for_did(ne_binary(), ne_binary()) -> 'ok'.
--spec rates_for_did(ne_binary(), api_ne_binary(), trunking_options()) -> 'ok'.
--spec rates_for_did(ne_binary(), api_ne_binary(), api_ne_binary(), trunking_options()) -> 'ok'.
+-spec rates_for_did(kz_term:ne_binary()) -> 'ok'.
 rates_for_did(DID) ->
     rates_for_did(DID, 'undefined', 'undefined', []).
+
+-spec rates_for_did(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 rates_for_did(DID, AccountId) ->
     rates_for_did(DID, 'undefined', AccountId, []).
+
+-spec rates_for_did(kz_term:ne_binary(), kz_term:api_ne_binary(), trunking_options()) -> 'ok'.
 rates_for_did(DID, Direction, RouteOptions) ->
     rates_for_did(DID, Direction, 'undefined', RouteOptions).
+
+-spec rates_for_did(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), trunking_options()) -> 'ok'.
 rates_for_did(DID, Direction, AccountId, RouteOptions) when is_list(RouteOptions) ->
     case hon_util:candidate_rates(DID, AccountId) of
         {'ok', []} -> io:format("rate lookup had no results~n");
@@ -84,7 +85,7 @@ rates_for_did(DID, Direction, AccountId, RouteOptions) when is_list(RouteOptions
 rates_for_did(DID, Direction, AccountId, Opt) ->
     rates_for_did(DID, Direction, AccountId, [Opt]).
 
--spec print_matching(kzd_rate:docs()) -> 'ok'.
+-spec print_matching(kzd_rates:docs()) -> 'ok'.
 print_matching([]) ->
     io:format("no rates matched~n");
 print_matching(Matching) ->
@@ -92,14 +93,14 @@ print_matching(Matching) ->
     ?LOCAL_SUMMARY_HEADER,
 
     [Winning|Sorted] = hon_util:sort_rates(Matching),
-    Name = kzd_rate:name(Winning),
+    Name = kzd_rates:rate_name(Winning),
 
     lists:foreach(fun print_rate/1
-                 ,[kzd_rate:set_name(Winning, <<"* ", Name/binary>>)
+                 ,[kzd_rates:set_rate_name(Winning, <<"* ", Name/binary>>)
                    | Sorted
                   ]).
 
--spec rates_between(ne_binary(), ne_binary()) -> 'ok'.
+-spec rates_between(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 rates_between(Pre, Post) ->
     ViewOpts = [{'startkey', kz_term:to_binary(Pre)}
                ,{'endkey', kz_term:to_binary(Post)}
@@ -114,23 +115,23 @@ rates_between(Pre, Post) ->
             'ok'
     end.
 
--spec print_rate(kzd_rate:doc()) -> 'ok'.
+-spec print_rate(kzd_rates:doc()) -> 'ok'.
 print_rate(Rate) ->
     io:format(?LOCAL_SUMMARY_ROW_FORMAT
-             ,[kz_term:to_binary(kzd_rate:name(Rate))
-              ,kz_term:to_binary(kzd_rate:rate_cost(Rate))
-              ,kz_term:to_binary(kzd_rate:increment(Rate))
-              ,kz_term:to_binary(kzd_rate:minimum(Rate))
-              ,kz_term:to_binary(kzd_rate:surcharge(Rate))
-              ,kz_term:to_binary(kzd_rate:weight(Rate))
-              ,kz_term:to_binary(kzd_rate:prefix(Rate))
-              ,kz_term:to_binary(kzd_rate:ratedeck(Rate, <<>>))
-              ,kz_term:to_binary(kzd_rate:version(Rate, <<>>))
+             ,[kz_term:to_binary(kzd_rates:rate_name(Rate))
+              ,kz_term:to_binary(kzd_rates:rate_cost(Rate))
+              ,kz_term:to_binary(kzd_rates:rate_increment(Rate))
+              ,kz_term:to_binary(kzd_rates:rate_minimum(Rate))
+              ,kz_term:to_binary(kzd_rates:rate_surcharge(Rate))
+              ,kz_term:to_binary(kzd_rates:weight(Rate))
+              ,kz_term:to_binary(kzd_rates:prefix(Rate))
+              ,kz_term:to_binary(kzd_rates:ratedeck_id(Rate, <<>>))
+              ,kz_term:to_binary(kzd_rates:rate_version(Rate, <<>>))
               ]).
 
--spec get_rate_version() -> api_binary().
+-spec get_rate_version() -> kz_term:api_binary().
 get_rate_version() -> hotornot_config:rate_version().
 
--spec set_rate_version(ne_binary()) -> 'ok'.
+-spec set_rate_version(kz_term:ne_binary()) -> 'ok'.
 set_rate_version(Version) ->
     hotornot_config:set_rate_version(Version).

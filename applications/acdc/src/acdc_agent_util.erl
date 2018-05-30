@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_util).
 
 -export([update_status/3, update_status/4
@@ -26,21 +24,22 @@
 
 -include("acdc.hrl").
 
--spec update_status(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
--spec update_status(ne_binary(), ne_binary(), ne_binary(), kz_proplist()) -> 'ok'.
+-spec update_status(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 update_status(AccountId, AgentId, Status) ->
     update_status(AccountId, AgentId, Status, []).
+
+-spec update_status(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 update_status(?NE_BINARY = AccountId, AgentId, Status, Options) ->
     API = [{<<"Account-ID">>, AccountId}
           ,{<<"Agent-ID">>, AgentId}
           ,{<<"Status">>, Status}
-          ,{<<"Timestamp">>, kz_time:current_tstamp()}
+          ,{<<"Timestamp">>, kz_time:now_s()}
            | Options ++ kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     kapps_util:amqp_pool_send(API, fun kapi_acdc_stats:publish_status_update/1).
 
--spec most_recent_status(ne_binary(), ne_binary()) ->
-                                {'ok', ne_binary()} |
+-spec most_recent_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                {'ok', kz_term:ne_binary()} |
                                 {'error', any()}.
 most_recent_status(AccountId, AgentId) ->
     case most_recent_ets_status(AccountId, AgentId) of
@@ -50,8 +49,8 @@ most_recent_status(AccountId, AgentId) ->
             most_recent_db_status(AccountId, AgentId)
     end.
 
--spec most_recent_ets_status(ne_binary(), ne_binary()) ->
-                                    {'ok', ne_binary()} |
+-spec most_recent_ets_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                    {'ok', kz_term:ne_binary()} |
                                     {'error', any()}.
 most_recent_ets_status(AccountId, AgentId) ->
     API = [{<<"Account-ID">>, AccountId}
@@ -70,10 +69,10 @@ most_recent_ets_status(AccountId, AgentId) ->
             {'ok', kz_json:get_value(<<"status">>, StatusJObj)}
     end.
 
--spec most_recent_db_status(ne_binary(), ne_binary()) ->
-                                   {'ok', ne_binary()}.
+-spec most_recent_db_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                   {'ok', kz_term:ne_binary()}.
 most_recent_db_status(AccountId, AgentId) ->
-    Opts = [{'startkey', [AgentId, kz_time:current_tstamp()]}
+    Opts = [{'startkey', [AgentId, kz_time:now_s()]}
            ,{'limit', 1}
            ,'descending'
            ],
@@ -92,10 +91,10 @@ most_recent_db_status(AccountId, AgentId) ->
             {'ok', <<"unknown">>}
     end.
 
--spec prev_month_recent_db_status(ne_binary(), ne_binary()) ->
-                                         {'ok', ne_binary()}.
+-spec prev_month_recent_db_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                         {'ok', kz_term:ne_binary()}.
 prev_month_recent_db_status(AccountId, AgentId) ->
-    Opts = [{'startkey', [AgentId, kz_time:current_tstamp()]}
+    Opts = [{'startkey', [AgentId, kz_time:now_s()]}
            ,{'limit', 1}
            ,'descending'
            ],
@@ -114,16 +113,14 @@ prev_month_recent_db_status(AccountId, AgentId) ->
     end.
 
 -type statuses_return() :: {'ok', kz_json:object()}.
--spec most_recent_statuses(ne_binary()) ->
-                                  statuses_return().
--spec most_recent_statuses(ne_binary(), api_binary() | kz_proplist()) ->
-                                  statuses_return().
--spec most_recent_statuses(ne_binary(), api_binary(), kz_proplist()) ->
-                                  statuses_return().
 
+-spec most_recent_statuses(kz_term:ne_binary()) ->
+                                  statuses_return().
 most_recent_statuses(AccountId) ->
     most_recent_statuses(AccountId, 'undefined', []).
 
+-spec most_recent_statuses(kz_term:ne_binary(), kz_term:api_binary() | kz_term:proplist()) ->
+                                  statuses_return().
 most_recent_statuses(AccountId, 'undefined') ->
     most_recent_statuses(AccountId, 'undefined', []);
 most_recent_statuses(AccountId, ?NE_BINARY = AgentId) ->
@@ -131,6 +128,8 @@ most_recent_statuses(AccountId, ?NE_BINARY = AgentId) ->
 most_recent_statuses(AccountId, Options) when is_list(Options) ->
     most_recent_statuses(AccountId, props:get_value(<<"Agent-ID">>, Options), Options).
 
+-spec most_recent_statuses(kz_term:ne_binary(), kz_term:api_binary(), kz_term:proplist()) ->
+                                  statuses_return().
 most_recent_statuses(AccountId, AgentId, Options) ->
     ETS = kz_util:spawn_monitor(fun async_most_recent_ets_statuses/4, [AccountId, AgentId, Options, self()]),
                                                 %DB = maybe_start_db_lookup('async_most_recent_db_statuses'
@@ -140,18 +139,7 @@ most_recent_statuses(AccountId, AgentId, Options) ->
 
     maybe_reduce_statuses(AgentId, receive_statuses([ETS])).
 
-                                                %-spec maybe_start_db_lookup(atom(), fun(), ne_binary(), api_binary(), list(), pid()) ->
-                                                %                                   pid_ref() | 'undefined'.
-                                                %maybe_start_db_lookup(F, Fun, AccountId, AgentId, Options, Self) ->
-                                                %    case kz_cache:fetch_local(?CACHE_NAME, db_fetch_key(F, AccountId, AgentId)) of
-                                                %        {'ok', _} -> 'undefined';
-                                                %        {'error', 'not_found'} ->
-                                                %            kz_util:spawn_monitor(Fun, [AccountId, AgentId, Options, Self])
-                                                %    end.
-                                                %
-                                                %db_fetch_key(F, AccountId, AgentId) -> {F, AccountId, AgentId}.
-
--spec maybe_reduce_statuses(api_binary(), kz_json:object()) ->
+-spec maybe_reduce_statuses(kz_term:api_binary(), kz_json:object()) ->
                                    {'ok', kz_json:object()}.
 maybe_reduce_statuses('undefined', Statuses) ->
     {'ok', kz_json:map(fun map_reduce_agent_statuses/2, Statuses)};
@@ -172,12 +160,13 @@ reduce_agent_statuses(_, Data, {T, _}=Acc) ->
     end.
 
 -type receive_info() :: [{pid(), reference()} | 'undefined'].
+
 -spec receive_statuses(receive_info()) ->
-                              kz_json:object().
--spec receive_statuses(receive_info(), kz_json:object()) ->
                               kz_json:object().
 receive_statuses(Reqs) -> receive_statuses(Reqs, kz_json:new()).
 
+-spec receive_statuses(receive_info(), kz_json:object()) ->
+                              kz_json:object().
 receive_statuses([], AccJObj) -> AccJObj;
                                                 % receive_statuses(['undefined' | Reqs], AccJObj) ->
                                                 %     receive_statuses(Reqs, AccJObj);
@@ -203,8 +192,7 @@ clear_monitor(Ref) ->
     after 0 -> 'ok'
     end.
 
-%% @private
--spec async_most_recent_ets_statuses(ne_binary(), api_binary(), kz_proplist(), pid()) -> 'ok'.
+-spec async_most_recent_ets_statuses(kz_term:ne_binary(), kz_term:api_binary(), kz_term:proplist(), pid()) -> 'ok'.
 async_most_recent_ets_statuses(AccountId, AgentId, Options, Pid) ->
     case most_recent_ets_statuses(AccountId, AgentId, Options) of
         {'ok', Statuses} ->
@@ -215,36 +203,23 @@ async_most_recent_ets_statuses(AccountId, AgentId, Options, Pid) ->
             'ok'
     end.
 
-%% @private
-                                                %-spec async_most_recent_db_statuses(ne_binary(), api_binary(), kz_proplist(), pid()) -> 'ok'.
-                                                %async_most_recent_db_statuses(AccountId, AgentId, Options, Pid) ->
-                                                %    case most_recent_db_statuses(AccountId, AgentId, Options) of
-                                                %        {'ok', Statuses} ->
-                                                %            Pid ! {'statuses', Statuses, self()},
-                                                %            kz_cache:store_local(?CACHE_NAME, db_fetch_key('async_most_recent_db_statuses', AccountId, AgentId), 'true'),
-                                                %            'ok';
-                                                %        {'error', _E} ->
-                                                %            Pid ! {'statuses', kz_json:new(), self()},
-                                                %            'ok'
-                                                %    end.
-
--spec most_recent_ets_statuses(ne_binary()) ->
-                                      statuses_return() |
-                                      {'error', any()}.
--spec most_recent_ets_statuses(ne_binary(), api_binary()) ->
-                                      statuses_return() |
-                                      {'error', any()}.
--spec most_recent_ets_statuses(ne_binary(), api_binary(), kz_proplist()) ->
+-spec most_recent_ets_statuses(kz_term:ne_binary()) ->
                                       statuses_return() |
                                       {'error', any()}.
 most_recent_ets_statuses(AccountId) ->
     most_recent_ets_statuses(AccountId, 'undefined', []).
 
+-spec most_recent_ets_statuses(kz_term:ne_binary(), kz_term:api_binary()) ->
+                                      statuses_return() |
+                                      {'error', any()}.
 most_recent_ets_statuses(AccountId, ?NE_BINARY = AgentId) ->
     most_recent_ets_statuses(AccountId, AgentId, []);
 most_recent_ets_statuses(AccountId, Options) when is_list(Options) ->
     most_recent_ets_statuses(AccountId, 'undefined', Options).
 
+-spec most_recent_ets_statuses(kz_term:ne_binary(), kz_term:api_binary(), kz_term:proplist()) ->
+                                      statuses_return() |
+                                      {'error', any()}.
 most_recent_ets_statuses(AccountId, AgentId, Options) ->
     API = props:filter_undefined(
             [{<<"Account-ID">>, AccountId}
@@ -261,22 +236,23 @@ most_recent_ets_statuses(AccountId, AgentId, Options) ->
             {'ok', kz_json:get_value([<<"Agents">>], Resp, kz_json:new())}
     end.
 
--spec most_recent_db_statuses(ne_binary()) ->
-                                     statuses_return() |
-                                     {'error', any()}.
--spec most_recent_db_statuses(ne_binary(), api_binary()) ->
-                                     statuses_return() |
-                                     {'error', any()}.
--spec most_recent_db_statuses(ne_binary(), api_binary(), kz_proplist()) ->
+-spec most_recent_db_statuses(kz_term:ne_binary()) ->
                                      statuses_return() |
                                      {'error', any()}.
 most_recent_db_statuses(AccountId) ->
     most_recent_db_statuses(AccountId, 'undefined', []).
+
+-spec most_recent_db_statuses(kz_term:ne_binary(), kz_term:api_binary()) ->
+                                     statuses_return() |
+                                     {'error', any()}.
 most_recent_db_statuses(AccountId, ?NE_BINARY = AgentId) ->
     most_recent_db_statuses(AccountId, AgentId, []);
 most_recent_db_statuses(AccountId, Options) when is_list(Options) ->
     most_recent_db_statuses(AccountId, 'undefined', Options).
 
+-spec most_recent_db_statuses(kz_term:ne_binary(), kz_term:api_binary(), kz_term:proplist()) ->
+                                     statuses_return() |
+                                     {'error', any()}.
 most_recent_db_statuses(AccountId, 'undefined', ReqOptions) ->
     case props:get_value(<<"Agent-ID">>, ReqOptions) of
         'undefined' -> most_recent_db_statuses_by_timestamp(AccountId, ReqOptions);
@@ -334,7 +310,7 @@ constrain_agent_view_options(AgentId, ViewOptions) ->
     case {props:get_value('startkey', ViewOptions), props:get_value('endkey', ViewOptions)} of
         {'undefined', 'undefined'} ->
             %% No time constraints, limit it to most recent time period
-            Now = kz_time:current_tstamp(),
+            Now = kz_time:now_s(),
             Past = Now - Window,
             [{'startkey', [AgentId, Now]}
             ,{'endkey', [AgentId, Past]}
@@ -368,7 +344,7 @@ build_agent_view_options(AgentId, [{<<"End-Range">>, T} | ReqOptions], ViewOptio
 build_agent_view_options(AgentId, [_| ReqOptions], ViewOptions) ->
     build_agent_view_options(AgentId, ReqOptions, ViewOptions).
 
--spec find_most_recent_fold(integer() | ne_binary(), kz_json:object(), {integer(), kz_json:object()}) ->
+-spec find_most_recent_fold(integer() | kz_term:ne_binary(), kz_json:object(), {integer(), kz_json:object()}) ->
                                    {integer(), kz_json:object()}.
 find_most_recent_fold(K, V, {T, _V}=Acc) ->
     try kz_term:to_integer(K) of

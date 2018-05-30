@@ -22,7 +22,11 @@
             "type": "object"
         },
         "modules": {
-            "description": "services modules"
+            "description": "services modules",
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
         },
         "reseller_bookkeeper_lookup": {
             "default": false,

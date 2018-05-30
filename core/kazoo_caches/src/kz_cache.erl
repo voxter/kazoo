@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Simple cache server
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Simple cache server.
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_cache).
 -behaviour(gen_listener).
 
@@ -50,6 +48,9 @@
 -define(EXPIRES, ?SECONDS_IN_HOUR).
 -define(EXPIRE_PERIOD, 10 * ?MILLISECONDS_IN_SECOND).
 -define(EXPIRE_PERIOD_MSG, 'expire_cache_objects').
+
+-define(MONITOR_EXPIRE_MSG, 'monitor_cleanup').
+
 -define(DEFAULT_WAIT_TIMEOUT, 5).
 
 -define(NOTIFY_KEY(Key), {'monitor_key', Key}).
@@ -63,7 +64,7 @@
 -define(DATABASE_BINDING, [{'type', <<"database">>}]).
 
 -type store_options() :: [{'origin', origin_tuple() | origin_tuples()} |
-                          {'expires', kz_timeout()} |
+                          {'expires', timeout()} |
                           {'callback', 'undefined' | callback_fun()}
                          ].
 -export_type([store_options/0]).
@@ -76,30 +77,31 @@
                ,channel_reconnect_flush = 'false' :: boolean()
                ,new_node_flush = 'false' :: boolean()
                ,expire_node_flush = 'false' :: boolean()
-               ,expire_period = ?EXPIRE_PERIOD :: kz_timeout()
+               ,expire_period = ?EXPIRE_PERIOD :: timeout()
                ,expire_period_ref :: reference()
-               ,props = [] :: kz_proplist()
+               ,props = [] :: kz_term:proplist()
                ,has_monitors = 'false' :: boolean()
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(atom()) -> startlink_ret().
--spec start_link(atom(), kz_proplist()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
 
+-spec start_link(atom()) -> kz_types:startlink_ret().
 start_link(Name) when is_atom(Name) ->
     start_link(Name, ?EXPIRE_PERIOD, []).
 
+-spec start_link(atom(), kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Name, Props) when is_list(Props) ->
     start_link(Name, ?EXPIRE_PERIOD, Props).
 
--spec start_link(atom(), kz_timeout(), kz_proplist()) -> startlink_ret().
+-spec start_link(atom(), timeout(), kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Name, ExpirePeriod, Props) ->
     case props:get_value('origin_bindings', Props) of
         'undefined' ->
@@ -125,17 +127,17 @@ stop_local(Srv) ->
     catch gen_server:call(Srv, 'stop'),
     'ok'.
 
--spec maybe_add_db_binding(kz_proplists()) -> kz_proplists().
+-spec maybe_add_db_binding(kz_term:proplists()) -> kz_term:proplists().
 maybe_add_db_binding([]) -> [];
 maybe_add_db_binding([[]]) -> [[]];
 maybe_add_db_binding(BindingProps) ->
     [?DATABASE_BINDING | BindingProps].
 
--spec store(any(), any()) -> 'ok'.
--spec store(any(), any(), kz_proplist()) -> 'ok'.
 
+-spec store(any(), any()) -> 'ok'.
 store(K, V) -> store(K, V, []).
 
+-spec store(any(), any(), kz_term:proplist()) -> 'ok'.
 store(K, V, Props) -> store_local(?SERVER, K, V, Props).
 
 -spec peek(any()) -> {'ok', any()} |
@@ -161,24 +163,24 @@ filter(Pred) when is_function(Pred, 2) -> filter_local(?SERVER, Pred).
 -spec dump() -> 'ok'.
 dump() -> dump('false').
 
--spec dump(text()) -> 'ok'.
+-spec dump(kz_term:text()) -> 'ok'.
 dump(ShowValue) -> dump_local(?SERVER, ShowValue).
+
 
 -spec wait_for_key(any()) -> {'ok', any()} |
                              {'error', 'timeout'}.
--spec wait_for_key(any(), kz_timeout()) -> {'ok', any()} |
-                                           {'error', 'timeout'}.
-
 wait_for_key(Key) -> wait_for_key(Key, ?DEFAULT_WAIT_TIMEOUT).
 
+-spec wait_for_key(any(), timeout()) -> {'ok', any()} |
+                                        {'error', 'timeout'}.
 wait_for_key(Key, Timeout) -> wait_for_key_local(?SERVER, Key, Timeout).
 
 %% Local cache API
--spec store_local(server_ref(), any(), any()) -> 'ok'.
--spec store_local(server_ref(), any(), any(), kz_proplist()) -> 'ok'.
 
+-spec store_local(kz_types:server_ref(), any(), any()) -> 'ok'.
 store_local(Srv, K, V) -> store_local(Srv, K, V, []).
 
+-spec store_local(kz_types:server_ref(), any(), any(), kz_term:proplist()) -> 'ok'.
 store_local(Srv, K, V, Props) when is_atom(Srv) ->
     case whereis(Srv) of
         'undefined' ->
@@ -209,7 +211,7 @@ fetch_local(Srv, K) ->
     case peek_local(Srv, K) of
         {'error', 'not_found'}=E -> E;
         {'ok', _Value}=Ok ->
-            ets:update_element(Srv, K, {#cache_obj.timestamp, kz_time:current_tstamp()}),
+            ets:update_element(Srv, K, {#cache_obj.timestamp, kz_time:now_s()}),
             Ok
     end.
 
@@ -220,7 +222,7 @@ erase_local(Srv, K) ->
         {'ok', _} -> gen_server:call(Srv, {'erase', K})
     end.
 
--spec flush_local(text() | atom()) -> 'ok'.
+-spec flush_local(kz_term:text() | atom()) -> 'ok'.
 flush_local(Srv) when not is_atom(Srv) ->
     flush_local(kz_term:to_atom(Srv));
 flush_local(Srv) ->
@@ -263,16 +265,16 @@ filter_local(Srv, Pred) when is_function(Pred, 2) ->
              ,Srv
              ).
 
--spec dump_local(text()) -> 'ok'.
+-spec dump_local(kz_term:text()) -> 'ok'.
 dump_local(Srv) -> dump_local(Srv, 'false').
 
--spec dump_local(text(), text() | boolean()) -> 'ok'.
+-spec dump_local(kz_term:text(), kz_term:text() | boolean()) -> 'ok'.
 dump_local(Srv, ShowValue) when not is_atom(Srv) ->
     dump_local(kz_term:to_atom(Srv), ShowValue);
 dump_local(Srv, ShowValue) when not is_boolean(ShowValue) ->
     dump_local(Srv, kz_term:to_boolean(ShowValue));
 dump_local(Srv, ShowValue) ->
-    {PointerTab, MonitorTab} = gen_listener:call(Srv, {'tables'}),
+    {'tables', PointerTab, MonitorTab} = gen_server:call(Srv, {'tables'}),
 
     _ = [dump_table(Tab, ShowValue)
          || Tab <- [Srv, PointerTab, MonitorTab]
@@ -281,14 +283,14 @@ dump_local(Srv, ShowValue) ->
 
 -spec dump_table(ets:tab(), boolean()) -> 'ok'.
 dump_table(Tab, ShowValue) ->
-    Now = kz_time:current_tstamp(),
-    io:format("Table ~p~n", [ets:info(Tab, 'name')]),
+    Now = kz_time:now_s(),
+    io:format('user', "Table ~p~n", [ets:info(Tab, 'name')]),
     _ = [display_cache_obj(CacheObj, ShowValue, Now)
          || CacheObj <- ets:match_object(Tab, #cache_obj{_ = '_'})
         ],
     'ok'.
 
--spec display_cache_obj(cache_obj(), boolean(), gregorian_seconds()) -> 'ok'.
+-spec display_cache_obj(cache_obj(), boolean(), kz_time:gregorian_seconds()) -> 'ok'.
 display_cache_obj(#cache_obj{key=Key
                             ,value=Value
                             ,timestamp=Timestamp
@@ -299,36 +301,37 @@ display_cache_obj(#cache_obj{key=Key
                  ,ShowValue
                  ,Now
                  ) ->
-    io:format("Key: ~300p~n", [Key]),
-    io:format("Expires: ~30p~n", [Expires]),
+    io:format('user', "Key: ~300p~n", [Key]),
+    io:format('user', "Expires: ~30p~n", [Expires]),
     case is_number(Expires) of
         'true' ->
-            io:format("Remaining: ~30p~n", [(Timestamp
-                                             + Expires)
-                                            - Now
-                                           ]);
+            io:format('user', "Remaining: ~30p~n", [(Timestamp + Expires) - Now]);
         'false' -> 'ok'
     end,
-    io:format("Origin: ~300p~n", [Origin]),
-    io:format("Callback: ~s~n", [Callback =/= 'undefined']),
+    io:format('user', "Origin: ~300p~n", [Origin]),
+    io:format('user', "Callback: ~s~n", [Callback =/= 'undefined']),
     case ShowValue of
-        'true' -> io:format("Value: ~p~n", [Value]);
+        'true' -> io:format('user', "Value: ~p~n", [Value]);
         'false' -> 'ok'
     end,
-    io:format("~n", []).
+    io:format('user', "~n", []).
 
 -spec wait_for_key_local(atom(), any()) -> {'ok', any()} |
                                            {'error', 'timeout'}.
--spec wait_for_key_local(atom(), any(), kz_timeout()) ->
-                                {'ok', any()} |
-                                {'error', 'timeout'}.
 wait_for_key_local(Srv, Key) ->
     wait_for_key_local(Srv, Key, ?DEFAULT_WAIT_TIMEOUT).
 
-wait_for_key_local(Srv, Key, Timeout) ->
+-spec wait_for_key_local(atom(), any(), pos_integer()) ->
+                                {'ok', any()} |
+                                {'error', 'timeout'}.
+wait_for_key_local(Srv, Key, Timeout) when is_integer(Timeout) ->
     WaitFor = Timeout + 100,
-    {'ok', Ref} = gen_server:call(Srv, {'wait_for_key', Key, Timeout}),
-    lager:debug("waiting for message with ref ~p", [Ref]),
+    {'ok', Ref} = gen_server:call(Srv, {'wait_for_key', Key, Timeout}, WaitFor),
+    wait_for_response(Ref, WaitFor).
+
+-spec wait_for_response(reference(), timeout()) -> {'ok', any()} |
+                                                   {'error', 'timeout'}.
+wait_for_response(Ref, WaitFor) ->
     receive
         {'exists', Ref, Value} -> {'ok', Value};
         {'store', Ref, Value} -> {'ok', Value};
@@ -336,26 +339,28 @@ wait_for_key_local(Srv, Key, Timeout) ->
     after WaitFor -> {'error', 'timeout'}
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
--spec init(list()) -> {'ok', state()}.
+%%------------------------------------------------------------------------------
+-spec init([atom() | timeout() | kz_term:proplist()]) -> {'ok', state()}.
 init([Name, ExpirePeriod, Props]) ->
     kz_util:put_callid(Name),
-    kapi_conf:declare_exchanges(),
+    init(Name, ExpirePeriod, Props, props:get_value('origin_bindings', Props)).
 
+-spec init(atom(), timeout(), kz_term:proplist(), kz_term:api_list()) -> {'ok', state()}.
+init(Name, ExpirePeriod, Props, 'undefined') ->
+    init(Name, ExpirePeriod, Props);
+init(Name, ExpirePeriod, Props, _Bindings) ->
+    kapi_conf:declare_exchanges(),
+    init(Name, ExpirePeriod, Props).
+
+-spec init(atom(), timeout(), kz_term:proplist()) -> {'ok', state()}.
+init(Name, ExpirePeriod, Props) ->
     Tab = ets:new(Name
                  ,['set', 'public', 'named_table', {'keypos', #cache_obj.key}]
                  ),
@@ -399,29 +404,19 @@ monitor_tab(Tab) ->
 to_tab(Tab, Suffix) ->
     kz_term:to_atom(kz_term:to_list(Tab) ++ Suffix, 'true').
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec monitor_response_fun(pid(), reference()) -> fun().
 monitor_response_fun(Pid, Ref) ->
     fun(_, Value, Reason) -> Pid ! {Reason, Ref, Value} end.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call({'tables'}, _From, #state{pointer_tab=PointerTab
                                      ,monitor_tab=MonitorTab
                                      }=State) ->
-    {'reply', {PointerTab, MonitorTab}, State};
+    {'reply', {'tables', PointerTab, MonitorTab}, State};
 handle_call({'wait_for_key', Key, Timeout}
            ,{Pid, _}
            ,#state{tab=Tab
@@ -441,6 +436,7 @@ handle_call({'wait_for_key', Key, Timeout}
                                  ,callback=monitor_response_fun(Pid, Ref)
                                  },
             ets:insert(MonitorTab, CacheObj),
+            _ = start_monitor_expire_timer(Timeout, Ref),
             {'reply', {'ok', Ref}, State#state{has_monitors='true'}}
     end;
 handle_call('stop', _From, State) ->
@@ -456,17 +452,11 @@ handle_call({'erase', Key}, _From, #state{}=State) ->
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'store', CacheObj}, State) ->
     State1 = handle_store(CacheObj, State),
     {'noreply', State1};
@@ -556,17 +546,11 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'timeout', Ref, ?EXPIRE_PERIOD_MSG}
            ,#state{expire_period_ref=Ref
                   ,expire_period=Period
@@ -579,18 +563,18 @@ handle_info({'timeout', Ref, ?EXPIRE_PERIOD_MSG}
     _Expired > 0
         andalso lager:debug("expired ~p objects", [_Expired]),
     {'noreply', State#state{expire_period_ref=start_expire_period_timer(Period)}};
+handle_info({'timeout', _Ref, {?MONITOR_EXPIRE_MSG, MonitorRef}}
+           ,#state{has_monitors='true'}=State
+           ) ->
+    {'noreply', maybe_exec_timeout_callbacks(State, MonitorRef)};
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Allows listener to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {reply, Options}
+%%------------------------------------------------------------------------------
+%% @doc Allows listener to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(JObj, #state{tab=Tab}=State) ->
     case (V=kapi_conf:doc_update_v(JObj))
@@ -604,39 +588,37 @@ handle_event(JObj, #state{tab=Tab}=State) ->
     end,
     'ignore'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{tab=Tab}) ->
     lager:debug("terminating ~p(~p)", [self(), Tab]),
     ets:delete(Tab),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec get_props_expires(kz_proplist()) -> kz_timeout().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec get_props_expires(kz_term:proplist()) -> timeout().
 get_props_expires(Props) ->
     case props:get_value('expires', Props) of
         'undefined' -> ?EXPIRES;
@@ -646,20 +628,19 @@ get_props_expires(Props) ->
             Expires
     end.
 
--spec get_props_callback(kz_proplist()) -> 'undefined' | callback_fun().
+-spec get_props_callback(kz_term:proplist()) -> 'undefined' | callback_fun().
 get_props_callback(Props) ->
     case props:get_value('callback', Props) of
         'undefined' -> 'undefined';
         Fun when is_function(Fun, 3) -> Fun
     end.
 
--spec get_props_origin(kz_proplist()) -> 'undefined' | origin_tuple() | origin_tuples().
+-spec get_props_origin(kz_term:proplist()) -> 'undefined' | origin_tuple() | origin_tuples().
 get_props_origin(Props) -> props:get_value('origin', Props).
 
 -spec expire_objects(ets:tab(), [ets:tab()]) -> non_neg_integer().
--spec expire_objects(ets:tab(), [ets:tab()], list()) -> non_neg_integer().
 expire_objects(Tab, AuxTables) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     FindSpec = [{#cache_obj{key = '$1'
                            ,value = '$2'
                            ,expires = '$3'
@@ -674,6 +655,7 @@ expire_objects(Tab, AuxTables) ->
                 }],
     expire_objects(Tab, AuxTables, ets:select(Tab, FindSpec)).
 
+-spec expire_objects(ets:tab(), [ets:tab()], list()) -> non_neg_integer().
 expire_objects(_Tab, _AuxTables, []) -> 0;
 expire_objects(Tab, AuxTables, Objects) ->
     _ = maybe_exec_expired_callbacks(Objects),
@@ -744,6 +726,11 @@ maybe_exec_flush_callbacks(Tab) ->
          ,[{'=/=', '$3', 'undefined'}]
          ,[{{'$3', '$1', '$2'}}]
          }],
+
+    exec_flush_callbacks(Tab, MatchSpec).
+
+-spec exec_flush_callbacks(ets:tab(), ets:match_spec()) -> 'ok'.
+exec_flush_callbacks(Tab, MatchSpec) ->
     _ = [kz_util:spawn(Callback, [K, V, 'flush'])
          || {Callback, K, V} <- ets:select(Tab, MatchSpec),
             is_function(Callback, 3)
@@ -768,6 +755,33 @@ maybe_exec_store_callbacks(#state{monitor_tab=MonitorTab}=State, Key, Value) ->
         end,
     State#state{has_monitors=has_monitors(MonitorTab)}.
 
+-spec maybe_exec_timeout_callbacks(state(), reference()) -> state().
+maybe_exec_timeout_callbacks(#state{monitor_tab=MonitorTab}=State, MonitorRef) ->
+    MatchSpec = [{#cache_obj{key = '$1'
+                            ,callback = '$2'
+                            ,value = '$3'
+                            ,_ = '_'
+                            }
+                 ,[{'=:=', {'const', MonitorRef}, '$3'}]
+                 ,[['$1', '$3', '$2']]
+                 }],
+    exec_timeout_callbacks(MonitorTab, MatchSpec),
+    State#state{has_monitors=has_monitors(MonitorTab)}.
+
+-spec exec_timeout_callbacks(ets:tab(), ets:match_spec()) -> 'ok'.
+exec_timeout_callbacks(Tab, MatchSpec) ->
+    _ = [exec_timeout_callback(Tab, list_to_tuple(Callback))
+         || Callback <- ets:select(Tab, MatchSpec)
+        ],
+    'ok'.
+
+-spec exec_timeout_callback(ets:tab(), {any(), reference(), fun()}) -> 'true'.
+exec_timeout_callback(Tab, {Key, Value, Callback}) when is_function(Callback, 3),
+                                                        is_reference(Value) ->
+    lager:debug("timing out monitor for ~p ~p", [Key, Value]),
+    kz_util:spawn(Callback, [Key, Value, 'timeout']),
+    delete_monitor_callbacks(Tab, Key).
+
 -spec has_monitors(ets:tab()) -> boolean().
 has_monitors(MonitorTab) ->
     ets:info(MonitorTab, 'size') > 0.
@@ -785,6 +799,10 @@ delete_monitor_callbacks(MonitorTab, Key) ->
 -spec start_expire_period_timer(pos_integer()) -> reference().
 start_expire_period_timer(ExpirePeriod) ->
     erlang:start_timer(ExpirePeriod, self(), ?EXPIRE_PERIOD_MSG).
+
+-spec start_monitor_expire_timer(pos_integer(), reference()) -> reference().
+start_monitor_expire_timer(Timeout, Ref) ->
+    erlang:start_timer(Timeout, self(), {?MONITOR_EXPIRE_MSG, Ref}).
 
 -spec insert_origin_pointers('undefined' | origin_tuple() | origin_tuples()
                             ,cache_obj(), ets:tab()) -> 'ok'.
@@ -852,7 +870,7 @@ handle_document_change(JObj, State) ->
     _Keys =/= []
         andalso lager:debug("removed ~p keys for ~s/~s/~s", [length(_Keys), Db, Id, Type]).
 
--spec handle_document_change(ne_binary(), ne_binary(), ne_binary(), state()) ->
+-spec handle_document_change(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), state()) ->
                                     list().
 handle_document_change(Db, <<"database">>, _Id, #state{pointer_tab=PTab}=State) ->
     MatchSpec = match_db_changed(Db),
@@ -875,7 +893,7 @@ handle_document_change(Db, Type, Id
                ,Objects
                ).
 
--spec match_db_changed(ne_binary()) -> ets:match_spec().
+-spec match_db_changed(kz_term:ne_binary()) -> ets:match_spec().
 match_db_changed(Db) ->
     [{#cache_obj{origin = {'db', Db}, _ = '_'}
      ,[]
@@ -891,7 +909,7 @@ match_db_changed(Db) ->
      }
     ].
 
--spec match_doc_changed(ne_binary(), ne_binary(), ne_binary()) -> ets:match_spec().
+-spec match_doc_changed(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> ets:match_spec().
 match_doc_changed(Db, Type, Id) ->
     [{#cache_obj{origin = {'db', Db}, _ = '_'}
      ,[]

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_new_user).
 -behaviour(teletype_gen_email_template).
 
@@ -15,13 +13,13 @@
         ,subject/0
         ,category/0
         ,friendly_name/0
-        ,to/1, from/1, cc/1, bcc/1, reply_to/1
+        ,to/0, from/0, cc/0, bcc/0, reply_to/0
         ]).
 -export([handle_req/1]).
 
 -include("teletype.hrl").
 
--spec id() -> ne_binary().
+-spec id() -> kz_term:ne_binary().
 id() -> <<"new_user">>.
 
 -spec macros() -> kz_json:object().
@@ -32,29 +30,29 @@ macros() ->
        ++ ?COMMON_TEMPLATE_MACROS
       ]).
 
--spec subject() -> ne_binary().
+-spec subject() -> kz_term:ne_binary().
 subject() -> <<"Your new VoIP services user profile has been created">>.
 
--spec category() -> ne_binary().
+-spec category() -> kz_term:ne_binary().
 category() -> <<"user">>.
 
--spec friendly_name() -> ne_binary().
+-spec friendly_name() -> kz_term:ne_binary().
 friendly_name() -> <<"New User">>.
 
--spec to(ne_binary()) -> kz_json:object().
-to(_) -> ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL).
+-spec to() -> kz_json:object().
+to() -> ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL).
 
--spec from(ne_binary()) -> api_ne_binary().
-from(ModConfigCat) -> teletype_util:default_from_address(ModConfigCat).
+-spec from() -> kz_term:api_ne_binary().
+from() -> teletype_util:default_from_address().
 
--spec cc(ne_binary()) -> kz_json:object().
-cc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec cc() -> kz_json:object().
+cc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec bcc(ne_binary()) -> kz_json:object().
-bcc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec bcc() -> kz_json:object().
+bcc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec reply_to(ne_binary()) -> api_ne_binary().
-reply_to(ModConfigCat) -> teletype_util:default_reply_to(ModConfigCat).
+-spec reply_to() -> kz_term:api_ne_binary().
+reply_to() -> teletype_util:default_reply_to().
 
 -spec init() -> 'ok'.
 init() ->
@@ -62,14 +60,14 @@ init() ->
     teletype_templates:init(?MODULE),
     teletype_bindings:bind(id(), ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:new_user_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [id()]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(id(), <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [id()]),
 
@@ -79,11 +77,53 @@ handle_req(JObj, 'true') ->
 
     case teletype_util:is_notice_enabled(AccountId, JObj, id()) of
         'false' -> teletype_util:notification_disabled(DataJObj, id());
-        'true' -> do_handle_req(DataJObj)
+        'true' -> process_req(DataJObj)
     end.
 
--spec do_handle_req(kz_json:object()) -> 'ok'.
-do_handle_req(DataJObj) ->
+-spec process_req(kz_json:object()) -> template_response().
+process_req(DataJObj) ->
+    {ReqData, Macros} = macros(DataJObj, 'true'),
+
+    %% Load templates
+    RenderedTemplates = teletype_templates:render(id(), Macros, ReqData),
+
+    AccountId = kapi_notifications:account_id(ReqData),
+    {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(id(), AccountId),
+    Subject0 = kz_json:find(<<"subject">>, [ReqData, TemplateMetaJObj], subject()),
+    Subject = teletype_util:render_subject(Subject0, Macros),
+    Emails = teletype_util:find_addresses(ReqData, TemplateMetaJObj, id()),
+
+    case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
+        'ok' -> teletype_util:notification_completed(id());
+        {'error', Reason} -> teletype_util:notification_failed(id(), Reason)
+    end.
+
+-spec macros(kz_json:object()) -> kz_term:proplist().
+macros(DataJObj) ->
+    macros(DataJObj, 'false').
+
+-spec macros(kz_json:object(), boolean()) -> {kz_json:object(), kz_term:proplist()} | kz_term:proplist().
+macros(DataJObj, 'true') ->
+    ReqData = get_user_doc(DataJObj),
+    {ReqData, create_macros(ReqData)};
+macros(DataJObj, 'false') ->
+    ReqData = get_user_doc(DataJObj),
+    create_macros(ReqData).
+
+-spec create_macros(kz_json:object()) -> kz_term:proplist().
+create_macros(DataJObj) ->
+    UserDoc = kz_json:get_value(<<"user">>, DataJObj, kz_json:new()),
+    UserParams = case kz_json:get_value(<<"password">>, UserDoc) of
+                     'undefined' -> teletype_util:user_params(UserDoc);
+                     Password -> [{<<"password">>, Password}|teletype_util:user_params(UserDoc)]
+                 end,
+    [{<<"system">>, teletype_util:system_params()}
+    ,{<<"account">>, teletype_util:account_params(DataJObj)}
+    ,{<<"user">>, UserParams}
+    ].
+
+-spec get_user_doc(kz_json:object()) -> kz_json:object().
+get_user_doc(DataJObj) ->
     UserId = kz_json:get_value(<<"user_id">>, DataJObj),
     {'ok', UserJObj} = teletype_util:open_doc(<<"user">>, UserId, DataJObj),
     Password = kz_json:get_value(<<"password">>, DataJObj),
@@ -94,31 +134,6 @@ do_handle_req(DataJObj) ->
     ReqData = kz_json:set_values(Values, DataJObj),
 
     case teletype_util:is_preview(DataJObj) of
-        'false' -> process_req(ReqData);
-        'true' -> process_req(kz_json:merge_jobjs(DataJObj, ReqData))
+        'false' -> ReqData;
+        'true' -> kz_json:merge_jobjs(DataJObj, ReqData)
     end.
-
--spec process_req(kz_json:object()) -> 'ok'.
-process_req(DataJObj) ->
-    Macros = macros(DataJObj),
-
-    %% Load templates
-    RenderedTemplates = teletype_templates:render(id(), Macros, DataJObj),
-
-    AccountId = kapi_notifications:account_id(DataJObj),
-    {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(id(), AccountId),
-    Subject0 = kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], subject()),
-    Subject = teletype_util:render_subject(Subject0, Macros),
-    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, teletype_util:mod_config_cat(id())),
-
-    case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
-    end.
-
--spec macros(kz_json:object()) -> kz_proplist().
-macros(DataJObj) ->
-    [{<<"system">>, teletype_util:system_params()}
-    ,{<<"account">>, teletype_util:account_params(DataJObj)}
-    ,{<<"user">>, teletype_util:public_proplist(<<"user">>, DataJObj)}
-    ].

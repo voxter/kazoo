@@ -1,16 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Users module
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Users module
 %%% Handle client requests for user documents
 %%%
+%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
+%%% @author SIPLABS, LLC (Ilya Ashchepkov)
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%   SIPLABS, LLC (Ilya Ashchepkov)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_users_v2).
 
 -export([create_user/1
@@ -18,14 +16,14 @@
         ]).
 
 -export([init/0
-        ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
-        ,content_types_provided/1, content_types_provided/2, content_types_provided/3, content_types_provided/4
-        ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,content_types_provided/1, content_types_provided/2, content_types_provided/3
+        ,resource_exists/0, resource_exists/1, resource_exists/2
         ,validate_resource/1, validate_resource/2, validate_resource/3, validate_resource/4
         ,billing/1
         ,authenticate/1
         ,authorize/1
-        ,validate/1, validate/2, validate/3, validate/4
+        ,validate/1, validate/2, validate/3
         ,put/1
         ,post/2, post/3
         ,delete/2 ,delete/3
@@ -35,14 +33,15 @@
 -include("crossbar.hrl").
 
 -define(CB_LIST, <<"users/crossbar_listing">>).
+-define(LIST_BY_HOTDESK_ID, <<"users/list_by_hotdesk_id">>).
 -define(LIST_BY_PRESENCE_ID, <<"devices/listing_by_presence_id">>).
 
 -define(VCARD, <<"vcard">>).
 -define(PHOTO, <<"photo">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
 %% SUPPORT FOR THE DEPRECIATED CB_SIGNUPS...
 -spec create_user(cb_context:context()) -> cb_context:context().
@@ -70,42 +69,40 @@ init() ->
     _ = crossbar_bindings:bind(<<"v2_resource.finish_request.*.users">>, 'crossbar_services', 'reconcile'),
     ok.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_UserId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE, ?HTTP_PATCH].
+
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_UserId, ?PHOTO) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
 allowed_methods(_UserId, ?VCARD) ->
     [?HTTP_GET].
-allowed_methods(_UserId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
-    [?HTTP_GET].
 
 -spec content_types_provided(cb_context:context()) ->
                                     cb_context:context().
--spec content_types_provided(cb_context:context(), path_token()) ->
-                                    cb_context:context().
--spec content_types_provided(cb_context:context(), path_token(), path_token()) ->
-                                    cb_context:context().
--spec content_types_provided(cb_context:context(), path_token(), path_token(), http_method()) ->
-                                    cb_context:context().
 content_types_provided(Context) ->
     Context.
+
+-spec content_types_provided(cb_context:context(), path_token()) ->
+                                    cb_context:context().
 content_types_provided(Context, _) ->
     Context.
+
+-spec content_types_provided(cb_context:context(), path_token(), path_token()) ->
+                                    cb_context:context().
 content_types_provided(Context, _, ?VCARD) ->
     cb_context:set_content_types_provided(Context, [{'to_binary', [{<<"text">>, <<"x-vcard">>}
                                                                   ,{<<"text">>, <<"directory">>}
@@ -118,33 +115,27 @@ content_types_provided(Context, _, ?PHOTO) ->
                                                    ]);
 content_types_provided(Context, _, _) ->
     Context.
-content_types_provided(Context, _, _, _) ->
-    Context.
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
-%% @end
-%%--------------------------------------------------------------------
--spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_UserId) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_UserId, ?VCARD) -> 'true';
 resource_exists(_UserId, ?PHOTO) -> 'true'.
-resource_exists(_UserId, ?QUICKCALL_PATH_TOKEN, _Number) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authenticate(cb_context:context()) -> 'true'.
 authenticate(Context) ->
     authenticate_users(cb_context:req_nouns(Context), cb_context:req_verb(Context)).
@@ -163,12 +154,10 @@ authorize_users(?USERS_QCALL_NOUNS(_UserId, _Number), ?HTTP_GET) ->
     'true';
 authorize_users(_Nouns, _Verb) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Ensure we will be able to bill for users
+%%------------------------------------------------------------------------------
+%% @doc Ensure we will be able to bill for users
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec billing(cb_context:context()) -> cb_context:context().
 billing(Context) ->
     process_billing(Context, cb_context:req_nouns(Context), cb_context:req_verb(Context)).
@@ -184,38 +173,39 @@ process_billing(Context, [{<<"users">>, _}|_], _Verb) ->
     end;
 process_billing(Context, _Nouns, _Verb) -> Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns and Resource Ids are valid.
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns and Resource Ids are valid.
 %% If valid, updates Context with userId
 %%
-%% Failure here returns 404
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate_resource(cb_context:context()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token(), path_token()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token(), path_token(), path_token()) -> cb_context:context().
 validate_resource(Context) -> Context.
+
+-spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
 validate_resource(Context, UserId) -> validate_user_id(UserId, Context).
+
+-spec validate_resource(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate_resource(Context, UserId, _) -> validate_user_id(UserId, Context).
+
+-spec validate_resource(cb_context:context(), path_token(), path_token(), path_token()) -> cb_context:context().
 validate_resource(Context, UserId, _, _) -> validate_user_id(UserId, Context).
 
--spec validate_user_id(api_binary(), cb_context:context()) -> cb_context:context().
--spec validate_user_id(api_binary(), cb_context:context(), kz_json:object()) -> cb_context:context().
+-spec validate_user_id(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_user_id(UserId, Context) ->
     case kz_datamgr:open_cache_doc(cb_context:account_db(Context), UserId) of
         {'ok', Doc} -> validate_user_id(UserId, Context, Doc);
         {'error', 'not_found'} ->
-            cb_context:add_system_error(
-              'bad_identifier'
+            cb_context:add_system_error('bad_identifier'
                                        ,kz_json:from_list([{<<"cause">>, UserId}])
                                        ,Context
-             );
+                                       );
         {'error', _R} -> crossbar_util:response_db_fatal(Context)
     end.
 
+-spec validate_user_id(kz_term:api_binary(), cb_context:context(), kz_json:object()) -> cb_context:context().
 validate_user_id(UserId, Context, Doc) ->
     case kz_doc:is_soft_deleted(Doc) of
         'true' ->
@@ -228,26 +218,23 @@ validate_user_id(UserId, Context, Doc) ->
                                ])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
--spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_users(Context, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, UserId) ->
     validate_user(Context, UserId, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context, UserId, ?VCARD) ->
     Context1 = load_user(UserId, Context),
     case cb_context:has_errors(Context1) of
@@ -256,14 +243,6 @@ validate(Context, UserId, ?VCARD) ->
     end;
 validate(Context, UserId, ?PHOTO) ->
     validate_photo(Context, UserId , cb_context:req_verb(Context)).
-
-validate(Context, UserId, ?QUICKCALL_PATH_TOKEN, _Number) ->
-    Context1 = crossbar_util:maybe_validate_quickcall(load_user(UserId, Context)),
-    case cb_context:has_errors(Context1) of
-        'true' -> Context1;
-        'false' ->
-            cb_modules_util:maybe_originate_quickcall(Context1)
-    end.
 
 validate_users(Context, ?HTTP_GET) ->
     load_user_summary(Context);
@@ -299,7 +278,7 @@ post(Context, _) ->
         _ -> Context2
     end.
 
--spec post(cb_context:context(), ne_binary(), path_token()) -> cb_context:context().
+-spec post(cb_context:context(), kz_term:ne_binary(), path_token()) -> cb_context:context().
 post(Context, UserId, ?PHOTO) ->
     [{_FileName, FileObj}] = cb_context:req_files(Context),
     Headers = kz_json:get_value(<<"headers">>, FileObj),
@@ -323,10 +302,10 @@ put(Context) ->
     crossbar_services:maybe_dry_run(Context, Callback).
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
--spec delete(cb_context:context(), ne_binary(), path_token()) -> cb_context:context().
 delete(Context, _Id) ->
     crossbar_doc:delete(Context).
 
+-spec delete(cb_context:context(), kz_term:ne_binary(), path_token()) -> cb_context:context().
 delete(Context, UserId, ?PHOTO) ->
     crossbar_doc:delete_attachment(UserId, ?PHOTO, Context).
 
@@ -334,28 +313,27 @@ delete(Context, UserId, ?PHOTO) ->
 patch(Context, Id) ->
     post(Context, Id).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec load_attachment(ne_binary(), cb_context:context()) ->
-                             cb_context:context().
--spec load_attachment(ne_binary(), ne_binary(), cb_context:context()) ->
+%%------------------------------------------------------------------------------
+
+-spec load_attachment(kz_term:ne_binary(), cb_context:context()) ->
                              cb_context:context().
 load_attachment(AttachmentId, Context) ->
     Headers =
-        [{<<"Content-Disposition">>, <<"attachment; filename=", AttachmentId/binary>>}
-        ,{<<"Content-Type">>, kz_doc:attachment_content_type(cb_context:doc(Context), AttachmentId)}
-        ],
-    cb_context:add_resp_headers(
-      crossbar_doc:load_attachment(cb_context:doc(Context)
-                                  ,AttachmentId
-                                  ,?TYPE_CHECK_OPTION(kzd_user:type())
-                                  ,Context
-                                  )
-                               ,Headers).
+        #{<<"content-disposition">> => <<"attachment; filename=", AttachmentId/binary>>
+         ,<<"content-type">> => kz_doc:attachment_content_type(cb_context:doc(Context), AttachmentId)
+         },
+    LoadedContext = crossbar_doc:load_attachment(cb_context:doc(Context)
+                                                ,AttachmentId
+                                                ,?TYPE_CHECK_OPTION(kzd_user:type())
+                                                ,Context
+                                                ),
+    cb_context:add_resp_headers(LoadedContext, Headers).
 
+-spec load_attachment(kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) ->
+                             cb_context:context().
 load_attachment(UserId, AttachmentId, Context) ->
     Context1 = load_user(UserId, Context),
     case cb_context:resp_status(Context1) of
@@ -363,16 +341,15 @@ load_attachment(UserId, AttachmentId, Context) ->
         _ -> Context1
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_update_devices_presence(cb_context:context()) -> 'ok'.
 maybe_update_devices_presence(Context) ->
     DbDoc = cb_context:fetch(Context, 'db_doc'),
     Doc = cb_context:doc(Context),
-    case kz_device:presence_id(DbDoc) =:= kz_device:presence_id(Doc) of
+    case kzd_devices:presence_id(DbDoc) =:= kzd_devices:presence_id(Doc) of
         'true' ->
             lager:debug("presence_id did not change, ignoring");
         'false' ->
@@ -380,7 +357,6 @@ maybe_update_devices_presence(Context) ->
     end.
 
 -spec update_devices_presence(cb_context:context()) -> 'ok'.
--spec update_devices_presence(cb_context:context(), kz_device:docs()) -> 'ok'.
 update_devices_presence(Context) ->
     case user_devices(Context) of
         {'error', _R} ->
@@ -391,13 +367,14 @@ update_devices_presence(Context) ->
             update_devices_presence(Context, DeviceDocs)
     end.
 
+-spec update_devices_presence(cb_context:context(), kzd_devices:docs()) -> 'ok'.
 update_devices_presence(Context, DeviceDocs) ->
     lists:foreach(fun(DeviceDoc) -> update_device_presence(Context, DeviceDoc) end
                  ,DeviceDocs
                  ).
 
 -spec user_devices(cb_context:context()) ->
-                          {'ok', kz_device:docs()} |
+                          {'ok', kzd_devices:docs()} |
                           {'error', any()}.
 user_devices(Context) ->
     UserId = kz_doc:id(cb_context:doc(Context)),
@@ -410,7 +387,7 @@ user_devices(Context) ->
             {'ok', [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs]}
     end.
 
--spec update_device_presence(cb_context:context(), kz_device:doc()) -> pid().
+-spec update_device_presence(cb_context:context(), kzd_devices:doc()) -> pid().
 update_device_presence(Context, DeviceDoc) ->
     AuthToken = cb_context:auth_token(Context),
     ReqId = cb_context:req_id(Context),
@@ -422,11 +399,10 @@ update_device_presence(Context, DeviceDoc) ->
                           provisioner_v5:update_device(DeviceDoc, AuthToken)
                   end).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_send_email(cb_context:context()) -> 'ok'.
 maybe_send_email(Context) ->
     ReqJObj = cb_context:req_data(Context),
@@ -435,11 +411,10 @@ maybe_send_email(Context) ->
         'true' -> send_email(Context)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec send_email(cb_context:context()) -> 'ok'.
 send_email(Context) ->
     lager:debug("trying to publish new user notification"),
@@ -452,13 +427,11 @@ send_email(Context) ->
           ],
     kapps_notify_publisher:cast(Req, fun kapi_notifications:publish_new_user/1).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load list of accounts, each summarized.  Or a specific
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load list of accounts, each summarized. Or a specific
 %% account summary.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec load_user_summary(cb_context:context()) -> cb_context:context().
 load_user_summary(Context) ->
     fix_envelope(
@@ -473,30 +446,27 @@ fix_envelope(Context) ->
     RespData = cb_context:resp_data(Context),
     cb_context:set_resp_data(Context, lists:reverse(RespData)).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load a user document from the database
+%%------------------------------------------------------------------------------
+%% @doc Load a user document from the database
 %% @end
-%%--------------------------------------------------------------------
--spec load_user(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec load_user(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 load_user(UserId, Context) -> crossbar_doc:load(UserId, Context, ?TYPE_CHECK_OPTION(kzd_user:type())).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec validate_request(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec validate_request(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_request(UserId, Context) ->
-    prepare_username(UserId, Context).
+    Context1 = prepare_username(UserId, Context),
+    check_hotdesk_id(UserId, Context1).
 
--spec validate_patch(api_binary(), cb_context:context()) -> cb_context:context().
+-spec validate_patch(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(UserId, Context) ->
     crossbar_doc:patch_and_validate(UserId, Context, fun validate_request/2).
 
--spec prepare_username(api_binary(), cb_context:context()) -> cb_context:context().
+-spec prepare_username(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 prepare_username(UserId, Context) ->
     JObj = cb_context:req_data(Context),
     case kz_json:get_ne_value(<<"username">>, JObj) of
@@ -506,7 +476,7 @@ prepare_username(UserId, Context) ->
             check_user_name(UserId, cb_context:set_req_data(Context, JObj1))
     end.
 
--spec check_user_name(api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_user_name(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_user_name(UserId, Context) ->
     JObj = cb_context:req_data(Context),
     UserName = kz_json:get_ne_value(<<"username">>, JObj),
@@ -521,7 +491,7 @@ check_user_name(UserId, Context) ->
             check_emergency_caller_id(UserId, Context1)
     end.
 
--spec non_unique_username_error(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec non_unique_username_error(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 non_unique_username_error(Context, Username) ->
     Msg = kz_json:from_list(
             [{<<"message">>, <<"User name is not unique for this account">>}
@@ -529,12 +499,12 @@ non_unique_username_error(Context, Username) ->
             ]),
     cb_context:add_validation_error([<<"username">>], <<"unique">>, Msg, Context).
 
--spec check_emergency_caller_id(api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_emergency_caller_id(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_emergency_caller_id(UserId, Context) ->
     Context1 = crossbar_util:format_emergency_caller_id_number(Context),
     check_user_schema(UserId, Context1).
 
--spec is_username_unique(api_binary(), api_binary(), ne_binary()) -> boolean().
+-spec is_username_unique(kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> boolean().
 is_username_unique(AccountDb, UserId, UserName) ->
     ViewOptions = [{'key', UserName}],
     case kz_datamgr:get_results(AccountDb, ?LIST_BY_USERNAME, ViewOptions) of
@@ -545,12 +515,46 @@ is_username_unique(AccountDb, UserId, UserName) ->
             'false'
     end.
 
--spec check_user_schema(api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_user_schema(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_user_schema(UserId, Context) ->
     OnSuccess = fun(C) -> on_successful_validation(UserId, C) end,
     cb_context:validate_request_data(<<"users">>, Context, OnSuccess).
 
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+-spec check_hotdesk_id(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
+check_hotdesk_id(UserId, Context) ->
+    JObj = cb_context:req_data(Context),
+    HotdeskId = kz_json:get_ne_value([<<"hotdesk">>, <<"id">>], JObj),
+    AccountDb = cb_context:account_db(Context),
+    case is_hotdesk_id_unique(AccountDb, UserId, HotdeskId) of
+        'true' ->
+            Context;
+        'false' ->
+            lager:debug("Hotdesk.id ~p is already used", [HotdeskId]),
+            non_unique_hotdesk_id_error(Context, HotdeskId);
+        {'error', DatamgrError} ->
+            crossbar_doc:handle_datamgr_errors(DatamgrError, HotdeskId, Context)
+    end.
+
+-spec is_hotdesk_id_unique(kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> boolean() | kz_datamgr:data_error().
+is_hotdesk_id_unique(AccountDb, UserId, HotdeskId) ->
+    ViewOptions = [{'key', HotdeskId}],
+    case kz_datamgr:get_results(AccountDb, ?LIST_BY_HOTDESK_ID, ViewOptions) of
+        {'ok', []} -> 'true';
+        {'ok', [JObj|_]} -> kz_doc:id(JObj) =:= UserId;
+        Else ->
+            lager:debug("error ~p checking view ~p in ~p", [Else, ?LIST_BY_HOTDESK_ID, AccountDb]),
+            Else
+    end.
+
+-spec non_unique_hotdesk_id_error(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+non_unique_hotdesk_id_error(Context, HotdeskId) ->
+    Msg = kz_json:from_list(
+            [{<<"message">>, <<"Hotdesk.id is not unique for this account">>}
+            ,{<<"cause">>, HotdeskId}
+            ]),
+    cb_context:add_validation_error([<<"hotdesk">>, <<"id">>], <<"unique">>, Msg, Context).
+
+-spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Props = [{<<"pvt_type">>, kzd_user:type()}],
     maybe_import_credintials('undefined'
@@ -561,7 +565,7 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(UserId, Context) ->
     maybe_import_credintials(UserId, crossbar_doc:load_merge(UserId, Context, ?TYPE_CHECK_OPTION(kzd_user:type()))).
 
--spec maybe_import_credintials(api_binary(), cb_context:context()) -> cb_context:context().
+-spec maybe_import_credintials(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 maybe_import_credintials(UserId, Context) ->
     JObj = cb_context:doc(Context),
     case kz_json:get_ne_value(<<"credentials">>, JObj) of
@@ -576,7 +580,7 @@ maybe_import_credintials(UserId, Context) ->
             maybe_validate_username(UserId, C)
     end.
 
--spec maybe_validate_username(api_binary(), cb_context:context()) -> cb_context:context().
+-spec maybe_validate_username(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 maybe_validate_username(UserId, Context) ->
     JObj = cb_context:doc(Context),
     NewUsername = kz_json:get_ne_value(<<"username">>, JObj),
@@ -601,7 +605,7 @@ maybe_validate_username(UserId, Context) ->
             manditory_rehash_creds(UserId, NewUsername, Context1)
     end.
 
--spec maybe_rehash_creds(api_binary(), api_binary(), cb_context:context()) -> cb_context:context().
+-spec maybe_rehash_creds(kz_term:api_binary(), kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 maybe_rehash_creds(UserId, Username, Context) ->
     case kz_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
         %% No user name or hash, no creds for you!
@@ -614,7 +618,7 @@ maybe_rehash_creds(UserId, Username, Context) ->
         Password -> rehash_creds(UserId, Username, Password, Context)
     end.
 
--spec manditory_rehash_creds(api_binary(), api_binary(), cb_context:context()) ->
+-spec manditory_rehash_creds(kz_term:api_binary(), kz_term:api_binary(), cb_context:context()) ->
                                     cb_context:context().
 manditory_rehash_creds(UserId, Username, Context) ->
     case kz_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
@@ -630,7 +634,7 @@ required_password_error(Context) ->
             ]),
     cb_context:add_validation_error(<<"password">>, <<"required">>, Msg, Context).
 
--spec rehash_creds(api_binary(), api_binary(), ne_binary(), cb_context:context()) ->
+-spec rehash_creds(kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary(), cb_context:context()) ->
                           cb_context:context().
 rehash_creds(_UserId, 'undefined', _Password, Context) ->
     Msg = kz_json:from_list(
@@ -652,14 +656,12 @@ rehash_creds(UserId, Username, Password, Context) ->
       cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1))
      ).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function will determine if the user name in the request is
+%%------------------------------------------------------------------------------
+%% @doc This function will determine if the user name in the request is
 %% unique or belongs to the request being made
 %% @end
-%%--------------------------------------------------------------------
--spec username_doc_id(api_binary(), cb_context:context()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec username_doc_id(kz_term:api_binary(), cb_context:context()) -> kz_term:api_binary().
 username_doc_id(Username, Context) ->
     username_doc_id(Username, Context, cb_context:account_db(Context)).
 username_doc_id(_, _, 'undefined') -> 'undefined';
@@ -673,21 +675,17 @@ username_doc_id(Username, Context, _AccountDb) ->
         _ -> 'undefined'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec(normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects()).
 normalize_view_results(JObj, Acc) -> [kz_json:get_value(<<"value">>, JObj)|Acc].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts context to vcard
+%%------------------------------------------------------------------------------
+%% @doc Converts context to vcard
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec convert_to_vcard(cb_context:context()) -> cb_context:context().
 convert_to_vcard(Context) ->
     JObj = cb_context:doc(Context),

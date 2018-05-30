@@ -1,17 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
-%%% @doc
-%%% Handles starting/stopping a call recording
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Handles starting/stopping a call recording.
 %%%
-%%% "data":{
-%%%   "time_limit":600 // in seconds, how long to record the call
-%%%   ,"format":["mp3","wav"] // what format to store the recording in
-%%%   ,"url":"http://server.com/path/to/dump/file" // what URL to PUT the file to
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`time_limit'</dt>
+%%%   <dd>How long to record the call, in seconds. Default is 600 seconds.</dd>
+%%%
+%%%   <dt>`format'</dt>
+%%%   <dd>What format to store the recording in, e.g. `mp3' or `wav'.</dd>
+%%%
+%%%   <dt>`url'</dt>
+%%%   <dd>What URL to PUT the file to.</dd>
+%%% </dl>
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_record_caller).
 
 -behaviour(gen_cf_action).
@@ -20,11 +25,10 @@
 
 -include("callflow.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Url = kz_json:get_value(<<"url">>, Data),
@@ -38,7 +42,7 @@ handle(Data, Call) ->
             cf_exe:continue(Call)
     end.
 
--spec record_caller(kz_json:object(), kapps_call:call(), ne_binary()) -> 'ok'.
+-spec record_caller(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 record_caller(Data, Call, Url) ->
     kapps_call_command:answer_now(Call),
 
@@ -54,7 +58,7 @@ record_caller(Data, Call, Url) ->
                                    ),
     lager:debug("recording ended").
 
--spec set_recording_url(kz_json:object(), kapps_call:call(), ne_binary(), ne_binary()) -> any().
+-spec set_recording_url(kz_json:object(), kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 set_recording_url(Data, Call, Url, MediaName) ->
     lager:debug("store to ~s to ~s", [MediaName, Url]),
 

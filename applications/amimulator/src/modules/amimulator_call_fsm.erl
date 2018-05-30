@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_call_fsm).
 
 -behaviour(gen_fsm).
@@ -21,11 +26,11 @@
 
 -define(STATE_UP, 6).
 
--record(state, {supervisor :: api_pid()
-               ,monitored_channel :: api_binary()
+-record(state, {supervisor :: kz_term:api_pid()
+               ,monitored_channel :: kz_term:api_binary()
                ,call_ids = [] :: list()
-               ,answered :: api_binary()
-               ,conference_call_id :: api_binary()
+               ,answered :: kz_term:api_binary()
+               ,conference_call_id :: kz_term:api_binary()
                ,early_bridge_payload :: kz_json:object() | 'undefined'
                }).
 -type state() :: #state{}.
@@ -34,11 +39,11 @@
 %% Public functions
 %%
 
--spec start_link(pid(), amimulator_call:call()) -> startlink_ret().
+-spec start_link(pid(), amimulator_call:call()) -> kz_types:startlink_ret().
 start_link(Super, Call) ->
     gen_fsm:start_link(?MODULE, [Super, Call], []).
 
--spec start_link(pid(), amimulator_call:call(), 'initial') -> startlink_ret().
+-spec start_link(pid(), amimulator_call:call(), 'initial') -> kz_types:startlink_ret().
 start_link(Super, Call, 'initial') ->
     gen_fsm:start_link(?MODULE, [Super, Call, 'initial'], []).
 
@@ -50,7 +55,7 @@ new_call(FSM, Call) ->
 add_initial(FSM, Call) ->
     gen_fsm:send_event(FSM, {'add_initial', Call}).
 
--spec answer(pid(), ne_binary()) -> 'ok'.
+-spec answer(pid(), kz_term:ne_binary()) -> 'ok'.
 answer(FSM, CallId) ->
     gen_fsm:send_event(FSM, {'answer', CallId}).
 
@@ -58,7 +63,7 @@ answer(FSM, CallId) ->
 bridge(FSM, EventJObj) ->
     gen_fsm:send_event(FSM, {'bridge', EventJObj}).
 
--spec destroy(pid(), api_binary(), ne_binary()) -> 'ok'.
+-spec destroy(pid(), kz_term:api_binary(), kz_term:ne_binary()) -> 'ok'.
 destroy(FSM, Reason, CallId) ->
     gen_fsm:send_event(FSM, {'destroy', Reason, CallId}).
 
@@ -66,7 +71,7 @@ destroy(FSM, Reason, CallId) ->
 monitoring(FSM, Call) ->
     gen_fsm:sync_send_all_state_event(FSM, {'monitoring', amimulator_call:channel(Call)}).
 
--spec accepts(pid(), ne_binary()) -> term().
+-spec accepts(pid(), kz_term:ne_binary()) -> term().
 accepts(FSM, CallId) ->
     gen_fsm:sync_send_all_state_event(FSM, {'accepts', CallId}).
 
@@ -83,12 +88,12 @@ init([Super, Call, 'initial']) ->
     lager:debug("catching up to correct start for call ~p", [amimulator_call:call_id(Call)]),
     initialize(Super, Call).
 
--spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
+-spec handle_event(any(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
 
--spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
+-spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> kz_types:handle_sync_event_ret(state()).
 handle_sync_event({'monitoring', Channel}, _From, StateName, #state{monitored_channel=Channel}=State) ->
     {'reply', 'true', StateName, State};
 handle_sync_event({'monitoring', _}, _From, StateName, State) ->
@@ -99,7 +104,7 @@ handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.
 
--spec handle_info(any(), atom(), state()) -> handle_fsm_ret(state()).
+-spec handle_info(any(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
 handle_info({'$gen_cast', _}, StateName, State) ->
     {'next_state', StateName, State};
 handle_info(Info, StateName, State) ->
@@ -119,9 +124,9 @@ code_change(_, StateName, State, _) ->
 %%
 
 -spec pre_create({'new_call' | 'answer'
-                 ,amimulator_call:call() | ne_binary()}
+                 ,amimulator_call:call() | kz_term:ne_binary()}
                 ,state()
-                ) -> handle_fsm_ret(state()).
+                ) -> kz_types:handle_fsm_ret(state()).
 pre_create({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
 
@@ -141,10 +146,10 @@ pre_create({'answer', CallId}, State) ->
     {'next_state', 'pre_create', State#state{answered=CallId}}.
 
 -spec created({'new_call' | 'add_initial', amimulator_call:call()} |
-              {'answer', ne_binary()} |
+              {'answer', kz_term:ne_binary()} |
               {'bridge', kz_json:object()} |
-              {'destroy', api_binary(), ne_binary()}
-             ,state()) -> handle_fsm_ret(state()).
+              {'destroy', kz_term:api_binary(), kz_term:ne_binary()}
+             ,state()) -> kz_types:handle_fsm_ret(state()).
 created({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}};
@@ -198,10 +203,10 @@ created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
     end.
 
 -spec answered({'new_call' | 'add_initial', amimulator_call:call()} |
-               {'answer', ne_binary()} |
+               {'answer', kz_term:ne_binary()} |
                {'bridge', kz_json:object()} |
-               {'destroy', api_binary(), ne_binary()}
-              ,state()) -> handle_fsm_ret(state()).
+               {'destroy', kz_term:api_binary(), kz_term:ne_binary()}
+              ,state()) -> kz_types:handle_fsm_ret(state()).
 answered({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)}};
@@ -277,7 +282,7 @@ initialize(Super, Call) ->
         _ -> {'ok', 'created', State}
     end.
 
--spec maybe_update_other_call_dest(api_binary(), api_binary(), amimulator_call:call()) -> 'ok'.
+-spec maybe_update_other_call_dest(kz_term:api_binary(), kz_term:api_binary(), amimulator_call:call()) -> 'ok'.
 maybe_update_other_call_dest(_, 'undefined', _) ->
     'ok';
 maybe_update_other_call_dest(CallId, CallId, _) ->

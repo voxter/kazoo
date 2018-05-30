@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
 %%% @doc
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_bandwidth2_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -41,7 +40,8 @@ find_numbers(Options) ->
     Results = knm_search:find([{'quantity',Limit}
                               ,{'prefix', Prefix}
                               ,{'query_id', <<"QID-", Prefix/binary>>}
-                               |Options]),
+                               |Options
+                              ]),
     [{"Verify found numbers"
      ,?_assertEqual(Limit, length(Results))
      }

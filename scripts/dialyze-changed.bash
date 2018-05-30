@@ -7,7 +7,7 @@
 pushd $(dirname $0) > /dev/null
 cd $(pwd -P)/..
 
-ERL_FILES=$(git --no-pager diff --name-only HEAD origin/4.1 -- applications core | grep erl)
+ERL_FILES=$(git --no-pager diff --name-only HEAD origin/4.2 -- applications core | grep erl)
 
 BEAM_FILES=()
 BEAM=""
@@ -27,6 +27,7 @@ for ERL in $ERL_FILES; do
     fi
 done
 
+BEAM_FILES+=("core/kazoo_stdlib/ebin/kz_types.beam")
 ARGS=${BEAM_FILES[@]}
 echo "dialyzing changed files(${#BEAM_FILES[@]}):"
 dialyzer --plt .kazoo.plt $MOD_BEAM $ARGS $@

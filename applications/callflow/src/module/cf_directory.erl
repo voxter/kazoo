@@ -1,45 +1,65 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% The basic flow of a directory call:
-%%% 1) Prompt: Please enter the first few letters of the person's
-%%%  a) First entry in sort order (first or last name)
-%%% 2) Receive MIN_DTMF dtmf tones
-%%%  a) If timeout occurs:
-%%%   1) Prompt: You need to specify a minimum of
-%%%    a) MIN_DTMF
-%%%    b) Prompt: letters of the person's name
-%%%   2) go back into main #2
-%%% 3) After receiving MIN_DTMF, filter table
-%%% 4) Go into a next_dtmf wait loop
-%%%  a) if timeout, prompt with # of matches, option to hear matches or continue pressing keys
-%%%  b) if continue, go into next_dtmf wait loop
-%%%  c) else go to play_matches
-%%% 5) play_matches: play hd(matches), options to hear more or connect or continue pressing keys
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Present a directory menu to the caller.
 %%%
-%%% If the flag "asr_enabled" is set, send the asr AMQP request, wait for the ASR response, and use
-%%% that for finding matches. Its more an all-or-nothing situation.
+%%% <strong>Basic flow of a directory call:</strong>
+%%% <ol>
+%%%   <li>Prompt: Please enter the first few letters of the person's
+%%%     <ul><li>First entry in sort order (first or last name)</li></ul>
+%%%   </li>
 %%%
-%%% The asr_provider key has the following properties:
-%%%   "p_endpoint": "user_or_did@asr-server.com" %% The endpoint to bridge to
-%%%   "p_account_id":"you@xmpp-server.com" %% the client's account id for receiving the text back
-%%%   "p_account_pass":"secret" %% optional, password for the client's account
-%%%   "p_lang":"us-EN" %% the language code for the ASR provider, defaults to "us-EN"
+%%%   <li>Receive `MIN_DTMF' DTMF tones. If timeout occurs:
+%%%     <ol>
+%%%       <li>Prompt: You need to specify a minimum of
+%%%         <ul>
+%%%           <li>MIN_DTMF</li>
+%%%           <li>Prompt: letters of the person's name</li>
+%%%         </ul>
+%%%       </li>
+%%%       <li>Go back into main #2</li>
+%%%     </ol>
+%%%   </li>
+%%%
+%%%   <li>After receiving `MIN_DTMF', filter table</li>
+%%%
+%%%   <li>Go into a next DTMF wait loop:
+%%%     <ul>
+%%%       <li>If timeout, prompt with `#' of matches, option to hear matches or continue pressing keys</li>
+%%%       <li>If continue, go into next DTMF wait loop</li>
+%%%       <li>Else go to `play_matches'</li>
+%%%     </ul>
+%%%   </li>
+%%%
+%%%   <li>`play_matches': Plays `hd(matches)', options to hear more or connect or continue pressing keys</li>
+%%% </ol>
+%%%
+%%% If the flag `asr_enabled' is set, send the An ASR AMQP request, wait for the ASR response, and use
+%%% that for finding matches. It's more an all-or-nothing situation.
+%%%
+%%% The `asr_provider' key has the following properties:
+%%% <dl>
+%%%   <dt>`p_endpoint'</dt><dd>The endpoint to bridge to, e.g. `user_or_did@asr-server.com'</dd>
+%%%   <dt>`p_account_id'</dt><dd>The client's account id for receiving the text back, e.g. `you@xmpp-server.com'</dd>
+%%%   <dt>`p_account_pass'</dt><dd><strong>Optional: </strong>Password for the client's account</dd>
+%%%   <dt>`p_lang'</dt><dd>The language code for the ASR provider, defaults to `us-EN'</dd>
+%%% </dl>
 %%%
 %%% So, the process becomes:
-%%% 1) Prompt "Please say the name of the person you'd like to be connected to"
-%%% 2) Send ASR request with CallID, ControlQ, and a response Q
-%%% 3) Wait for ASR response with text of what was said
-%%% 4) Find matches and iterate through the list, or go back to 1.
+%%% <ol>
+%%%  <li>Prompt "Please say the name of the person you'd like to be connected to"</li>
+%%%  <li>Send ASR request with `CallID', `ControlQ', and a response `Q'</li>
+%%%  <li>Wait for ASR response with text of what was said</li>
+%%%  <li>Find matches and iterate through the list, or go back to 1</li>
+%%% </ol>
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_directory).
 
 -behaviour(gen_cf_action).
 
--include("callflow.hrl").
+-include_lib("callflow/src/callflow.hrl").
 
 -export([handle/2]).
 
@@ -75,15 +95,14 @@
 %%------------------------------------------------------------------------------
 %% Records
 %%------------------------------------------------------------------------------
--record(directory_user, {
-          first_name :: ne_binary()
-                        ,last_name :: ne_binary()
-                        ,full_name :: ne_binary()
-                        ,first_last_keys :: ne_binary() % DTMF-version of first, last
-                        ,last_first_keys :: ne_binary() % DTMF-version of last, first
-                        ,callflow_id :: ne_binary() % what callflow to use on match
-                        ,name_audio_id :: api_binary() % pre-recorded audio of user's name
-         }).
+-record(directory_user, {first_name :: kz_term:ne_binary()
+                        ,last_name :: kz_term:ne_binary()
+                        ,full_name :: kz_term:ne_binary()
+                        ,first_last_keys :: kz_term:ne_binary() % DTMF-version of first, last
+                        ,last_first_keys :: kz_term:ne_binary() % DTMF-version of last, first
+                        ,callflow_id :: kz_term:ne_binary() % what callflow to use on match
+                        ,name_audio_id :: kz_term:api_binary() % pre-recorded audio of user's name
+                        }).
 -type directory_user() :: #directory_user{}.
 -type directory_users() :: [directory_user()].
 
@@ -100,14 +119,12 @@
 
 -type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     {'ok', DirJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
@@ -254,7 +271,7 @@ maybe_match_user(Call, U, MatchNum, Loop) ->
             cf_exe:stop(Call)
     end.
 
--spec interpret_user_match_dtmf(ne_binary()) -> dtmf_action().
+-spec interpret_user_match_dtmf(kz_term:ne_binary()) -> dtmf_action().
 interpret_user_match_dtmf(?DTMF_RESULT_CONNECT) -> 'route';
 interpret_user_match_dtmf(?DTMF_RESULT_NEXT) -> 'next';
 interpret_user_match_dtmf(?DTMF_RESULT_START) -> 'start_over';
@@ -278,21 +295,19 @@ route_to_match(Call, Callflow) ->
 %% Audio Prompts
 %%------------------------------------------------------------------------------
 -spec play_user(kapps_call:call(), kapps_call_command:audio_macro_prompt(), any()) ->
-                       {'ok', binary()} |
-                       {'error', atom()}.
+                       kapps_call_command:collect_digits_return().
 play_user(Call, UsernameTuple, _MatchNum) ->
     play_and_collect(Call, [{'prompt', ?PROMPT_RESULT_NUMBER}
                            ,UsernameTuple
                            ,{'prompt', ?PROMPT_RESULT_MENU}
                            ]).
 
--spec play_invalid(kapps_call:call()) -> ne_binary().
+-spec play_invalid(kapps_call:call()) -> kz_term:ne_binary().
 play_invalid(Call) ->
     kapps_call_command:audio_macro([{'prompt', ?PROMPT_INVALID_KEY}], Call).
 
 -spec play_confirm_match(kapps_call:call(), directory_user()) ->
-                                {'ok', binary()} |
-                                {'error', atom()}.
+                                kapps_call_command:collect_digits_return().
 play_confirm_match(Call, User) ->
     UserName = username_audio_macro(Call, User),
     lager:info("playing confirm_match with username: ~p", [UserName]),
@@ -309,7 +324,7 @@ username_audio_macro(Call, User) ->
         MediaID     -> maybe_play_media(Call, User, MediaID)
     end.
 
--spec maybe_play_media(kapps_call:call(), directory_user(), api_binary()) ->
+-spec maybe_play_media(kapps_call:call(), directory_user(), kz_term:api_binary()) ->
                               kapps_call_command:audio_macro_prompt().
 maybe_play_media(Call, User, MediaId) ->
     AccountDb = kapps_call:account_db(Call),
@@ -323,7 +338,7 @@ maybe_play_media(Call, User, MediaId) ->
         {'error', _} -> {'tts', <<39, (full_name(User))/binary, 39>>}
     end.
 
--spec play_directory_instructions(kapps_call:call(), 'first' | 'last' | 'both' | ne_binary()) ->
+-spec play_directory_instructions(kapps_call:call(), 'first' | 'last' | 'both' | kz_term:ne_binary()) ->
                                          {'ok', binary()} |
                                          {'error', atom()}.
 play_directory_instructions(Call, 'first') ->
@@ -333,22 +348,22 @@ play_directory_instructions(Call, 'last') ->
 play_directory_instructions(Call, 'both') ->
     play_and_collect(Call, [{'prompt', ?PROMPT_ENTER_PERSON_NAME}]).
 
--spec play_no_users(kapps_call:call()) -> ne_binary(). % noop id
+-spec play_no_users(kapps_call:call()) -> kz_term:ne_binary(). % noop id
 play_no_users(Call) ->
     kapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_MORE_RESULTS}], Call).
 
--spec play_no_users_found(kapps_call:call()) -> ne_binary(). % noop id
+-spec play_no_users_found(kapps_call:call()) -> kz_term:ne_binary(). % noop id
 play_no_users_found(Call) ->
     kapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_RESULTS_FOUND}], Call).
 
 -spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts()) ->
                               {'ok', binary()} |
                               {'error', atom()}.
--spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts(), non_neg_integer()) ->
-                              {'ok', binary()} |
-                              {'error', atom()}.
 play_and_collect(Call, AudioMacro) ->
     play_and_collect(Call, AudioMacro, 1).
+
+-spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts(), non_neg_integer()) ->
+                              kapps_call_command:collect_digits_return().
 play_and_collect(Call, AudioMacro, NumDigits) ->
     NoopID = kapps_call_command:audio_macro(AudioMacro, Call),
     lager:info("play and collect noopID: ~s", [NoopID]),
@@ -391,16 +406,16 @@ media_name(#directory_user{name_audio_id = ID}) -> ID.
 %%------------------------------------------------------------------------------
 %% Utility Functions
 %%------------------------------------------------------------------------------
--spec get_sort_by(ne_binary()) -> 'first' | 'last'.
+-spec get_sort_by(kz_term:ne_binary()) -> 'first' | 'last'.
 get_sort_by(<<"first", _/binary>>) -> 'first';
 get_sort_by(_) -> 'last'.
 
--spec get_search_fields(ne_binary()) -> 'first' | 'last' | 'both'.
+-spec get_search_fields(kz_term:ne_binary()) -> 'first' | 'last' | 'both'.
 get_search_fields(<<"both">>) -> 'both';
 get_search_fields(<<"first", _/binary>>) -> 'first';
 get_search_fields(_) -> 'last'.
 
--spec get_directory_listing(ne_binary(), ne_binary()) ->
+-spec get_directory_listing(kz_term:ne_binary(), kz_term:ne_binary()) ->
                                    {'ok', directory_users()} |
                                    {'error', any()}.
 get_directory_listing(Db, DirId) ->
@@ -416,20 +431,19 @@ get_directory_listing(Db, DirId) ->
             E
     end.
 
--spec get_directory_user(kz_json:object(), ne_binary()) -> directory_user().
+-spec get_directory_user(kz_json:object(), kz_term:ne_binary()) -> directory_user().
 get_directory_user(U, CallflowId) ->
     First = kz_json:get_value(<<"first_name">>, U),
     Last = kz_json:get_value(<<"last_name">>, U),
 
-    #directory_user{
-       first_name = First
+    #directory_user{first_name = First
                    ,last_name = Last
                    ,full_name = <<First/binary, " ", Last/binary>>
                    ,first_last_keys = cf_util:alpha_to_dialpad(<<First/binary, Last/binary>>)
                    ,last_first_keys = cf_util:alpha_to_dialpad(<<Last/binary, First/binary>>)
                    ,callflow_id = CallflowId
                    ,name_audio_id = kz_json:get_value(?RECORDED_NAME_KEY, U)
-      }.
+                   }.
 
 -spec sort_users(directory_users(), 'first' | 'last') -> directory_users().
 sort_users(Users, Order) ->
@@ -438,73 +452,72 @@ sort_users(Users, Order) ->
                            'first' ->
                                name_compare(
                                  kz_term:to_list(User1#directory_user.first_name)
-                                           ,kz_term:to_list(User1#directory_user.last_name)
-                                           ,kz_term:to_list(User2#directory_user.first_name)
-                                           ,kz_term:to_list(User2#directory_user.last_name)
+                                ,kz_term:to_list(User1#directory_user.last_name)
+                                ,kz_term:to_list(User2#directory_user.first_name)
+                                ,kz_term:to_list(User2#directory_user.last_name)
                                 );
                            'last' ->
                                name_compare(
                                  kz_term:to_list(User1#directory_user.last_name)
-                                           ,kz_term:to_list(User1#directory_user.first_name)
-                                           ,kz_term:to_list(User2#directory_user.last_name)
-                                           ,kz_term:to_list(User2#directory_user.first_name)
+                                ,kz_term:to_list(User1#directory_user.first_name)
+                                ,kz_term:to_list(User2#directory_user.last_name)
+                                ,kz_term:to_list(User2#directory_user.first_name)
                                 )
                        end
                end, Users).
 
--spec name_compare(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> boolean().
+-spec name_compare(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 name_compare(Name1a, Name1b, Name2a, Name2b) ->
     case Name1a =:= Name2a of
         'true' -> Name1b < Name2b;
         'false' -> Name1a < Name2a
     end.
 
--spec filter_users(directory_users(), ne_binary(), 'last' | 'first' | 'both') -> directory_users().
+-spec filter_users(directory_users(), kz_term:ne_binary(), 'last' | 'first' | 'both') -> directory_users().
 filter_users(Users, DTMFs, 'last') ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-      lists:foldl(
-        fun(U, Q) ->
-                case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
-                    'true' -> queue:in(U, Q);
-                    'false' -> Q
-                end
-        end, queue:new(), Users
-       )
+      lists:foldl(fun(U, Q) -> maybe_queue_user(U, Q, DTMFs, Size, 'last') end
+                 ,queue:new()
+                 ,Users
+                 )
      );
 filter_users(Users, DTMFs, 'first') ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-      lists:foldl(
-        fun(U, Q) ->
-                case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
-                    'true' -> queue:in(U, Q);
-                    'false' -> Q
-                end
-        end, queue:new(), Users
-       )
-     );
-filter_users(Users, DTMFs, 'both') ->
-    lager:info("filtering users by ~s", [DTMFs]),
-    Size = byte_size(DTMFs),
-    queue:to_list(
-      lists:foldl(
-        fun(U, Q) ->
-                case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
-                    'true' -> queue:in(U, Q);
-                    'false' ->
-                        case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
-                            'true' -> queue:in(U, Q);
-                            'false' -> Q
-                        end
-                end
-        end, queue:new(), Users
-       )
+      lists:foldl(fun(U, Q) -> maybe_queue_user(U, Q, DTMFs, Size, 'first') end
+                 ,queue:new()
+                 ,Users
+                 )
      ).
 
--spec maybe_dtmf_matches(ne_binary(), pos_integer(), ne_binary()) -> boolean().
+-spec maybe_queue_user(directory_user(), queue:queue(), kz_term:ne_binary(), pos_integer(), 'last' | 'first') ->
+                              queue:queue().
+maybe_queue_user(User, Queue, DTMFs, Size, FirstCheck) ->
+    case maybe_dtmf_matches(DTMFs, Size, first_check(FirstCheck, User)) of
+        'true' -> queue:in_r(User, Queue);
+        'false' ->
+            case maybe_dtmf_matches(DTMFs, Size, second_check(FirstCheck, User)) of
+                'true' -> queue:in(User, Queue);
+                'false' -> Queue
+            end
+    end.
+
+-spec first_check('last' | 'first', directory_user()) -> kz_term:ne_binary().
+first_check('last', User) ->
+    last_first_dtmfs(User);
+first_check('first', User) ->
+    first_last_dtmfs(User).
+
+-spec second_check('last' | 'first', directory_user()) -> kz_term:ne_binary().
+second_check('last', User) ->
+    first_last_dtmfs(User);
+second_check('first', User) ->
+    last_first_dtmfs(User).
+
+-spec maybe_dtmf_matches(kz_term:ne_binary(), pos_integer(), kz_term:ne_binary()) -> boolean().
 maybe_dtmf_matches(_, 0, _) -> 'false';
 maybe_dtmf_matches(_, Size, User) when byte_size(User) < Size -> 'false';
 maybe_dtmf_matches(DTMFs, Size, User) ->

@@ -1,18 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Callflow action to control call waiting feature.
 %%%
-%%% "data": {
-%%%   "action": "activate" | "deactivate" | *"toggle",
-%%%   "scope": "device" | *"user"
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`action'</dt>
+%%%   <dd>The action to be done: `activate', `deactivate' and `toggle'.
+%%%   Default is `toggle'.</dd>
 %%%
-%%% * Default value
+%%%   <dt>`scope'</dt>
+%%%   <dd>Which endpoint this action must be set: `device', `user'.
+%%%   Default is `user'.</dd>
+%%% </dl>
 %%%
+%%%
+%%% @author SIPLABS, LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS, LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_call_waiting).
 
 -behaviour(gen_cf_action).
@@ -23,27 +27,25 @@
 
 -record(call_waiting, {enabled = 'true' :: boolean()
                       ,jobj = kz_json:new() :: kz_json:object()
-                      ,account_db :: api_binary()
-                      ,action :: ne_binary()
+                      ,account_db :: kz_term:api_binary()
+                      ,action :: kz_term:ne_binary()
                       }).
 -type call_waiting() :: #call_waiting{}.
 
 -type switch_fun() :: fun((boolean()) -> boolean()).
--spec actions() -> kz_proplist_kv(ne_binary(), switch_fun()).
+-spec actions() -> kz_term:proplist_kv(kz_term:ne_binary(), switch_fun()).
 actions() ->
     [{<<"toggle">>, fun (Enabled) -> not Enabled end}
     ,{<<"activate">>, fun (_Enabled) -> 'true' end}
     ,{<<"deactivate">>, fun (_Enabled) -> 'false' end}
     ].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     case maybe_build_call_waiting_record(Data, Call) of
@@ -75,13 +77,13 @@ maybe_build_call_waiting_record(Data, Call) ->
             }
     end.
 
--spec get_doc_id(ne_binary(), kapps_call:call()) -> api_binary().
+-spec get_doc_id(kz_term:ne_binary(), kapps_call:call()) -> kz_term:api_binary().
 get_doc_id(<<"user">>, Call) ->
     kapps_call:owner_id(Call);
 get_doc_id(<<"device">>, Call) ->
     kapps_call:authorizing_id(Call).
 
--spec maybe_get_doc(api_binary(), api_binary()) -> kz_jobj_return().
+-spec maybe_get_doc(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:jobj_return().
 maybe_get_doc(_, 'undefined') ->
     {'error', 'no_device_id'};
 maybe_get_doc('undefined', _) ->
@@ -93,7 +95,7 @@ maybe_get_doc(AccountDb, Id) ->
 maybe_execute_action(#call_waiting{action = Action}=CW, Call) ->
     case props:get_value(Action, actions()) of
         'undefined' ->
-            lager:info("unsupported call forwaring action ~s", [Action]),
+            lager:info("unsupported call waiting action ~s", [Action]),
             kapps_call_command:b_prompt(<<"cw-not_available">>, Call);
         ActionFun -> execute_action(ActionFun, CW, Call)
     end.

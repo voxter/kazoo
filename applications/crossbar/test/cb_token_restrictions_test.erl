@@ -1,9 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%% @author James Aimonetti
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(cb_token_restrictions_test).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -34,7 +34,7 @@ deny_api_endpoint_test_() ->
                            ,{fun cb_context:set_auth_doc/2, auth_doc(?DENY_API_ENDPOINT_RESTRICTIONS)}
                            ]
                           ),
-    Label = "Verify denied access to non-existant endpoint in restrictions",
+    Label = "Verify denied access to nonexistent endpoint in restrictions",
 
     build_assertions(Label, Context, [?DENY_REQ, ?DENY_REQ, ?DENY_REQ, ?DENY_REQ]).
 

@@ -1,25 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author VCCS Telecom
 %%% @end
-%%% @contributors
-%%% VCCS Telecom
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_billing).
+-behaviour(kz_gen_service).
 
 -export([reconcile/1, reconcile/2]).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
 -define(SERVICE_CATEGORY, <<"billing">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile(kz_services:services()) -> kz_services:services().
 reconcile(Services) ->
     AccountId = kz_services:account_id(Services),
@@ -45,13 +42,11 @@ reconcile_fold(JObj, S) ->
     Quantity = kz_json:get_integer_value(<<"value">>, JObj, 0),
     kz_services:update(?SERVICE_CATEGORY, Item, Quantity, S).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec reconcile(kz_services:services(), api_binary()) -> kz_services:services().
+%%------------------------------------------------------------------------------
+-spec reconcile(kz_services:services(), kz_term:api_binary()) -> kz_services:services().
 reconcile(Services, 'undefined') -> Services;
 reconcile(Services0, Item) ->
     Services1 = reconcile(Services0),

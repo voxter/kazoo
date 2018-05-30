@@ -1,16 +1,12 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%%
-%%% Handle client requests for phone_number documents using new bandwidth api
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handle client requests for phone_number documents using new bandwidth api
+%%% @author Karl Anderson
+%%% @author Mark Magnusson
+%%% @author Pierre Fenoll
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%     Karl Anderson
-%%%     Mark Magnusson
-%%%     Pierre Fenoll
-%%%     Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_bandwidth2).
 -behaviour(knm_gen_carrier).
 
@@ -35,8 +31,9 @@
 -endif.
 
 -ifdef(TEST).
--define(DEBUG_WRITE(Format, Args), io:format(user, Format, Args)).
--define(DEBUG_APPEND(Format, Args), io:format(user, Format, Args)).
+-include_lib("eunit/include/eunit.hrl").
+-define(DEBUG_WRITE(Format, Args), ?debugFmt(Format, Args)).
+-define(DEBUG_APPEND(Format, Args), ?debugFmt(Format, Args)).
 -else.
 -define(BW2_DEBUG, kapps_config:get_is_true(?KNM_BW2_CONFIG_CAT, <<"debug">>, 'false')).
 -define(BW2_DEBUG_FILE, "/tmp/bandwidth2.com.xml").
@@ -55,32 +52,39 @@
 -ifdef(TEST).
 -define(BW2_ACCOUNT_ID, "eunit_testing_account").
 -else.
--define(BW2_ACCOUNT_ID,
-        kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"account_id">>, "")).
+-define(BW2_ACCOUNT_ID
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"account_id">>, "")
+       ).
 -endif.
 
--define(IS_SANDBOX_PROVISIONING_TRUE,
-        kapps_config:get_is_true(?KNM_BW2_CONFIG_CAT, <<"sandbox_provisioning">>, 'true')).
--define(IS_PROVISIONING_ENABLED,
-        kapps_config:get_is_true(?KNM_BW2_CONFIG_CAT, <<"enable_provisioning">>, 'true')).
--define(BW2_ORDER_NAME_PREFIX,
-        kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")).
+-define(IS_SANDBOX_PROVISIONING_TRUE
+       ,kapps_config:get_is_true(?KNM_BW2_CONFIG_CAT, <<"sandbox_provisioning">>, 'true')
+       ).
+-define(IS_PROVISIONING_ENABLED
+       ,kapps_config:get_is_true(?KNM_BW2_CONFIG_CAT, <<"enable_provisioning">>, 'true')
+       ).
+-define(BW2_ORDER_NAME_PREFIX
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"order_name_prefix">>, "Kazoo")
+       ).
 
--define(BW2_API_USERNAME,
-        kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_username">>, <<>>)).
--define(BW2_API_PASSWORD,
-        kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_password">>, <<>>)).
--define(BW2_SIP_PEER,
-        kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, "")).
--define(BW2_SITE_ID,
-        kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"site_id">>, "")).
+-define(BW2_API_USERNAME
+       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_username">>, <<>>)
+       ).
+-define(BW2_API_PASSWORD
+       ,kapps_config:get_binary(?KNM_BW2_CONFIG_CAT, <<"api_password">>, <<>>)
+       ).
+-define(BW2_SIP_PEER
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"sip_peer">>, "")
+       ).
+-define(BW2_SITE_ID
+       ,kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"site_id">>, "")
+       ).
 
--define(MAX_SEARCH_QUANTITY,
-        kapps_config:get_pos_integer(?KNM_BW2_CONFIG_CAT, <<"max_search_quantity">>, 500)).
+-define(MAX_SEARCH_QUANTITY
+       ,kapps_config:get_pos_integer(?KNM_BW2_CONFIG_CAT, <<"max_search_quantity">>, 500)
+       ).
 
 -define(BW2_ORDER_POLL_INTERVAL, 2000).
-
-
 
 -define(ORDER_NUMBER_XPATH, "ExistingTelephoneNumberOrderType/TelephoneNumberList/TelephoneNumber/text()").
 -define(CUSTOMER_ORDER_ID_XPATH, "CustomerOrderId/text()").
@@ -92,48 +96,41 @@
 
 %%% API
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec info() -> map().
 info() ->
     #{?CARRIER_INFO_MAX_PREFIX => 3
      }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
 
-%% @public
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(_Number) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check with carrier if these numbers are registered with it.
+%%------------------------------------------------------------------------------
+%% @doc Check with carrier if these numbers are registered with it.
 %% @end
-%%--------------------------------------------------------------------
--spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
-                                      {error, any()}.
+%%------------------------------------------------------------------------------
+-spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
+                                              {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the Bandwidth.com system for a quantity of available numbers
+%%------------------------------------------------------------------------------
+%% @doc Query the Bandwidth.com system for a quantity of available numbers
 %% in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_search:options()) -> search_ret().
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_search:options()) -> search_ret().
 find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 
@@ -170,7 +167,7 @@ find_numbers(Search, Quantity, Options) ->
     Result = search(Search, Params),
     process_search_response(Result, Options).
 
--spec process_tollfree_search_response(xml_el(), knm_search:options()) -> {'ok', list()}.
+-spec process_tollfree_search_response(kz_types:xml_el(), knm_search:options()) -> {'ok', list()}.
 process_tollfree_search_response(Result, Options) ->
     QID = knm_search:query_id(Options),
     Found = [N
@@ -179,7 +176,7 @@ process_tollfree_search_response(Result, Options) ->
             ],
     {'ok', Found}.
 
--spec process_search_response(xml_el(), knm_search:options()) -> {'ok', list()}.
+-spec process_search_response(kz_types:xml_el(), knm_search:options()) -> {'ok', list()}.
 process_search_response(Result, Options) ->
     QID = knm_search:query_id(Options),
     Found = [N
@@ -188,12 +185,10 @@ process_search_response(Result, Options) ->
             ],
     {'ok', Found}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -206,7 +201,7 @@ acquire_number(Number) ->
         'true' ->
             PhoneNumber = knm_number:phone_number(Number),
             Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
-            ON = lists:flatten([?BW2_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:current_tstamp())]),
+            ON = lists:flatten([?BW2_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:now_s())]),
             AuthBy = knm_phone_number:auth_by(PhoneNumber),
 
             Props = [{'Name', [ON]}
@@ -231,7 +226,7 @@ acquire_number(Number) ->
             end
     end.
 
--spec check_order(api_binary(), api_binary(), xml_el(), knm_number:knm_number(), knm_number:knm_number()) -> knm_number:knm_number().
+-spec check_order(kz_term:api_binary(), kz_term:api_binary(), kz_types:xml_el(), knm_number:knm_number(), knm_number:knm_number()) -> knm_number:knm_number().
 check_order(OrderId, <<"RECEIVED">>, _Response, PhoneNumber, Number) ->
     timer:sleep(?BW2_ORDER_POLL_INTERVAL),
     Url = ["orders/", kz_term:to_list(OrderId)],
@@ -263,25 +258,22 @@ check_order(_OrderId, OrderStatus, _Response, PhoneNumber, _Number) ->
     Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
     knm_errors:by_carrier(?MODULE, Error, Num).
 
--spec to_bandwidth2(ne_binary()) -> ne_binary().
+-spec to_bandwidth2(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_bandwidth2(<<"+1", Number/binary>>) -> Number;
 to_bandwidth2(Number) -> Number.
 
--spec from_bandwidth2(ne_binary()) -> ne_binary().
+-spec from_bandwidth2(kz_term:ne_binary()) -> kz_term:ne_binary().
 from_bandwidth2(<<"+", _/binary>> = Number) -> Number;
 from_bandwidth2(Number) -> <<"+1", Number/binary>>.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(_Number) -> _Number.
 
 
-%% @public
 -spec sites() -> 'ok'.
 sites() ->
     {'ok', Xml} = api_get(url(["sites"])),
@@ -290,13 +282,12 @@ sites() ->
     lists:foreach(fun process_site/1, Sites),
     io:format("done.~n").
 
--spec process_site(xml_el()) -> 'ok'.
+-spec process_site(kz_types:xml_el()) -> 'ok'.
 process_site(Site) ->
     Id   = kz_xml:get_value("Id/text()", Site),
     Name = kz_xml:get_value("Name/text()", Site),
     io:format("Id: ~p Name: ~p~n", [Id, Name]).
 
-%% @public
 -spec peers(binary()) -> 'ok'.
 peers(SiteId) ->
     {'ok', Xml} = api_get(url(["sippeers"])),
@@ -305,7 +296,7 @@ peers(SiteId) ->
     lists:foreach(fun process_peer/1, Peers),
     io:format("done.~n").
 
--spec process_peer(xml_el()) -> 'ok'.
+-spec process_peer(kz_types:xml_el()) -> 'ok'.
 process_peer(Peer) ->
     Id   = kz_xml:get_value("PeerId/text()", Peer),
     Name = kz_xml:get_value("PeerName/text()", Peer),
@@ -320,16 +311,16 @@ url(RelativePath) ->
        | RelativePath
       ]).
 
--type api_res() :: {'ok', xml_el()} | {'error', atom()}.
+-type api_res() :: {'ok', kz_types:xml_el()} | {'error', atom()}.
 
--spec search(ne_binary(), [nonempty_string()]) -> xml_el().
+-spec search(kz_term:ne_binary(), [nonempty_string()]) -> kz_types:xml_el().
 search(Num, Params) ->
     case api_get(url(["availableNumbers?" | Params])) of
         {'ok', Results} -> Results;
         {'error', Reason} -> knm_errors:by_carrier(?MODULE, Reason, Num)
     end.
 
--spec auth() -> {'basic_auth', {ne_binary(), ne_binary()}}.
+-spec auth() -> {'basic_auth', {kz_term:ne_binary(), kz_term:ne_binary()}}.
 auth() ->
     {'basic_auth', {?BW2_API_USERNAME, ?BW2_API_PASSWORD}}.
 
@@ -378,13 +369,11 @@ api_post("https://api.inetwork.com/v1.0/accounts/eunit_testing_account/orders", 
     handle_response({'ok', 200, [], Resp}).
 -endif.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Make a REST request to Bandwidth.com Numbers API to perform the
+%%------------------------------------------------------------------------------
+%% @doc Make a REST request to Bandwidth.com Numbers API to perform the
 %% given verb (purchase, search, provision, etc).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_response(kz_http:ret()) -> api_res().
 handle_response({Result, Code, Props, Response})
   when is_binary(Response) ->
@@ -435,13 +424,11 @@ handle_response({'error', _}=E) ->
     lager:debug("bandwidth.com request error: ~p", [E]),
     E.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert a number order response to json
+%%------------------------------------------------------------------------------
+%% @doc Convert a number order response to json
 %% @end
-%%--------------------------------------------------------------------
--spec number_order_response_to_json(xml_els() | xml_el()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec number_order_response_to_json(kz_types:xml_els() | kz_types:xml_el()) -> kz_json:object().
 number_order_response_to_json([]) ->
     kz_json:new();
 number_order_response_to_json([Xml]) ->
@@ -457,8 +444,7 @@ number_order_response_to_json(Xml) ->
        )
      ).
 
-%% @private
--spec search_response_to_KNM(xml_els() | xml_el(), ne_binary()) -> tuple().
+-spec search_response_to_KNM(kz_types:xml_els() | kz_types:xml_el(), kz_term:ne_binary()) -> tuple().
 search_response_to_KNM([Xml], QID) ->
     search_response_to_KNM(Xml, QID);
 search_response_to_KNM(Xml, QID) ->
@@ -470,19 +456,16 @@ search_response_to_KNM(Xml, QID) ->
             ),
     {QID, {Num, ?MODULE, ?NUMBER_STATE_DISCOVERY, JObj}}.
 
-%% @private
--spec tollfree_search_response_to_KNM(xml_el(), ne_binary()) -> tuple().
+-spec tollfree_search_response_to_KNM(kz_types:xml_el(), kz_term:ne_binary()) -> tuple().
 tollfree_search_response_to_KNM(Xml, QID) ->
     Num = from_bandwidth2(kz_xml:get_value("//TelephoneNumber/text()", Xml)),
     {QID, {Num, ?MODULE, ?NUMBER_STATE_DISCOVERY, kz_json:new()}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert a rate center XML entity to json
+%%------------------------------------------------------------------------------
+%% @doc Convert a rate center XML entity to json
 %% @end
-%%--------------------------------------------------------------------
--spec rate_center_to_json(xml_els() | xml_el()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec rate_center_to_json(kz_types:xml_els() | kz_types:xml_el()) -> kz_json:object().
 rate_center_to_json([]) ->
     kz_json:new();
 rate_center_to_json([Xml]) ->
@@ -497,15 +480,13 @@ rate_center_to_json(Xml) ->
        )
      ).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Determine if the request was successful, and if not extract any
+%%------------------------------------------------------------------------------
+%% @doc Determine if the request was successful, and if not extract any
 %% error text
 %% @end
-%%--------------------------------------------------------------------
--spec verify_response(xml_el()) -> {'ok', xml_el()} |
-                                   {'error', any()}.
+%%------------------------------------------------------------------------------
+-spec verify_response(kz_types:xml_el()) -> {'ok', kz_types:xml_el()} |
+                                            {'error', any()}.
 verify_response(Xml) ->
     NPAPath = "count(//TelephoneNumberDetailList/TelephoneNumberDetail)",
     TollFreePath = "count(//TelephoneNumberList/TelephoneNumber)",
@@ -530,7 +511,7 @@ verify_response(Xml) ->
             {'error', Reason}
     end.
 
--spec validate_xpath_value(api_binary() | {atom(), atom(), non_neg_integer()}) -> boolean().
+-spec validate_xpath_value(kz_term:api_binary() | {atom(), atom(), non_neg_integer()}) -> boolean().
 validate_xpath_value('undefined') -> 'false';
 validate_xpath_value(<<>>) -> 'false';
 validate_xpath_value({'xmlObj', 'number', Num}) -> Num > 0;

@@ -1,3 +1,9 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc
+%%% @author James Aimonetti
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(pqc_cb_tasks).
 
 -export([create/3
@@ -21,7 +27,7 @@ create(API, QueryString, CSV) ->
                            ,CSV
                            ).
 
--spec execute(pqc_cb_api:state(), ne_binary()) -> pqc_cb_api:response().
+-spec execute(pqc_cb_api:state(), kz_term:ne_binary()) -> pqc_cb_api:response().
 execute(API, TaskId) ->
     pqc_cb_api:make_request([200]
                            ,fun kz_http:patch/3
@@ -30,7 +36,7 @@ execute(API, TaskId) ->
                            ,<<>>
                            ).
 
--spec fetch(pqc_cb_api:state(), ne_binary()) -> pqc_cb_api:response().
+-spec fetch(pqc_cb_api:state(), kz_term:ne_binary()) -> pqc_cb_api:response().
 fetch(API, TaskId) ->
     pqc_cb_api:make_request([200]
                            ,fun kz_http:get/2
@@ -38,7 +44,7 @@ fetch(API, TaskId) ->
                            ,pqc_cb_api:request_headers(API)
                            ).
 
--spec delete(pqc_cb_api:state(), ne_binary()) -> pqc_cb_api:response().
+-spec delete(pqc_cb_api:state(), kz_term:ne_binary()) -> pqc_cb_api:response().
 delete(API, TaskId) ->
     pqc_cb_api:make_request([200]
                            ,fun kz_http:delete/2
@@ -46,7 +52,7 @@ delete(API, TaskId) ->
                            ,pqc_cb_api:request_headers(API)
                            ).
 
--spec query(pqc_cb_api:state(), ne_binary(), ne_binary()) -> pqc_cb_api:response().
+-spec query(pqc_cb_api:state(), kz_term:ne_binary(), kz_term:ne_binary()) -> pqc_cb_api:response().
 query(API, Category, Action) ->
     TaskURL = tasks_url(["category=", kz_term:to_list(Category)
                         ,"&action=", kz_term:to_list(Action)
@@ -59,7 +65,7 @@ query(API, Category, Action) ->
                            ,pqc_cb_api:request_headers(API)
                            ).
 
--spec task_url(ne_binary()) -> string().
+-spec task_url(kz_term:ne_binary()) -> string().
 
 task_url(TaskId) ->
     string:join([pqc_cb_api:v2_base_url(), "tasks", kz_term:to_list(TaskId)], "/").

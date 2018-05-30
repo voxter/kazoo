@@ -1,17 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%% Handle authn_req messages
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handle authn_req messages
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(conf_authn_req).
 
 -export([handle_req/2]).
 
 -include("conference.hrl").
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
     'true' = kapi_authn:req_v(JObj),
     _ = kz_util:put_callid(JObj),
@@ -24,7 +22,7 @@ handle_req(JObj, _Props) ->
         _Else -> 'ok'
     end.
 
--spec send_authn_resp(ne_binary(), kz_json:object()) -> 'ok'.
+-spec send_authn_resp(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 send_authn_resp(Password, JObj) ->
     Resp = props:filter_undefined(
              [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}

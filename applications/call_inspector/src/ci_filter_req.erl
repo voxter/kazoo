@@ -1,18 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ci_filter_req).
 
 -export([handle_req/2]).
 
 -include("call_inspector.hrl").
 
--spec handle_req(kz_json:object(), kz_proplist()) -> ok.
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> ok.
 handle_req(JObj, _Props) ->
     true = kapi_inspector:filter_req_v(JObj),
     CallIds = [CallId

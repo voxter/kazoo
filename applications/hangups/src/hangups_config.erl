@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(hangups_config).
 
 -export([monitored_hangup_causes/0
@@ -25,10 +30,10 @@
                          ,<<"PICKED_OFF">>
                          ]).
 
--spec monitored_hangup_causes() -> ne_binaries().
+-spec monitored_hangup_causes() -> kz_term:ne_binaries().
 monitored_hangup_causes() ->
     kapps_config:get(?APP_NAME, <<"hangups_to_monitor">>, ?DEFAULT_MONITORED).
 
--spec ignored_hangup_causes() -> ne_binaries().
+-spec ignored_hangup_causes() -> kz_term:ne_binaries().
 ignored_hangup_causes() ->
     kapps_config:get(?APP_NAME, <<"ignore_hangup_causes">>, ?DEFAULT_IGNORED).

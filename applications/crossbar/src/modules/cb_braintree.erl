@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle client requests for braintree documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle client requests for braintree documents
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_braintree).
 
 -export([init/0
@@ -33,10 +29,14 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".braintree">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = ssl:start(),
@@ -48,17 +48,15 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.delete.braintree">>, ?MODULE, 'delete'),
     ok.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(?CUSTOMER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST];
 allowed_methods(?CARDS_PATH_TOKEN) ->
@@ -72,6 +70,7 @@ allowed_methods(?CREDITS_PATH_TOKEN) ->
 allowed_methods(?CLIENT_TOKEN_PATH_TOKEN) ->
     [?HTTP_GET].
 
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(?CARDS_PATH_TOKEN, _CardId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
 allowed_methods(?ADDRESSES_PATH_TOKEN, _AddressId) ->
@@ -79,16 +78,13 @@ allowed_methods(?ADDRESSES_PATH_TOKEN, _AddressId) ->
 allowed_methods(?TRANSACTIONS_PATH_TOKEN, _TransactionId) ->
     [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(?CUSTOMER_PATH_TOKEN) -> 'true';
 resource_exists(?CARDS_PATH_TOKEN) -> 'true';
 resource_exists(?ADDRESSES_PATH_TOKEN) -> 'true';
@@ -96,19 +92,18 @@ resource_exists(?TRANSACTIONS_PATH_TOKEN) -> 'true';
 resource_exists(?CREDITS_PATH_TOKEN) -> 'true';
 resource_exists(?CLIENT_TOKEN_PATH_TOKEN) -> 'true'.
 
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(?CARDS_PATH_TOKEN, _) -> 'true';
 resource_exists(?ADDRESSES_PATH_TOKEN, _) -> 'true';
 resource_exists(?TRANSACTIONS_PATH_TOKEN, _) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
 %% CUSTOMER API
 validate(Context, ?CUSTOMER_PATH_TOKEN) ->
@@ -240,7 +235,7 @@ error_max_credit(Context, MaxCredit, FutureAmount) ->
                                    ,Context
                                    ).
 
--spec current_account_dollars(ne_binary()) -> dollars().
+-spec current_account_dollars(kz_term:ne_binary()) -> dollars().
 current_account_dollars(AccountId) ->
     case wht_util:current_account_dollars(AccountId) of
         {'ok', Dollars} -> Dollars;
@@ -326,7 +321,6 @@ validate_transaction(Context, TransactionId, ?HTTP_GET) ->
     end.
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, ?CUSTOMER_PATH_TOKEN) ->
     try braintree_customer:update(cb_context:fetch(Context, 'braintree')) of
         #bt_customer{}=Customer ->
@@ -342,6 +336,7 @@ post(Context, ?CUSTOMER_PATH_TOKEN) ->
             crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
     end.
 
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, ?CARDS_PATH_TOKEN, CardId) ->
     try braintree_card:update(cb_context:fetch(Context, 'braintree')) of
         #bt_card{}=Card ->
@@ -433,13 +428,13 @@ create_credits(Context) ->
             crossbar_util:response('error', <<"transaction error">>, 500, Reason, Context)
     end.
 
--spec reset_low_balance_notification(ne_binary()) -> 'ok'.
+-spec reset_low_balance_notification(kz_term:ne_binary()) -> 'ok'.
 reset_low_balance_notification(AccountId) ->
-    case kz_account:fetch(AccountId) of
+    case kzd_accounts:fetch(AccountId) of
         {'error', _} -> 'ok';
         {'ok', AccountJObj0} ->
-            AccountJObj1 = kz_account:reset_low_balance_sent(AccountJObj0),
-            AccountJObj2 = kz_account:remove_low_balance_tstamp(AccountJObj1),
+            AccountJObj1 = kzd_accounts:reset_low_balance_sent(AccountJObj0),
+            AccountJObj2 = kzd_accounts:remove_low_balance_tstamp(AccountJObj1),
             kz_util:account_update(AccountJObj2)
     end.
 
@@ -467,16 +462,14 @@ delete(Context, ?ADDRESSES_PATH_TOKEN, AddressId) ->
             crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates an empty customer in braintree
+%%------------------------------------------------------------------------------
+%% @doc Creates an empty customer in braintree
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create_braintree_customer(cb_context:context()) -> cb_context:context().
 create_braintree_customer(Context) ->
     try
@@ -527,7 +520,7 @@ charge_billing_id(Amount, Context) ->
                     ,{<<"order_id">>, cb_context:fetch(Context, 'bt_order_id')}
                     ];
                 _Id ->
-                    [{<<"purchase_order">>, ?CODE_SUB_ACCOUNT_MANUAL_ADDITION}
+                    [{<<"purchase_order">>, ?CODE_MANUAL_ADDITION_SUB_ACCOUNT}
                     ,{<<"order_id">>, cb_context:fetch(Context, 'bt_order_id')}
                     ]
             end,
@@ -543,7 +536,7 @@ charge_billing_id(Amount, Context) ->
             crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
     end.
 
--spec send_transaction_notify(ne_binary(), #bt_transaction{}) -> 'ok'.
+-spec send_transaction_notify(kz_term:ne_binary(), #bt_transaction{}) -> 'ok'.
 send_transaction_notify(AccountId, Transaction) ->
     Props = [{<<"Account-ID">>, AccountId}
              | braintree_transaction:record_to_notification_props(Transaction)
@@ -551,7 +544,7 @@ send_transaction_notify(AccountId, Transaction) ->
             ],
     kapps_notify_publisher:cast(Props, fun kapi_notifications:publish_transaction/1).
 
--spec add_credit_to_account(kz_json:object(), integer(), ne_binary(), ne_binary(), api_binary()) ->
+-spec add_credit_to_account(kz_json:object(), integer(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) ->
                                    {'ok', kz_transaction:transaction()} |
                                    {'error', any()}.
 add_credit_to_account(BraintreeData, Units, LedgerId, AccountId, OrderId) ->
@@ -559,10 +552,10 @@ add_credit_to_account(BraintreeData, Units, LedgerId, AccountId, OrderId) ->
     Routines = [fun(T) ->
                         case LedgerId =/= AccountId of
                             'false' ->
-                                kz_transaction:set_reason(<<"manual_addition">>, T);
+                                kz_transaction:set_reason(wht_util:manual_addition(), T);
                             'true'  ->
                                 T1 = kz_transaction:set_sub_account_info(AccountId, T),
-                                kz_transaction:set_reason(<<"sub_account_manual_addition">>, T1)
+                                kz_transaction:set_reason(wht_util:sub_account_manual_addition(), T1)
                         end
                 end
                ,fun(T) -> kz_transaction:set_bookkeeper_info(BraintreeData, T) end
@@ -577,5 +570,5 @@ add_credit_to_account(BraintreeData, Units, LedgerId, AccountId, OrderId) ->
 -spec sync(cb_context:context()) -> 'ok'.
 sync(Context) ->
     AccountId = cb_context:account_id(Context),
-    _P = kz_util:spawn(fun kz_service_sync:sync/1, [AccountId]),
-    'ok'.
+    _P = kz_util:spawn(fun kz_services:sync/1, [AccountId]),
+    lager:debug("syncing ~s in ~p", [AccountId, _P]).

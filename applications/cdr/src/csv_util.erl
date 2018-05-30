@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (c) 2010-2017, 2600Hz
-%%% @doc
-%%% Utility module for V3 Kazoo Migration
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Utility module for V3 Kazoo Migration
+%%% @author Ben Wann
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Ben Wann
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(csv_util).
 
 -include("cdr.hrl").
@@ -20,10 +18,14 @@
 
 -define(INCLUDE_HEADERS, 'true').
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
-%% TODO change name...
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc TODO: change name...
+%% @end
+%%------------------------------------------------------------------------------
 -spec json_objs_to_csv(kz_json:objects()) -> iolist().
 json_objs_to_csv(JObjs) ->
     json_objs_to_csv(JObjs, ?INCLUDE_HEADERS).
@@ -33,7 +35,7 @@ json_objs_to_csv([], _) -> [];
 json_objs_to_csv(JObjs, _) ->
     kz_json:encode(JObjs).
 
--spec test_convert(ne_binary()) -> 'ok' | {'error', any()}.
+-spec test_convert(kz_term:ne_binary()) -> 'ok' | {'error', any()}.
 test_convert(AccountDb) ->
     ViewOptions = ['include_docs'],
     case kz_datamgr:get_results(AccountDb, <<"cdrs/crossbar_listing">>, ViewOptions) of
@@ -50,15 +52,14 @@ test_convert(AccountDb) ->
             maybe_save_csv("test.csv", CsvData)
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @spec
-%% @end
-%%--------------------------------------------------------------------
-
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_save_csv(file:name(), iolist()) -> 'ok' | {'error', any()}.
 maybe_save_csv(FileName, CsvData) ->
     TestPath = filename:join(code:priv_dir('cdr'), "test_data"),

@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_acdc).
 
 -export([init/1, bindings/1, responders/1, handle_event/2]).
@@ -8,11 +13,11 @@
 %% Public functions
 %%
 
--spec init(ne_binary()) -> 'ok'.
+-spec init(kz_term:ne_binary()) -> 'ok'.
 init(_AccountId) ->
     'ok'.
 
--spec bindings(kz_proplist()) -> kz_proplist().
+-spec bindings(kz_term:proplist()) -> kz_term:proplist().
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [
@@ -29,7 +34,7 @@ bindings(Props) ->
                     ]}
     ].
 
--spec responders(kz_proplist()) -> kz_proplist().
+-spec responders(kz_term:proplist()) -> kz_term:proplist().
 responders(_Props) ->
     [{<<"member">>, <<"call">>}
     ,{<<"member">>, <<"call_cancel">>}
@@ -47,7 +52,7 @@ responders(_Props) ->
     ,{<<"agent">>, <<"logout_queue">>}
     ].
 
--spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_event(EventJObj, _) ->
     {EventType, EventName} = kz_util:get_event_type(EventJObj),
 
@@ -355,11 +360,11 @@ publish_status_events(Status, AgentDoc, Queues) ->
 
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, kz_json:get_value(<<"pvt_account_id">>, AgentDoc)).
 
--spec maybe_cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), binary()) -> boolean().
+-spec maybe_cancel_queue_call(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), binary()) -> boolean().
 maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason) ->
     maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, 0).
 
--spec maybe_cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), binary(), non_neg_integer()) -> boolean().
+-spec maybe_cancel_queue_call(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), binary(), non_neg_integer()) -> boolean().
 maybe_cancel_queue_call(_, _, _, _, 3) ->
     'false';
 maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, Attempts) ->
@@ -372,14 +377,14 @@ maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, Attempts) ->
             'true'
     end.
 
--spec cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), kapps_call:call(), binary()) -> 'ok'.
+-spec cancel_queue_call(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), binary()) -> 'ok'.
 cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
     Position = ami_sm:queue_pos(QueueId, CallId),
     ami_sm:queue_leave(QueueId, CallId),
 
     case amimulator_util:queue_number(
            kz_util:format_account_id(AccountId, 'encoded')
-                                     ,QueueId
+          ,QueueId
           ) of
         'undefined' ->
             lager:debug("Could not find queue extension");
@@ -388,7 +393,7 @@ cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
             amimulator_event_listener:publish_amqp_event({publish, cancel_queue_call_payload(Number, CallId, Position, EndpointName, Reason)}, AccountId)
     end.
 
--spec cancel_queue_call_payload(binary(), ne_binary(), pos_integer(), binary(), binary()) -> list().
+-spec cancel_queue_call_payload(binary(), kz_term:ne_binary(), pos_integer(), binary(), binary()) -> list().
 cancel_queue_call_payload(Number, CallId, Position, EndpointName, <<"no agents">>) ->
     [
      {<<"Event">>, <<"Leave">>},

@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017 Voxter Communications
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2017-2018, 2600Hz
+%%% @doc Handle e911 provisioning
 %%%
-%%% Handle e911 provisioning
 %%%
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_acrovoice_e911).
 -behaviour(knm_gen_provider).
 
@@ -30,19 +28,17 @@
 -define(BASE_URL, <<"https://update911.info/api3/">>).
 -define(RESELLER_URL(AccountId), <<(?BASE_URL)/binary, (?RESELLER_ID(AccountId))/binary>>).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is saved, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is saved, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec save(knm_number:knm_number()) -> knm_number:knm_number().
--spec save(knm_number:knm_number(), ne_binary()) -> knm_number:knm_number().
 save(Number) ->
     State = knm_phone_number:state(knm_number:phone_number(Number)),
     save(Number, State).
 
+-spec save(knm_number:knm_number(), kz_term:ne_binary()) -> knm_number:knm_number().
 save(Number, ?NUMBER_STATE_RESERVED) ->
     maybe_update_e911(Number);
 save(Number, ?NUMBER_STATE_IN_SERVICE) ->
@@ -52,13 +48,11 @@ save(Number, ?NUMBER_STATE_PORT_IN) ->
 save(Number, _State) ->
     delete(Number).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is deleted, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is deleted, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) -> knm_number:knm_number().
 delete(Number) ->
     case feature(Number) of
@@ -74,27 +68,28 @@ delete(Number) ->
             end
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%% @private
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec feature(knm_number:knm_number()) -> kz_json:api_json_term().
 feature(Number) ->
     knm_phone_number:feature(knm_number:phone_number(Number), ?FEATURE_E911).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_update_e911(knm_number:knm_number()) -> knm_number:knm_number().
--spec maybe_update_e911(knm_number:knm_number(), boolean()) -> knm_number:knm_number().
 maybe_update_e911(Number) ->
     IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     maybe_update_e911(Number, IsDryRun).
 
+-spec maybe_update_e911(knm_number:knm_number(), boolean()) -> knm_number:knm_number().
 maybe_update_e911(Number, 'true') ->
     CurrentE911 = feature(Number),
     E911 = kz_json:get_ne_value(?FEATURE_E911, knm_phone_number:doc(knm_number:phone_number(Number))),
@@ -139,8 +134,6 @@ maybe_update_e911(Number, 'false') ->
 
 -spec update_e911(knm_number:knm_number(), kz_json:object()) ->
                          'ok' | {'error', any()}.
--spec update_e911(knm_phone_number:knm_phone_number(), kz_json:object(), ne_binary()) ->
-                         'ok' | {'error', any()}.
 update_e911(Number, E911) ->
     PN = knm_number:phone_number(Number),
     DID = knm_phone_number:number(PN),
@@ -150,6 +143,8 @@ update_e911(Number, E911) ->
         'false' -> {'error', 'unsupported_classification'}
     end.
 
+-spec update_e911(knm_phone_number:knm_phone_number(), kz_json:object(), kz_term:ne_binary()) ->
+                         'ok' | {'error', any()}.
 update_e911(PN, E911, NPAN) ->
     AccountId = knm_phone_number:assigned_to(PN),
 
@@ -159,7 +154,7 @@ update_e911(PN, E911, NPAN) ->
         'undefined' -> {'error', 'no_auth_signature'}
     end.
 
--spec do_update_e911(kz_json:object(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+-spec do_update_e911(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                             'ok' | {'error', any()}.
 do_update_e911(E911, AccountId, NPAN, Stamp, Signature) ->
     try
@@ -179,7 +174,7 @@ do_update_e911(E911, AccountId, NPAN, Stamp, Signature) ->
         throw:TE -> {'error', TE}
     end.
 
--spec handle_update_resp(pos_integer(), text()) -> 'ok' | {'error', any()}.
+-spec handle_update_resp(pos_integer(), kz_term:text()) -> 'ok' | {'error', any()}.
 handle_update_resp(200, RespData) ->
     case kz_http_util:parse_query_string(RespData) of
         [{<<"result">>, <<"ok">>}] -> 'ok';
@@ -188,13 +183,13 @@ handle_update_resp(200, RespData) ->
 handle_update_resp(RespCode, RespData) ->
     {'error', <<(kz_term:to_binary(RespCode))/binary, ": ", RespData/binary>>}.
 
--spec handle_update_resp_error(kz_proplist()) -> {'error', any()}.
--spec handle_update_resp_error(binary(), binary(), kz_proplist()) -> {'error', any()}.
+-spec handle_update_resp_error(kz_term:proplist()) -> {'error', any()}.
 handle_update_resp_error(Props) ->
     Result = props:get_binary_value(<<"result">>, Props, <<>>),
     Error = props:get_binary_value(<<"error">>, Props, <<>>),
     handle_update_resp_error(Result, Error, Props).
 
+-spec handle_update_resp_error(binary(), binary(), kz_term:proplist()) -> {'error', any()}.
 handle_update_resp_error(<<"error">>, <<"addressvalidation">>, Props) ->
     case props:get_integer_value(<<"alternatives">>, Props) of
         0 -> {'error', <<"Invalid address">>};
@@ -203,17 +198,17 @@ handle_update_resp_error(<<"error">>, <<"addressvalidation">>, Props) ->
 handle_update_resp_error(<<"error">>, Error, _) ->
     {'error', Error}.
 
--spec handle_update_resp_alternatives(kz_proplist(), non_neg_integer()) ->
+-spec handle_update_resp_alternatives(kz_term:proplist(), non_neg_integer()) ->
                                              {'error', kz_json:object()}.
--spec handle_update_resp_alternatives(kz_proplist(), non_neg_integer(), binaries()) ->
-                                             binaries().
 handle_update_resp_alternatives(Props, Count) ->
     Alternatives = handle_update_resp_alternatives(Props, Count, []),
     {'error', <<"Invalid address, did you mean \""
-                ,(kz_binary:join(Alternatives, <<"\" or \"">>))/binary
-                ,"\"?"
+               ,(kz_binary:join(Alternatives, <<"\" or \"">>))/binary
+               ,"\"?"
               >>}.
 
+-spec handle_update_resp_alternatives(kz_term:proplist(), non_neg_integer(), kz_term:binaries()) ->
+                                             kz_term:binaries().
 handle_update_resp_alternatives(_, 0, Alternatives) -> Alternatives;
 handle_update_resp_alternatives(Props, Count, Alternatives) ->
     Prefix = <<"alternative", (kz_term:to_binary(Count-1))/binary>>,
@@ -224,27 +219,23 @@ handle_update_resp_alternatives(Props, Count, Alternatives) ->
     PostalCode = props:get_binary_value(<<Prefix/binary, "_postalCode">>, Props, <<>>),
 
     [kz_binary:strip(<<StreetNum/binary
-                       ," "
-                       ,StreetName/binary
-                       ,", "
-                       ,City/binary
-                       ,", "
-                       ,Province/binary
-                       ," "
-                       ,PostalCode/binary
+                      ," "
+                      ,StreetName/binary
+                      ,", "
+                      ,City/binary
+                      ,", "
+                      ,Province/binary
+                      ," "
+                      ,PostalCode/binary
                      >>)
      | Alternatives
     ].
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec remove_number(knm_number:knm_number()) -> 'ok' | {'error', any()}.
--spec remove_number(knm_phone_number:knm_phone_number(), ne_binary()) ->
-                           'ok' | {'error', any()}.
 remove_number(Number) ->
     PN = knm_number:phone_number(Number),
     DID = knm_phone_number:number(PN),
@@ -256,6 +247,8 @@ remove_number(Number) ->
             'ok'
     end.
 
+-spec remove_number(knm_phone_number:knm_phone_number(), kz_term:ne_binary()) ->
+                           'ok' | {'error', any()}.
 remove_number(PN, NPAN) ->
     AccountId = knm_phone_number:assigned_to(PN),
 
@@ -265,7 +258,7 @@ remove_number(PN, NPAN) ->
         'undefined' -> {'error', 'no_auth_signature'}
     end.
 
--spec do_remove_number(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+-spec do_remove_number(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                               'ok' | {'error', any()}.
 do_remove_number(AccountId, NPAN, Stamp, Signature) ->
     Props = [{<<"action">>, <<"delete">>}
@@ -280,7 +273,7 @@ do_remove_number(AccountId, NPAN, Stamp, Signature) ->
         {'error', _}=E -> E
     end.
 
--spec handle_delete_resp(pos_integer(), text()) -> 'ok' | {'error', any()}.
+-spec handle_delete_resp(pos_integer(), kz_term:text()) -> 'ok' | {'error', any()}.
 handle_delete_resp(200, RespData) ->
     case kz_http_util:parse_query_string(RespData) of
         [{<<"result">>, <<"ok">>}] -> 'ok';
@@ -289,22 +282,20 @@ handle_delete_resp(200, RespData) ->
 handle_delete_resp(RespCode, RespData) ->
     {'error', <<(kz_term:to_binary(RespCode))/binary, ": ", RespData/binary>>}.
 
--spec handle_delete_resp_error(kz_proplist()) -> {'error', any()}.
+-spec handle_delete_resp_error(kz_term:proplist()) -> {'error', any()}.
 handle_delete_resp_error(Props) ->
     Error = props:get_binary_value(<<"error">>, Props, <<>>),
     {'error', Error}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Parse address fields from an E911 JSON object.
+%%------------------------------------------------------------------------------
+%% @doc Parse address fields from an E911 JSON object.
 %% Omitted fields:
 %%   newSuiteType
 %%   newOther
 %%   newLanguage
 %% @end
-%%--------------------------------------------------------------------
--spec address_fields(kz_json:object()) -> kz_proplist().
+%%------------------------------------------------------------------------------
+-spec address_fields(kz_json:object()) -> kz_term:proplist().
 address_fields(E911) ->
     LastName = kz_json:get_binary_value(<<"customer_name">>, E911, <<>>),
     {StreetNum, StreetName} = address_parts(kz_json:get_binary_value(<<"street_address">>, E911, <<>>)),
@@ -333,7 +324,7 @@ address_parts(Address) ->
             end
     end.
 
--spec get_state_province_abbreviation(ne_binary()) -> ne_binary().
+-spec get_state_province_abbreviation(kz_term:ne_binary()) -> kz_term:ne_binary().
 get_state_province_abbreviation(StateOrProvince) ->
     States = [{<<"alabama">>, <<"AL">>}
              ,{<<"alaska">>, <<"AK">>}
@@ -422,13 +413,13 @@ get_state_province_abbreviation(StateOrProvince) ->
         Abbreviation -> Abbreviation
     end.
 
--spec lat_long(api_binary(), api_binary()) -> api_binary().
+-spec lat_long(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_binary().
 lat_long('undefined', _) -> 'undefined';
 lat_long(_, 'undefined') -> 'undefined';
 lat_long(Latitude, Longitude) ->
     <<"Latitude: ", Latitude/binary, " Longitude: ", Longitude/binary>>.
 
--spec supported_classification(ne_binary()) -> boolean().
+-spec supported_classification(kz_term:ne_binary()) -> boolean().
 supported_classification(DID) ->
     case knm_converters:classify(DID) of
         <<"did_us">> -> 'true';
@@ -438,8 +429,8 @@ supported_classification(DID) ->
             'false'
     end.
 
--spec stamp_and_signature(ne_binary(), api_binary()) ->
-                                 {ne_binary(), ne_binary()} |
+-spec stamp_and_signature(kz_term:ne_binary(), kz_term:api_binary()) ->
+                                 {kz_term:ne_binary(), kz_term:ne_binary()} |
                                  'undefined'.
 stamp_and_signature(_, 'undefined') ->
     lager:error("no api key found in configuration"),
@@ -452,10 +443,14 @@ stamp_and_signature(NPAN, APIKey) ->
                    || <<C>> <= MD5 >>,
     {Stamp, Signature}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal helper functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec trim(binary(), non_neg_integer()) -> binary().
 trim(Binary, Length) ->
     try binary:part(Binary, {0, Length}) of
@@ -464,20 +459,20 @@ trim(Binary, Length) ->
         error:badarg -> Binary
     end.
 
--spec pad_time(non_neg_integer()) -> ne_binary().
+-spec pad_time(non_neg_integer()) -> kz_term:ne_binary().
 pad_time(Time) when Time < 10 ->
     <<"0", (kz_term:to_binary(Time))/binary>>;
 pad_time(Time) ->
     kz_term:to_binary(Time).
 
 -spec date_string(pos_integer(), pos_integer(), pos_integer(), non_neg_integer(), non_neg_integer()) ->
-                         ne_binary().
+                         kz_term:ne_binary().
 date_string(Year, Month, Day, Hour, Minute) ->
     <<(kz_term:to_binary(Year))/binary
-      ,(pad_time(Month))/binary
-      ,(pad_time(Day))/binary
-      ,(pad_time(Hour))/binary
-      ,(pad_time(Minute))/binary>>.
+     ,(pad_time(Month))/binary
+     ,(pad_time(Day))/binary
+     ,(pad_time(Hour))/binary
+     ,(pad_time(Minute))/binary>>.
 
 -spec empty_jobj(kz_json:object()) -> boolean().
 empty_jobj(JObj) ->

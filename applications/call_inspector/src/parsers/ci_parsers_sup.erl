@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ci_parsers_sup).
 
 -behaviour(supervisor).
@@ -40,32 +38,30 @@
 
 -define(CHILDREN, parsers_from_config(?DEFAULT_PARSERS)).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
@@ -77,13 +73,15 @@ init([]) ->
 
 -type parser() :: 'ci_parser_freeswitch' | 'ci_parser_kamailio' | 'ci_parser_hep'.
 -spec start_child(parser(), [ci_parsers_util:parser_args()]) ->
-                         {'ok', atom()}.
+                         {'ok', atom()} |
+                         {'error', term()}.
 start_child(Module, Args) ->
     Id = ci_parsers_util:make_name(lists:keyfind('parser_args', 1, Args)),
     ChildSpec = ?WORKER_NAME_ARGS(Module, Id, Args),
     case supervisor:start_child(?SERVER, ChildSpec) of
         {'ok', _Pid} -> {'ok', Id};
-        {'error', {'already_started', _Pid}} -> {'ok', Id}
+        {'error', {'already_started', _Pid}} -> {'ok', Id};
+        {'error', _}=Error -> Error
     end.
 
 -spec stop_child(atom()) -> 'ok'.

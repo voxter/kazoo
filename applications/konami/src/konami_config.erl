@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Handles Konami code configs
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handles Konami code configs
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(konami_config).
 
 -export([numbers/0, numbers/1
@@ -24,10 +22,8 @@
                                        ,{<<"data">>, kz_json:from_list([{<<"text">>, <<"hi">>}])}
                                        ])).
 
--define(DEFAULT_NUMBERS, kz_json:from_list([{<<"2">>, ?META_SAY_HI}
-                                           ])).
--define(DEFAULT_PATTERNS, kz_json:from_list([{<<"^2$">>, ?META_SAY_HI}
-                                            ])).
+-define(DEFAULT_NUMBERS, kz_json:from_list([{<<"2">>, ?META_SAY_HI}])).
+-define(DEFAULT_PATTERNS, kz_json:from_list([{<<"^2$">>, ?META_SAY_HI}])).
 
 -define(DEFAULT_LISTEN_ON, 'a').
 
@@ -35,10 +31,10 @@
 -type formatter_fun() :: fun((any()) -> any()).
 
 -spec numbers() -> kz_json:object().
--spec numbers(ne_binary()) -> kz_json:object().
 numbers() ->
     kapps_config:get_json(<<"metaflows">>, <<"numbers">>, ?DEFAULT_NUMBERS).
 
+-spec numbers(kz_term:ne_binary()) -> kz_json:object().
 numbers(Account) ->
     case konami_doc(Account) of
         'undefined' -> numbers();
@@ -47,10 +43,10 @@ numbers(Account) ->
     end.
 
 -spec patterns() -> kz_json:object().
--spec patterns(ne_binary()) -> kz_json:object().
 patterns() ->
     kapps_config:get_json(<<"metaflows">>, <<"patterns">>, ?DEFAULT_PATTERNS).
 
+-spec patterns(kz_term:ne_binary()) -> kz_json:object().
 patterns(Account) ->
     case konami_doc(Account) of
         'undefined' -> patterns();
@@ -59,11 +55,11 @@ patterns(Account) ->
     end.
 
 -spec binding_digit() -> <<_:8>>.
--spec binding_digit(ne_binary()) -> <<_:8>>.
 binding_digit() ->
     BindingDigit = kapps_config:get_ne_binary(<<"metaflows">>, <<"binding_digit">>, ?DEFAULT_BINDING_DIGIT),
     constrain_binding_digit(BindingDigit).
 
+-spec binding_digit(kz_term:ne_binary()) -> <<_:8>>.
 binding_digit(Account) ->
     case konami_doc(Account) of
         'undefined' -> binding_digit();
@@ -71,7 +67,7 @@ binding_digit(Account) ->
             get_attribute(KonamiDoc, <<"binding_digit">>, fun binding_digit/0, fun constrain_binding_digit/1)
     end.
 
--spec constrain_binding_digit(ne_binary()) -> <<_:8>>.
+-spec constrain_binding_digit(kz_term:ne_binary()) -> <<_:8>>.
 constrain_binding_digit(BindingDigit) ->
     case lists:member(BindingDigit, ?ANY_DIGIT) of
         'true' -> BindingDigit;
@@ -79,10 +75,10 @@ constrain_binding_digit(BindingDigit) ->
     end.
 
 -spec timeout() -> non_neg_integer().
--spec timeout(ne_binary()) -> non_neg_integer().
 timeout() ->
     kapps_config:get_integer(<<"metaflows">>, <<"digit_timeout_ms">>, ?DEFAULT_DIGIT_TIMEOUT).
 
+-spec timeout(kz_term:ne_binary()) -> non_neg_integer().
 timeout(Account) ->
     case konami_doc(Account) of
         'undefined' -> timeout();
@@ -91,9 +87,10 @@ timeout(Account) ->
     end.
 
 -spec listen_on() -> 'a' | 'b' | 'ab'.
--spec listen_on(ne_binary()) -> 'a' | 'b' | 'ab'.
 listen_on() ->
     constrain_listen_on(kapps_config:get_ne_binary(<<"metaflows">>, <<"listen_on">>, ?DEFAULT_LISTEN_ON)).
+
+-spec listen_on(kz_term:ne_binary()) -> 'a' | 'b' | 'ab'.
 listen_on(Account) ->
     case konami_doc(Account) of
         'undefined' -> listen_on();
@@ -101,7 +98,7 @@ listen_on(Account) ->
             get_attribute(KonamiDoc, <<"listen_on">>, fun listen_on/0, fun constrain_listen_on/1)
     end.
 
--spec constrain_listen_on(api_binary()) -> 'a' | 'b' | 'ab'.
+-spec constrain_listen_on(kz_term:api_binary()) -> 'a' | 'b' | 'ab'.
 constrain_listen_on(<<"a">>) -> 'a';
 constrain_listen_on(<<"b">>) -> 'b';
 constrain_listen_on(<<"ab">>) -> 'ab';
@@ -111,20 +108,20 @@ constrain_listen_on(_) -> ?DEFAULT_LISTEN_ON.
 -spec identity(X) -> X.
 identity(X) -> X.
 
--spec get_attribute(kz_json:object(), ne_binary(), default_fun()) -> any().
--spec get_attribute(kz_json:object(), ne_binary(), default_fun(), formatter_fun()) -> any().
+-spec get_attribute(kz_json:object(), kz_term:ne_binary(), default_fun()) -> any().
 get_attribute(JObj, K, DefaultFun) ->
     get_attribute(JObj, K, DefaultFun, fun identity/1).
 
+-spec get_attribute(kz_json:object(), kz_term:ne_binary(), default_fun(), formatter_fun()) -> any().
 get_attribute(JObj, K, DefaultFun, FormatterFun) ->
     case kz_json:get_value(K, JObj) of
         'undefined' -> DefaultFun();
         V -> FormatterFun(V)
     end.
 
--spec konami_doc(ne_binary()) -> api_object().
+-spec konami_doc(kz_term:ne_binary()) -> kz_term:api_object().
 konami_doc(Account) ->
-    case kz_account:fetch(Account) of
+    case kzd_accounts:fetch(Account) of
         {'ok', JObj} -> kz_json:get_value(<<"metaflows">>, JObj);
         {'error', 'not_found'} -> 'undefined';
         {'error', _E} ->

@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_sup).
 -behaviour(supervisor).
 
@@ -29,20 +27,24 @@
                   ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
                   ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link(kz_json:object()) -> startlink_ret().
--spec start_link(kapps_call:call(), ne_binary()) -> startlink_ret().
--spec start_link(ne_binary(), ne_binary(), kz_json:object(), ne_binaries()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec start_link(kz_json:object()) -> kz_types:startlink_ret().
 start_link(AgentJObj) ->
     supervisor:start_link(?SERVER, [AgentJObj]).
+
+-spec start_link(kapps_call:call(), kz_term:ne_binary()) -> kz_types:startlink_ret().
 start_link(ThiefCall, QueueId) ->
     supervisor:start_link(?SERVER, [ThiefCall, QueueId]).
+
+-spec start_link(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binaries()) -> kz_types:startlink_ret().
 start_link(AcctId, AgentId, AgentJObj, Queues) ->
     supervisor:start_link(?SERVER, [AcctId, AgentId, AgentJObj, Queues]).
 
@@ -84,37 +86,35 @@ print_status([{K, V}|T]) ->
     ?PRINT("  ~s: ~p", [K, V]),
     print_status(T).
 
--spec listener(pid()) -> api_pid().
+-spec listener(pid()) -> kz_term:api_pid().
 listener(Super) ->
     case child_of_type(Super, 'acdc_agent_listener') of
         [] -> 'undefined';
         [P] -> P
     end.
 
--spec fsm(pid()) -> api_pid().
+-spec fsm(pid()) -> kz_term:api_pid().
 fsm(Super) ->
     case child_of_type(Super, 'acdc_agent_fsm') of
         [] -> 'undefined';
         [P] -> P
     end.
 
--spec child_of_type(pid(), atom()) -> pids().
+-spec child_of_type(pid(), atom()) -> kz_term:pids().
 child_of_type(S, T) -> [P || {Ty, P, 'worker', _} <- supervisor:which_children(S), T =:= Ty].
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init(Args) ->
     RestartStrategy = 'one_for_all',
     MaxRestarts = 2,
@@ -124,6 +124,6 @@ init(Args) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

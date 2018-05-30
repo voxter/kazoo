@@ -1,20 +1,26 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Handles inspection of incoming caller id and branching to a child
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handles inspection of incoming caller ID and branching to a child
 %%% callflow node accordingly.
 %%%
-%%% "data":{
-%%%   "id":"01fc63f92d9b89a25dd4ff1039e64497" // match list id
-%%% },
-%%% "children": {
-%%%   "match": { [callflow node to branch to when absolute mode is false and regex matches] },
-%%%   "nomatch": { [callflow node to branch to when regex does not match or no child node defined for incoming caller id] },
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`id'</dt>
+%%%   <dd>Document ID of the match list</dd>
+%%% </dl>
+%%%
+%%% Sample for children section of Callflow:
+%%% ```
+%%%     "children": {
+%%%         "match": { // callflow node to branch to when absolute mode is false and regex matches },
+%%%         "nomatch": { // callflow node to branch to when regex does not match or no child node defined for incoming caller id },
+%%%     }
+%%% '''
+%%%
+%%%
+%%% @author Kozlov Yakov
 %%% @end
-%%% @contributors
-%%%   Kozlov Yakov
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_cidlistmatch).
 
 -behaviour(gen_cf_action).
@@ -23,12 +29,10 @@
 
 -include("callflow.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     CallerIdNumber = kapps_call:caller_id_number(Call),
@@ -42,7 +46,7 @@ handle(Data, Call) ->
         'false' -> handle_no_match(Call)
     end.
 
--spec is_matching_prefix(ne_binary(), ne_binary(), ne_binary()) -> boolean().
+-spec is_matching_prefix(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 is_matching_prefix(AccountDb, ListId, Number) ->
     NumberPrefixes = build_keys(Number),
     Keys = [[ListId, X] || X <- NumberPrefixes],
@@ -51,7 +55,7 @@ is_matching_prefix(AccountDb, ListId, Number) ->
         _ -> 'false'
     end.
 
--spec is_matching_regexp(ne_binary(), ne_binary(), ne_binary()) -> boolean().
+-spec is_matching_regexp(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 is_matching_regexp(AccountDb, ListId, Number) ->
     case kz_datamgr:get_results(AccountDb, <<"lists/regexps_in_list">>, [{'key', ListId}]) of
         {'ok', Regexps} ->
@@ -64,7 +68,7 @@ is_matching_regexp(AccountDb, ListId, Number) ->
             'false'
     end.
 
--spec match_regexps(binaries(), ne_binary()) -> boolean().
+-spec match_regexps(kz_term:binaries(), kz_term:ne_binary()) -> boolean().
 match_regexps([Pattern | Rest], Number) ->
     case re:run(Number, Pattern) of
         {'match', _} -> 'true';
@@ -73,23 +77,21 @@ match_regexps([Pattern | Rest], Number) ->
 match_regexps([], _Number) -> 'false'.
 
 %% TODO: this function from hon_util, may be place it somewhere in library?
--spec build_keys(binary()) -> binaries().
+-spec build_keys(binary()) -> kz_term:binaries().
 build_keys(<<"+", E164/binary>>) ->
     build_keys(E164);
 build_keys(<<D:1/binary, Rest/binary>>) ->
     build_keys(Rest, D, [D]).
 
--spec build_keys(binary(), binary(), binaries()) -> binaries().
+-spec build_keys(binary(), binary(), kz_term:binaries()) -> kz_term:binaries().
 build_keys(<<D:1/binary, Rest/binary>>, Prefix, Acc) ->
     build_keys(Rest, <<Prefix/binary, D/binary>>, [<<Prefix/binary, D/binary>> | Acc]);
 build_keys(<<>>, _, Acc) -> Acc.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle a caller id "match" condition
+%%------------------------------------------------------------------------------
+%% @doc Handle a caller id "match" condition
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_match(kapps_call:call()) -> 'ok'.
 handle_match(Call) ->
     case is_callflow_child(<<"match">>, Call) of
@@ -97,12 +99,10 @@ handle_match(Call) ->
         'false' -> cf_exe:continue(Call)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle a caller id "no match" condition
+%%------------------------------------------------------------------------------
+%% @doc Handle a caller id "no match" condition
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_no_match(kapps_call:call()) -> 'ok'.
 handle_no_match(Call) ->
     case is_callflow_child(<<"nomatch">>, Call) of
@@ -110,13 +110,11 @@ handle_no_match(Call) ->
         'false' -> cf_exe:continue(Call)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if the given node name is a callflow child
+%%------------------------------------------------------------------------------
+%% @doc Check if the given node name is a callflow child
 %% @end
-%%--------------------------------------------------------------------
--spec is_callflow_child(ne_binary(), kapps_call:call()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_callflow_child(kz_term:ne_binary(), kapps_call:call()) -> boolean().
 is_callflow_child(Name, Call) ->
     lager:debug("Looking for callflow child ~s", [Name]),
     case cf_exe:attempt(Name, Call) of

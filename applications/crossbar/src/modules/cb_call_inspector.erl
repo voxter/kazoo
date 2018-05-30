@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_call_inspector).
 
 -export([init/0
@@ -19,16 +17,22 @@
 
 -include("crossbar.hrl").
 
-%%%===================================================================
-%%% API
-%%%===================================================================
+-define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".call_inspector">>).
+-define(MAX_BULK, kapps_config:get_pos_integer(?MOD_CONFIG_CAT, <<"maximum_bulk">>, 50)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+-define(CB_LIST, <<"cdrs/crossbar_listing">>).
+-define(CB_LIST_BY_USER, <<"cdrs/listing_by_owner">>).
+
+-define(MATCH_CDR_ID(YYYYMM, CallId), <<YYYYMM:6/binary, "-", CallId/binary>>).
+
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.call_inspector">>, ?MODULE, 'allowed_methods'),
@@ -37,90 +41,76 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.to_csv.get.call_inspector">>, ?MODULE, 'to_csv'),
     crossbar_bindings:bind(<<"*.validate.call_inspector">>, ?MODULE, 'validate').
 
--spec to_json(cb_cdrs:payload()) -> cb_cdrs:payload().
--spec to_json(cb_cdrs:payload(), list()) -> cb_cdrs:payload().
-to_json({Req1, Context}) ->
-    to_json({Req1, Context}
-           ,props:get_value(<<"call_inspector">>, cb_context:req_nouns(Context), [])
-           ).
-to_json(Payload, [_|_]) -> Payload;
-to_json({Req1, Context}, []) ->
-    Headers = cowboy_req:get('resp_headers', Req1),
-    {'ok', Req2} = cowboy_req:chunked_reply(200, Headers, Req1),
-    'ok' = cowboy_req:chunk("{\"status\":\"success\", \"data\":[", Req2),
-    {Req3, Context1} = send_chunked_cdrs({Req2, Context}),
-    'ok' = cowboy_req:chunk("]", Req3),
-    _ = cb_cdrs:pagination({Req3, Context1}),
-    'ok' = cowboy_req:chunk([",\"request_id\":\"", cb_context:req_id(Context), "\""
-                            ,",\"auth_token\":\"", cb_context:auth_token(Context), "\""
-                            ,"}"
-                            ]
-                           ,Req3
-                           ),
-    'ok' = cowboy_req:ensure_response(Req3, 200),
-    {Req3, cb_context:store(Context1, 'is_chunked', 'true')}.
+-spec to_json(cb_cowboy_payload()) -> cb_cowboy_payload().
+to_json({Req, Context}) ->
+    {Req, to_response(Context, <<"json">>, cb_context:req_nouns(Context))}.
 
--spec to_csv(cb_cdrs:payload()) -> cb_cdrs:payload().
--spec to_csv(cb_cdrs:payload(), list()) -> cb_cdrs:payload().
+-spec to_csv(cb_cowboy_payload()) -> cb_cowboy_payload().
 to_csv({Req, Context}) ->
-    to_csv({Req, Context}
-          ,props:get_value(<<"call_inspector">>, cb_context:req_nouns(Context), [])
-          ).
+    {Req, to_response(Context, <<"csv">>, cb_context:req_nouns(Context))}.
 
-to_csv(Payload, [_|_]) -> Payload;
-to_csv({Req, Context}, []) ->
-    Headers = props:set_values([{<<"content-type">>, <<"application/octet-stream">>}
-                               ,{<<"content-disposition">>, <<"attachment; filename=\"cdrs.csv\"">>}
-                               ]
-                              ,cowboy_req:get('resp_headers', Req)
-                              ),
-    {'ok', Req1} = cowboy_req:chunked_reply(200, Headers, Req),
-    Context1 = cb_context:store(Context, 'is_csv', 'true'),
-    {Req2, _} = send_chunked_cdrs({Req1, Context1}),
-    'ok' = cowboy_req:ensure_response(Req2, 200),
-    {Req2, cb_context:store(Context1,'is_chunked', 'true')}.
+to_response(Context, RespType, [{<<"call_inspector">>, []}, {?KZ_ACCOUNTS_DB, _}|_]) ->
+    load_chunked_cdrs(Context, RespType);
+to_response(Context, RespType, [{<<"call_inspector">>, []}, {<<"users">>, [_]}|_]) ->
+    load_chunked_cdrs(Context, RespType);
+to_response(Context, _, _) ->
+    Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() -> [?HTTP_GET].
 
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_CallId) -> [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /skels => []
-%%    /skels/foo => [<<"foo">>]
-%%    /skels/foo/bar => [<<"foo">>, <<"bar">>]
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /call_inspector => []
+%%    /call_inspector/foo => [<<"foo">>]
+%%    /call_inspector/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
 
 -spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /skels mights load a list of skel objects
-%% /skels/123 might load the skel object 123
+%% /call_inspector mights load a list of skel objects
+%% /call_inspector/123 might load the skel object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
-    cb_cdrs:validate(Context).
+    case get_view_options(cb_context:req_nouns(Context)) of
+        {'undefined', []} ->
+            lager:debug("invalid URL chain for cdrs request"),
+            cb_context:add_system_error('faulty_request', Context);
+        {ViewName, Options} ->
+            load_chunk_view(Context, ViewName, Options)
+    end.
+
+-spec load_chunk_view(cb_context:context(), kz_term:ne_binary(), kz_term:proplist()) -> cb_context:context().
+load_chunk_view(Context, ViewName, Options0) ->
+    AuthAccountId = cb_context:auth_account_id(Context),
+    IsReseller = kz_services:is_reseller(AuthAccountId),
+    Options = [{'is_chunked', 'true'}
+              ,{'chunk_size', ?MAX_BULK}
+               | Options0
+              ],
+    crossbar_view:load_modb(cb_context:store(Context, 'is_reseller', IsReseller), ViewName, Options).
 
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, CallId) ->
@@ -131,17 +121,25 @@ validate(Context, CallId) ->
             inspect_call_id(CallId, Context)
     end.
 
--spec inspect_call_id(ne_binary(), cb_context:context()) -> cb_context:context().
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec inspect_call_id(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 inspect_call_id(CallId, Context) ->
     Req = [{<<"Call-ID">>, CallId}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req
                                     ,fun kapi_inspector:publish_lookup_req/1
-                                    ,{call_inspector, fun kapi_inspector:lookup_resp_v/1, true}
+                                    ,{'call_inspector', fun kapi_inspector:lookup_resp_v/1, 'true'}
                                     )
     of
-        {ok, [JObj]} ->
+        {'ok', [JObj]} ->
             Chunks   = sanitize(kz_json:get_value(<<"Chunks">>, JObj, [])),
             Analysis = sanitize(kz_json:get_value(<<"Analysis">>, JObj, [])),
             Response = kz_json:from_list(
@@ -152,57 +150,68 @@ inspect_call_id(CallId, Context) ->
                          ]
                         ),
             crossbar_util:response(Response, Context);
-        {timeout, _Resp} ->
+        {'timeout', _Resp} ->
             lager:debug("timeout: ~s ~p", [CallId, _Resp]),
             crossbar_util:response_datastore_timeout(Context);
-        {error, _E} ->
+        {'error', _E} ->
             lager:debug("error: ~s ~p", [CallId, _E]),
             crossbar_util:response_bad_identifier(CallId, Context)
     end.
 
-%% @private
 -spec sanitize(kz_json:objects()) -> kz_json:objects().
 sanitize(JObjs) ->
     [kz_json:delete_key(<<"call-id">>, JObj) || JObj <- JObjs].
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
+%% @doc Generate specific view options for the path.
+%% @end
+%%------------------------------------------------------------------------------
+-spec get_view_options(req_nouns()) -> {kz_term:api_ne_binary(), crossbar_view:options()}.
+get_view_options([{<<"call_inspector">>, []}, {?KZ_ACCOUNTS_DB, _}|_]) ->
+    {?CB_LIST, []};
+get_view_options([{<<"call_inspector">>, []}, {<<"users">>, [OwnerId]}|_]) ->
+    {?CB_LIST_BY_USER
+    ,[{'range_start_keymap', [OwnerId]}
+     ,{'range_end_keymap', [OwnerId]}
+     ]
+    };
+get_view_options(_) ->
+    {'undefined', []}.
+
+%%------------------------------------------------------------------------------
+%% @doc Loads CDR docs from database and normalized the them.
+%% @end
+%%------------------------------------------------------------------------------
+-spec load_chunked_cdrs(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+load_chunked_cdrs(Context, RespType) ->
+    Ids = get_cdr_ids(cb_context:resp_data(Context)),
+    cb_cdrs:load_chunked_cdr_ids(Context, RespType, Ids).
+
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec send_chunked_cdrs(cb_cdrs:payload()) -> cb_cdrs:payload().
-send_chunked_cdrs({Req, Context}) ->
-    Dbs = cb_context:fetch(Context, 'chunked_dbs'),
-    AuthAccountId = cb_context:auth_account_id(Context),
-    IsReseller = kz_services:is_reseller(AuthAccountId),
-    send_chunked_cdrs(Dbs, {Req, cb_context:store(Context, 'is_reseller', IsReseller)}).
-
--spec send_chunked_cdrs(ne_binaries(), cb_cdrs:payload()) -> cb_cdrs:payload().
-send_chunked_cdrs([], Payload) -> Payload;
-send_chunked_cdrs([Db | Dbs], {Req, Context}) ->
-    View = cb_context:fetch(Context, 'chunked_view'),
-    ViewOptions = cb_cdrs:fetch_view_options(Context),
-    Context1 = cb_context:store(Context, 'start_key', props:get_value('startkey', ViewOptions)),
-    Context2 = cb_context:store(Context1, 'page_size', 0),
-    Ids = get_cdr_ids(Db, View, ViewOptions),
-    {Context3, CDRIds} = cb_cdrs:maybe_paginate_and_clean(Context2, Ids),
-    send_chunked_cdrs(Dbs, cb_cdrs:load_chunked_cdrs(Db, CDRIds, {Req, Context3})).
-
--define(MATCH_CDR_ID(YYYYMM, CallId), <<YYYYMM:6/binary, "-", CallId/binary>>).
-
--spec get_cdr_ids(ne_binary(), ne_binary(), crossbar_doc:view_options()) -> kz_proplist().
-get_cdr_ids(Db, View, ViewOptions) ->
-    {ok, Ids} = cb_cdrs:get_cdr_ids(Db, View, ViewOptions),
+%%------------------------------------------------------------------------------
+-spec get_cdr_ids(kz_json:objects()) -> kz_term:ne_binaries().
+get_cdr_ids(JObjs) ->
+    Ids = [kz_doc:id(JObj) || JObj <- JObjs],
     %% Remove leading year, month and dash
-    CallIds = [CallId || {?MATCH_CDR_ID(_,CallId), _CDR} <- Ids],
-    lager:debug("filtering ~p callids", [length(CallIds)]),
+    CallIds = [CallId || ?MATCH_CDR_ID(_, CallId) <- Ids],
+
+    lager:debug("filtering ~p call_ids", [length(CallIds)]),
     FilteredCallIds = filter_callids(CallIds),
+
     lager:debug("found ~p dialogues", [length(FilteredCallIds)]),
-    [Id || {?MATCH_CDR_ID(_,CallId), _}=Id <- Ids,
-           lists:member(CallId, FilteredCallIds)
+
+    [Id ||?MATCH_CDR_ID(_, CallId)=Id <- Ids,
+          lists:member(CallId, FilteredCallIds)
     ].
 
--spec filter_callids(ne_binaries()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+%% @doc Send a filter request to call_inspector application to filter
+%% which cdr_id is on call_inspector data store
+%% @end
+%%------------------------------------------------------------------------------
+-spec filter_callids(kz_term:ne_binaries()) -> kz_term:ne_binaries().
 filter_callids([]) -> [];
 filter_callids(CallIds) ->
     Req = [{<<"Call-IDs">>, CallIds}
@@ -210,17 +219,17 @@ filter_callids(CallIds) ->
           ],
     case kz_amqp_worker:call_collect(Req
                                     ,fun kapi_inspector:publish_filter_req/1
-                                    ,{call_inspector, true}
+                                    ,{'call_inspector', fun kapi_inspector:filter_resp_v/1, 'true'}
                                     )
     of
-        {ok, JObjs} ->
+        {'ok', JObjs} ->
             FilterIds = fun (JObj) -> kz_json:get_value(<<"Call-IDs">>, JObj, []) end,
             lists:usort(lists:flatmap(FilterIds, JObjs));
-        {timeout, JObjs} ->
+        {'timeout', JObjs} ->
             lager:debug("timeout ~s", [kz_json:encode(JObjs)]),
             FilterIds = fun (JObj) -> kz_json:get_value(<<"Call-IDs">>, JObj, []) end,
             lists:usort(lists:flatmap(FilterIds, JObjs));
-        {error, _E} ->
+        {'error', _E} ->
             lager:debug("error: ~p", [_E]),
             []
     end.

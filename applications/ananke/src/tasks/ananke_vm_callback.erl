@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author SIPLABS, LLC (Ilya Ashchepkov)
 %%% @end
-%%% @contributors
-%%%     SIPLABS, LLC (Ilya Ashchepkov)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ananke_vm_callback).
 
 -export([init/0
@@ -16,21 +14,21 @@
 
 -include("ananke.hrl").
 
--record(args, {account_id            :: api_binary()
-              ,user_id               :: api_binary()
-              ,vm_box_id             :: api_binary()
-              ,callback_number       :: api_binary()
+-record(args, {account_id            :: kz_term:api_binary()
+              ,user_id               :: kz_term:api_binary()
+              ,vm_box_id             :: kz_term:api_binary()
+              ,callback_number       :: kz_term:api_binary()
               ,is_callback_disabled  :: boolean()
-              ,vm_number             :: api_binary()
+              ,vm_number             :: kz_term:api_binary()
               ,schedule              :: pos_integers()
               ,call_timeout          :: pos_integer()
-              ,realm                 :: api_binary()
+              ,realm                 :: kz_term:api_binary()
               }).
 
 -spec init() -> 'ok'.
 init() -> 'ok'.
 
--spec check(ne_binary(), ne_binary()) -> any().
+-spec check(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 check(AccountId, VMBoxId) ->
     lager:info("checking vmbox ~p in ~p", [VMBoxId, AccountId]),
     case has_unread(AccountId, VMBoxId) of
@@ -46,12 +44,12 @@ check(AccountId, VMBoxId) ->
                       )
     end.
 
--spec has_unread(ne_binary(), ne_binary()) -> boolean().
+-spec has_unread(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 has_unread(AccountId, VMBoxId) ->
     {New, _} = kvm_messages:count_non_deleted(AccountId, VMBoxId),
     New > 0.
 
--spec handle_req(kz_json:object(), kz_proplist()) -> any().
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> any().
 handle_req(JObj, Props) ->
     'true' = props:get_value(<<"skip_verification">>, Props, 'false')
         orelse kapi_notifications:voicemail_saved_v(JObj),
@@ -66,7 +64,7 @@ handle_req(JObj, Props) ->
         UserId ->
             lager:debug("voicemail owner is ~p", [UserId]),
             {'ok', UserJObj} = kz_datamgr:open_cache_doc(AccountDb, UserId),
-            {'ok', AccountJObj} = kz_account:fetch(AccountId),
+            {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
 
             OptionsPath = [<<"notify">>, <<"callback">>],
             VMBoxNotifyJObj = kz_json:get_value(OptionsPath, VMBoxJObj),
@@ -99,7 +97,7 @@ handle_req(JObj, Props) ->
             maybe_start_caller(StartArgs)
     end.
 
--spec get_voicemail_number(ne_binary(), ne_binary()) -> api_binary().
+-spec get_voicemail_number(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_binary().
 get_voicemail_number(AccountDb, Mailbox) ->
     {'ok', Callflows} = kz_datamgr:get_results(AccountDb
                                               ,<<"callflows/crossbar_listing">>
@@ -126,14 +124,14 @@ is_voicemail_cf(JObj) ->
         _ -> is_voicemail_cf(FlowJObj)
     end.
 
--spec get_cf_flow(kz_json:object()) -> api_object().
+-spec get_cf_flow(kz_json:object()) -> kz_term:api_object().
 get_cf_flow(JObj) ->
     case kz_json:get_value([<<"children">>, <<"_">>], JObj) of
         'undefined' -> kz_json:get_value([<<"doc">>, <<"flow">>], JObj);
         FlowJObj -> FlowJObj
     end.
 
--spec get_callflow_number(kz_json:object(), ne_binary()) -> api_binary().
+-spec get_callflow_number(kz_json:object(), kz_term:ne_binary()) -> kz_term:api_binary().
 get_callflow_number(Callflow, _Mailbox) ->
     case kz_json:get_value([<<"doc">>, <<"numbers">>], Callflow, ['undefined']) of
         [] -> 'undefined';
@@ -164,7 +162,7 @@ start_caller(#args{callback_number = Number
     WorkerArgs = [OriginateReq, Schedule, CheckFun],
     ananke_tasks_sup:start_task(WorkerId, 'ananke_callback_worker', WorkerArgs).
 
--spec build_originate_req(#args{}) -> kz_proplist().
+-spec build_originate_req(#args{}) -> kz_term:proplist().
 build_originate_req(#args{callback_number = CallbackNumber
                          ,vm_number = VMNumber
                          ,account_id = AccountId
@@ -215,11 +213,11 @@ build_originate_req(#args{callback_number = CallbackNumber
        | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
       ]).
 
--spec get_first_defined([{ne_binary(), kz_json:object()}]) -> api_binary().
+-spec get_first_defined([{kz_term:ne_binary(), kz_json:object()}]) -> kz_term:api_binary().
 get_first_defined(Props) ->
     get_first_defined(Props, 'undefined').
 
--spec get_first_defined([{ne_binary(), kz_json:object()}], Default) -> binary() | Default.
+-spec get_first_defined([{kz_term:ne_binary(), kz_json:object()}], Default) -> binary() | Default.
 get_first_defined([], Default) -> Default;
 get_first_defined([{Keys, JObj} | Rest], Default) ->
     case kz_json:get_value(Keys, JObj) of

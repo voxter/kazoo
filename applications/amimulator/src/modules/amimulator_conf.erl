@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_conf).
 
 -export([init/1
@@ -12,11 +17,11 @@
 %% Public functions
 %%
 
--spec init(ne_binary()) -> 'ok'.
+-spec init(kz_term:ne_binary()) -> 'ok'.
 init(_AccountId) ->
     ok.
 
--spec bindings(kz_proplist()) -> kz_proplist().
+-spec bindings(kz_term:proplist()) -> kz_term:proplist().
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [
@@ -25,11 +30,11 @@ bindings(Props) ->
                   ]}
     ].
 
--spec responders(kz_proplist()) -> kz_proplist().
+-spec responders(kz_term:proplist()) -> kz_term:proplist().
 responders(_Props) ->
     [{<<"conference">>, <<"event">>}].
 
--spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_event(EventJObj, _) ->
     Event = kz_json:get_value(<<"Event">>, EventJObj),
     handle_specific_event(Event, EventJObj).
@@ -110,7 +115,7 @@ conference_bindings([], Bindings) ->
 conference_bindings([ConferenceId|Ids], Bindings) ->
     conference_bindings(Ids, [{event, ConferenceId} | Bindings]).
 
--spec add_participants_cache_entry(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec add_participants_cache_entry(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 add_participants_cache_entry(CallId, Channel, CallerIdName) ->
     {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
 
@@ -120,6 +125,6 @@ add_participants_cache_entry(CallId, Channel, CallerIdName) ->
             ],
     ami_sm:cache_conf_part(CallId, Cache).
 
--spec del_participants_cache_entry(ne_binary()) -> 'ok'.
+-spec del_participants_cache_entry(kz_term:ne_binary()) -> 'ok'.
 del_participants_cache_entry(CallId) ->
     ami_sm:delete_cached_conf_part(CallId).

@@ -1,29 +1,31 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_auth_client).
 
 -include("kazoo_auth.hrl").
 
 -define(AUTH_BY_SYSTEM_IDS, <<"auth/auth_by_system_ids">>).
 
-%% ====================================================================
-%% API functions
-%% ====================================================================
+-type token() :: {ok | error, map()}.
+-export_type([token/0]).
+
+%%%=============================================================================
+%%% API functions
+%%%=============================================================================
+
 -export([token_for_app/1, token_for_app/2
         ,token_for_auth_id/1, token_for_auth_id/2
         ]).
 
 
--spec token_for_auth_id(ne_binary()) -> {ok | error, map()}.
+-spec token_for_auth_id(kz_term:ne_binary()) -> {ok | error, map()}.
 token_for_auth_id(AuthId) ->
     token_for_auth_id(AuthId, #{}).
 
--spec token_for_auth_id(ne_binary(), map()) -> {ok | error, map()}.
+-spec token_for_auth_id(kz_term:ne_binary(), map()) -> {ok | error, map()}.
 token_for_auth_id(AuthId, Options) ->
     Map = #{options => Options#{auth_id => AuthId}},
     Routines = [fun add_subject/1
@@ -40,11 +42,11 @@ token_for_auth_id(AuthId, Options) ->
     kz_auth_util:run(Map, Routines).
 
 
--spec token_for_app(ne_binary()) -> {ok | error, map()}.
+-spec token_for_app(kz_term:ne_binary()) -> {ok | error, map()}.
 token_for_app(AppId) ->
     token_for_app(AppId, #{}).
 
--spec token_for_app(ne_binary(), map()) -> {ok | error, map()}.
+-spec token_for_app(kz_term:ne_binary(), map()) -> {ok | error, map()}.
 token_for_app(AppId, Options) ->
     Map = #{app_id => AppId
            ,options => Options
@@ -63,10 +65,14 @@ token_for_app(AppId, Options) ->
     kz_auth_util:run(Map, Routines).
 
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 add_app(#{app_id := AppId}=Map) ->
     case kz_auth_apps:get_auth_app(AppId, 'app_and_provider') of
         {'error', _} = Error -> Map#{error => Error};

@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% Handlers for various AMQP payloads
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Handlers for various AMQP payloads
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(j5_request).
 
 -export([authorize/3
@@ -68,44 +66,43 @@
         ,callee_id_name/1
         ]).
 -export([resource_type/1]).
+-export([resource_id/1]).
 -export([account_trunk_usage/1]).
 -export([reseller_trunk_usage/1]).
 
 -include("jonny5.hrl").
 
--record(request, {account_id :: api_binary()
-                 ,account_billing :: api_binary()
+-record(request, {account_id :: kz_term:api_binary()
+                 ,account_billing :: kz_term:api_binary()
                  ,account_authorized = 'false' :: boolean()
-                 ,reseller_id :: api_binary()
-                 ,reseller_billing :: api_binary()
+                 ,reseller_id :: kz_term:api_binary()
+                 ,reseller_billing :: kz_term:api_binary()
                  ,reseller_authorized = 'false' :: boolean()
                  ,soft_limit = 'false' :: boolean()
-                 ,call_id :: api_binary()
-                 ,call_direction :: api_binary()
-                 ,other_leg_call_id :: api_binary()
-                 ,sip_to :: api_binary()
-                 ,sip_from :: api_binary()
-                 ,sip_request :: api_binary()
-                 ,message_id :: api_binary()
-                 ,server_id :: api_binary()
-                 ,node :: api_binary()
-                 ,classification :: api_binary()
-                 ,number :: api_binary()
+                 ,call_id :: kz_term:api_binary()
+                 ,call_direction :: kz_term:api_binary()
+                 ,other_leg_call_id :: kz_term:api_binary()
+                 ,sip_to :: kz_term:api_binary()
+                 ,sip_from :: kz_term:api_binary()
+                 ,sip_request :: kz_term:api_binary()
+                 ,message_id :: kz_term:api_binary()
+                 ,server_id :: kz_term:api_binary()
+                 ,node :: kz_term:api_binary()
+                 ,classification :: kz_term:api_binary()
+                 ,number :: kz_term:api_binary()
                  ,billing_seconds = 0 :: non_neg_integer()
                  ,answered_time = 0 :: non_neg_integer()
-                 ,timestamp = 0 :: gregorian_seconds()
+                 ,timestamp = 0 :: kz_time:gregorian_seconds()
                  ,request_jobj = kz_json:new() :: kz_json:object()
                  ,request_ccvs = kz_json:new() :: kz_json:object()
                  }).
 -opaque request() :: #request{}.
 -export_type([request/0]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec from_jobj(kz_json:object()) -> request().
 from_jobj(JObj) ->
     CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
@@ -129,14 +126,14 @@ from_jobj(JObj) ->
             ,node = kz_api:node(JObj)
             ,billing_seconds = kz_json:get_integer_value(<<"Billing-Seconds">>, JObj, 0)
             ,answered_time = kz_json:get_integer_value(<<"Answered-Seconds">>, JObj, 0)
-            ,timestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj, kz_time:current_tstamp())
+            ,timestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj, kz_time:now_s())
             ,classification = knm_converters:classify(Number)
             ,number = Number
             ,request_jobj = JObj
             ,request_ccvs = CCVs
             }.
 
--spec from_ccvs(request(), kz_proplist()) -> request().
+-spec from_ccvs(request(), kz_term:proplist()) -> request().
 from_ccvs(#request{request_ccvs=ReqCCVs
                   ,request_jobj=ReqJObj
                   }=Request, CCVs) ->
@@ -148,7 +145,7 @@ from_ccvs(#request{request_ccvs=ReqCCVs
                    }.
 
 
--spec request_number(ne_binary(), kz_json:object()) -> ne_binary().
+-spec request_number(kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binary().
 request_number(Number, CCVs) ->
     case kz_json:get_first_defined([<<"E164-Destination">>
                                    ,<<"Original-Number">>
@@ -163,12 +160,10 @@ request_number(Number, CCVs) ->
 -spec ccvs(request()) -> kz_json:object().
 ccvs(#request{request_ccvs=CCVs}) -> CCVs.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec to_jobj(request()) -> kz_json:object().
 to_jobj(Request) ->
     Props =
@@ -188,13 +183,11 @@ to_jobj(Request) ->
          ),
     kz_json:from_list(Props).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec authorize(ne_binary(), request(), j5_limits:limits()) -> request().
+%%------------------------------------------------------------------------------
+-spec authorize(kz_term:ne_binary(), request(), j5_limits:limits()) -> request().
 authorize(Reason
          ,#request{reseller_id=AccountId
                   ,account_id=AccountId
@@ -211,7 +204,7 @@ authorize(Reason
             authorized_by_account(Reason, Request)
     end.
 
--spec authorized_by_reseller(ne_binary(), request()) -> request().
+-spec authorized_by_reseller(kz_term:ne_binary(), request()) -> request().
 authorized_by_reseller(Reason, #request{reseller_id=_ResellerId}=Request) ->
     lager:debug("reseller ~s authorized channel: ~s"
                ,[_ResellerId, Reason]
@@ -220,7 +213,7 @@ authorized_by_reseller(Reason, #request{reseller_id=_ResellerId}=Request) ->
                    ,reseller_authorized='true'
                    }.
 
--spec authorized_by_account(ne_binary(), request()) -> request().
+-spec authorized_by_account(kz_term:ne_binary(), request()) -> request().
 authorized_by_account(Reason, #request{account_id=_AccountId}=Request) ->
     lager:debug("account ~s authorized channel: ~s"
                ,[_AccountId, Reason]
@@ -229,21 +222,19 @@ authorized_by_account(Reason, #request{account_id=_AccountId}=Request) ->
                    ,account_authorized='true'
                    }.
 
--spec authorize_account(ne_binary(), request()) -> request().
+-spec authorize_account(kz_term:ne_binary(), request()) -> request().
 authorize_account(Reason, Request) ->
     authorized_by_account(Reason, Request).
 
--spec authorize_reseller(ne_binary(), request()) -> request().
+-spec authorize_reseller(kz_term:ne_binary(), request()) -> request().
 authorize_reseller(Reason, Request) ->
     authorized_by_reseller(Reason, Request).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec deny(ne_binary(), request(), j5_limits:limits()) -> request().
+%%------------------------------------------------------------------------------
+-spec deny(kz_term:ne_binary(), request(), j5_limits:limits()) -> request().
 deny(Reason
     ,#request{reseller_id=ResellerId
              ,account_id=AccountId
@@ -266,7 +257,7 @@ deny(Reason
                            }
     end.
 
--spec deny_account(ne_binary(), request()) -> request().
+-spec deny_account(kz_term:ne_binary(), request()) -> request().
 deny_account(Reason, #request{account_id=AccountId}=Request) ->
     lager:debug("account ~s denied channel: ~s"
                ,[AccountId, Reason]
@@ -275,7 +266,7 @@ deny_account(Reason, #request{account_id=AccountId}=Request) ->
                    ,account_authorized='false'
                    }.
 
--spec deny_reseller(ne_binary(), request()) -> request().
+-spec deny_reseller(kz_term:ne_binary(), request()) -> request().
 deny_reseller(Reason, #request{reseller_id=ResellerId}=Request) ->
     lager:debug("reseller ~s denied channel: ~s"
                ,[ResellerId, Reason]
@@ -284,12 +275,10 @@ deny_reseller(Reason, #request{reseller_id=ResellerId}=Request) ->
                    ,reseller_authorized='false'
                    }.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_authorized(request()) -> boolean().
 is_authorized(#request{account_id=AccountId
                       ,account_authorized=Authorized
@@ -312,39 +301,33 @@ is_authorized(#request{account_authorized=AccountAuthorized
         'false' -> AccountAuthorized
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec set_account_id(api_binary(), request()) -> request().
+%%------------------------------------------------------------------------------
+-spec set_account_id(kz_term:api_binary(), request()) -> request().
 set_account_id(AccountId, Request) ->
     Request#request{account_id=AccountId}.
 
--spec account_id(request()) -> api_binary().
+-spec account_id(request()) -> kz_term:api_binary().
 account_id(#request{account_id=AccountId}) -> AccountId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec set_reseller_id(api_binary(), request()) -> request().
+%%------------------------------------------------------------------------------
+-spec set_reseller_id(kz_term:api_binary(), request()) -> request().
 set_reseller_id(ResellerId, Request) ->
     Request#request{reseller_id=ResellerId}.
 
--spec reseller_id(request()) -> api_binary().
+-spec reseller_id(request()) -> kz_term:api_binary().
 reseller_id(#request{reseller_id=ResellerId}) -> ResellerId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec billing(request(), j5_limits:limits()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec billing(request(), j5_limits:limits()) -> kz_term:api_binary().
 billing(#request{account_billing=AccountBilling
                 ,reseller_id=ResellerId
                 ,reseller_billing=ResellerBilling
@@ -355,18 +338,16 @@ billing(#request{account_billing=AccountBilling
         'false' -> AccountBilling
     end.
 
--spec account_billing(request()) -> api_binary().
+-spec account_billing(request()) -> kz_term:api_binary().
 account_billing(#request{account_billing=Billing}) -> Billing.
 
--spec reseller_billing(request()) -> api_binary().
+-spec reseller_billing(request()) -> kz_term:api_binary().
 reseller_billing(#request{reseller_billing=Billing}) -> Billing.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec set_soft_limit(request()) -> request().
 set_soft_limit(Request) ->
     Request#request{soft_limit='true'}.
@@ -378,142 +359,112 @@ clear_soft_limit(Request) ->
 -spec soft_limit(request()) -> boolean().
 soft_limit(#request{soft_limit=SoftLimit}) -> SoftLimit.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec other_leg_call_id(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec other_leg_call_id(request()) -> kz_term:api_binary().
 other_leg_call_id(#request{other_leg_call_id=CallId}) -> CallId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec timestamp(request()) -> non_neg_integer().
 timestamp(#request{timestamp=Timestamp}) -> Timestamp.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec answered_time(request()) -> non_neg_integer() | 'undefined'.
 answered_time(#request{answered_time=AnsweredTime}) ->
     AnsweredTime.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec billing_seconds(request()) -> non_neg_integer() | 'undefined'.
 billing_seconds(#request{billing_seconds=BillingSeconds}) ->
     BillingSeconds.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec call_direction(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec call_direction(request()) -> kz_term:api_binary().
 call_direction(#request{call_direction=CallDirection}) ->
     CallDirection.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec call_id(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec call_id(request()) -> kz_term:api_binary().
 call_id(#request{call_id=CallId}) -> CallId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec from(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec from(request()) -> kz_term:api_binary().
 from(#request{sip_from=From}) -> From.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec to(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec to(request()) -> kz_term:api_binary().
 to(#request{sip_to=To}) -> To.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec message_id(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec message_id(request()) -> kz_term:api_binary().
 message_id(#request{message_id=MessageId}) -> MessageId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec server_id(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec server_id(request()) -> kz_term:api_binary().
 server_id(#request{server_id=ServerId}) -> ServerId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec node(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec node(request()) -> kz_term:api_binary().
 node(#request{node=NodeId}) -> NodeId.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec classification(request()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec classification(request()) -> kz_term:api_binary().
 classification(#request{classification=Classification}) -> Classification.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec number(request()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec number(request()) -> kz_term:ne_binary().
 number(#request{number=Number}) -> Number.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec per_minute_cost(request()) -> non_neg_integer().
 per_minute_cost(#request{request_jobj=JObj}) ->
     wht_util:per_minute_cost(JObj).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec call_cost(request()) -> non_neg_integer().
 call_cost(#request{request_jobj=JObj}) ->
     wht_util:call_cost(JObj).
@@ -522,7 +473,7 @@ call_cost(#request{request_jobj=JObj}) ->
 calculate_call(#request{request_jobj=JObj}) ->
     wht_util:calculate_call(JObj).
 
--spec caller_network_address(request()) -> api_binary().
+-spec caller_network_address(request()) -> kz_term:api_binary().
 caller_network_address(#request{request_jobj=JObj}) ->
     kz_json:get_value(<<"From-Network-Addr">>, JObj).
 
@@ -530,50 +481,54 @@ caller_network_address(#request{request_jobj=JObj}) ->
 rate(#request{request_ccvs=CCVs}) ->
     kz_json:get_integer_value(<<"Rate">>, CCVs).
 
--spec rate_name(request()) -> ne_binary().
+-spec rate_name(request()) -> kz_term:ne_binary().
 rate_name(#request{request_ccvs=CCVs}) ->
     kz_json:get_ne_binary_value(<<"Rate-Name">>, CCVs).
 
--spec rate_description(request()) -> ne_binary().
+-spec rate_description(request()) -> kz_term:ne_binary().
 rate_description(#request{request_ccvs=CCVs}) ->
     kz_json:get_ne_binary_value(<<"Rate-Description">>, CCVs).
 
--spec rate_increment(request()) -> ne_binary().
+-spec rate_increment(request()) -> kz_term:ne_binary().
 rate_increment(#request{request_ccvs=CCVs}) ->
     kz_json:get_integer_value(<<"Rate-Increment">>, CCVs, 0).
 
--spec rate_minimum(request()) -> ne_binary().
+-spec rate_minimum(request()) -> kz_term:ne_binary().
 rate_minimum(#request{request_ccvs=CCVs}) ->
     kz_json:get_integer_value(<<"Rate-Minimum">>, CCVs, 0).
 
--spec rate_nocharge_time(request()) -> ne_binary().
+-spec rate_nocharge_time(request()) -> kz_term:ne_binary().
 rate_nocharge_time(#request{request_ccvs=CCVs}) ->
     kz_json:get_integer_value(<<"Rate-NoCharge-Time">>, CCVs, 0).
 
--spec caller_id_number(request()) -> api_binary().
+-spec caller_id_number(request()) -> kz_term:api_binary().
 caller_id_number(#request{request_jobj=JObj}) ->
     kz_json:get_value(<<"Caller-ID-Number">>, JObj).
 
--spec caller_id_name(request()) -> api_binary().
+-spec caller_id_name(request()) -> kz_term:api_binary().
 caller_id_name(#request{request_jobj=JObj}) ->
     kz_json:get_value(<<"Caller-ID-Name">>, JObj).
 
--spec callee_id_number(request()) -> api_binary().
+-spec callee_id_number(request()) -> kz_term:api_binary().
 callee_id_number(#request{request_jobj=JObj}) ->
     kz_json:get_value(<<"Callee-ID-Number">>, JObj).
 
--spec callee_id_name(request()) -> api_binary().
+-spec callee_id_name(request()) -> kz_term:api_binary().
 callee_id_name(#request{request_jobj=JObj}) ->
     kz_json:get_value(<<"Callee-ID-Name">>, JObj).
 
--spec resource_type(request()) -> api_binary().
+-spec resource_type(request()) -> kz_term:api_binary().
 resource_type(#request{request_ccvs=CCVs}) ->
     kz_json:get_value(<<"Resource-Type">>, CCVs).
 
--spec account_trunk_usage(request()) -> api_binary().
+-spec resource_id(request()) -> kz_term:api_ne_binary().
+resource_id(#request{request_ccvs=CCVs}) ->
+    kz_json:get_ne_binary_value(<<"Resource-ID">>, CCVs).
+
+-spec account_trunk_usage(request()) -> kz_term:api_binary().
 account_trunk_usage(#request{request_ccvs=CCVs}) ->
     kz_json:get_value(<<"Account-Trunk-Usage">>, CCVs).
 
--spec reseller_trunk_usage(request()) -> api_binary().
+-spec reseller_trunk_usage(request()) -> kz_term:api_binary().
 reseller_trunk_usage(#request{request_ccvs=CCVs}) ->
     kz_json:get_value(<<"Reseller-Trunk-Usage">>, CCVs).

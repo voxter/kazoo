@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Sergey Korobkov
 %%% @end
-%%% @contributors
-%%%   Sergey Korobkov
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kt_rates).
 %% behaviour: tasks_provider
 
@@ -36,10 +34,16 @@
 -define(RATES_VIEW, <<"rates/lookup">>).
 -define(BULK_LIMIT, 500).
 
-%%%===================================================================
-%%% API
-%%%===================================================================
+-define(DOLLAR_SIGN, 36). % = $\$ but makes fmt wonky atm
 
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = tasks_bindings:bind(<<"tasks.help">>, ?MODULE, 'help'),
@@ -48,21 +52,21 @@ init() ->
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".cleanup">>, ?MODULE, 'cleanup'),
     tasks_bindings:bind_actions(<<"tasks."?CATEGORY>>, ?MODULE, ?ACTIONS).
 
--spec output_header(ne_binary()) -> kz_tasks:output_header().
+-spec output_header(kz_term:ne_binary()) -> kz_tasks:output_header().
 output_header(<<"export">>) -> ?DOC_FIELDS.
 
 -spec help(kz_json:object()) -> kz_json:object().
 help(JObj) -> help(JObj, <<?CATEGORY>>).
 
--spec help(kz_json:object(), ne_binary()) -> kz_json:object().
+-spec help(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
 help(JObj, <<?CATEGORY>>=Category) ->
     lists:foldl(fun(Action, J) -> help(J, Category, Action) end, JObj, ?ACTIONS).
 
--spec help(kz_json:object(), ne_binary(), ne_binary()) -> kz_json:object().
+-spec help(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().
 help(JObj, <<?CATEGORY>>=Category, Action) ->
     kz_json:set_value([Category, Action], kz_json:from_list(action(Action)), JObj).
 
--spec action(ne_binary()) -> kz_proplist().
+-spec action(kz_term:ne_binary()) -> kz_term:proplist().
 action(<<"export">>) ->
     [{<<"description">>, <<"Export ratedeck">>}
     ,{<<"doc">>, <<"Export rates from the supplied ratedeck">>}
@@ -93,7 +97,7 @@ action(<<"delete">>) ->
 
 %%% Verifiers
 
--spec direction(ne_binary()) -> boolean().
+-spec direction(kz_term:ne_binary()) -> boolean().
 direction(<<"inbound">>) -> 'true';
 direction(<<"outbound">>) -> 'true';
 direction(_) -> 'false'.
@@ -157,13 +161,13 @@ import(ExtraArgs, 'init', Args) ->
     end;
 import(_ExtraArgs, Dict, Args) ->
     Rate = generate_row(Args),
-    Db = kzd_ratedeck:format_ratedeck_db(kzd_rate:ratedeck(Rate, ?KZ_RATES_DB)),
+    Db = kzd_ratedeck:format_ratedeck_db(kzd_rates:ratedeck_id(Rate, ?KZ_RATES_DB)),
 
     BulkLimit = kz_datamgr:max_bulk_insert(),
 
     case dict:find(Db, Dict) of
         'error' ->
-            lager:debug("adding prefix ~s to ratedeck '~s'", [kzd_rate:prefix(Rate), Db]),
+            lager:debug("adding prefix ~s to ratedeck '~s'", [kzd_rates:prefix(Rate), Db]),
             {'ok', dict:store(Db, {1, [Rate]}, Dict)};
         {'ok', {BulkLimit, Rates}} ->
             lager:info("saving ~b rates to '~s'", [BulkLimit, Db]),
@@ -196,11 +200,11 @@ delete(ExtraArgs, 'init', Args) ->
             {<<"task execution is forbidden">>, 'stop'}
     end;
 delete(_ExtraArgs, State, Args) ->
-    Rate = kzd_rate:from_map(Args),
+    Rate = kzd_rates:from_map(Args),
 
     Limit = props:get_value('limit', State),
     Count = props:get_value('count', State) + 1,
-    P = kz_term:to_integer(kzd_rate:prefix(Rate)),
+    P = kz_term:to_integer(kzd_rates:prefix(Rate)),
 
     %% override account-ID from task props
     Dict = dict:append(P, Rate, props:get_value('dict', State)),
@@ -226,7 +230,7 @@ delete(_ExtraArgs, State, Args) ->
             }
     end.
 
--spec cleanup(ne_binary(), any()) -> any().
+-spec cleanup(kz_term:ne_binary(), any()) -> any().
 cleanup(<<"import">>, Dict) ->
     _Size = dict:size(Dict),
     lager:debug("importing ~p ratedeck~s", [_Size, maybe_plural(_Size)]),
@@ -239,7 +243,7 @@ cleanup(<<"delete">>, State) ->
     kz_datamgr:enable_change_notice(),
     kzs_publish:publish_db(Db, <<"edited">>).
 
--spec import_rates_into_ratedeck(ne_binary(), {non_neg_integer(), kz_json:objects()}) -> 'ok'.
+-spec import_rates_into_ratedeck(kz_term:ne_binary(), {non_neg_integer(), kz_json:objects()}) -> 'ok'.
 import_rates_into_ratedeck(Ratedeck, {0, []}) ->
     RatedeckDb = kzd_ratedeck:format_ratedeck_db(Ratedeck),
     kz_datamgr:enable_change_notice(),
@@ -259,15 +263,19 @@ import_rates_into_ratedeck(Ratedeck, {_C, Rates}) ->
 maybe_plural(1) -> "";
 maybe_plural(_) -> "s".
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec split_results(kz_json:objects()) -> {kz_json:objects(), kz_json:object()}.
 split_results([_|_] = JObjs) ->
     {Head, [Last]} = lists:split(length(JObjs)-1, JObjs),
     %% !!!
-    %% workaround untill https://github.com/benoitc/couchbeam/pull/160
+    %% workaround until https://github.com/benoitc/couchbeam/pull/160
     %% !!!
     case kz_json:get_value(<<"key">>, lists:last(Head)) =:= kz_json:get_value(<<"key">>, Last) of
         'true' -> split_results(Head);
@@ -278,15 +286,15 @@ split_results([_|_] = JObjs) ->
 is_allowed(ExtraArgs) ->
     AuthAccountId = maps:get('auth_account_id', ExtraArgs),
     AccountId = maps:get('account_id', ExtraArgs),
-    {'ok', AccountDoc} = kz_account:fetch(AccountId),
-    {'ok', AuthAccountDoc} = kz_account:fetch(AuthAccountId),
+    {'ok', AccountDoc} = kzd_accounts:fetch(AccountId),
+    {'ok', AuthAccountDoc} = kzd_accounts:fetch(AuthAccountId),
     kz_util:is_in_account_hierarchy(AuthAccountId, AccountId, 'true')
     %% Serve request for reseller rates
-        andalso kz_account:is_reseller(AccountDoc)
+        andalso kzd_accounts:is_reseller(AccountDoc)
     %% or serve requests from SuperAdmin
-        orelse kz_account:is_superduper_admin(AuthAccountDoc).
+        orelse kzd_accounts:is_superduper_admin(AuthAccountDoc).
 
--spec get_ratedeck_db(kz_tasks:extra_args()) -> ne_binary().
+-spec get_ratedeck_db(kz_tasks:extra_args()) -> kz_term:ne_binary().
 get_ratedeck_db(_ExtraArgs) ->
     %% TODO: per account DB?
     ?KZ_RATES_DB.
@@ -296,20 +304,23 @@ to_csv_row(Row) ->
     Doc = kz_json:get_json_value(<<"doc">>, Row),
     [kz_json:get_binary_value(Key, Doc) || Key <- ?DOC_FIELDS].
 
--spec generate_row(kz_tasks:args()) -> kzd_rate:doc().
+-spec generate_row(kz_tasks:args()) -> kzd_rates:doc().
 generate_row(Args) ->
-    RateJObj = kzd_rate:from_map(Args),
-    Prefix = kzd_rate:prefix(RateJObj),
+    RateJObj = kzd_rates:from_map(Args),
+    Prefix = kz_term:to_binary(kzd_rates:prefix(RateJObj)),
     lager:debug("create rate for prefix ~s(~s)", [Prefix, kz_doc:id(RateJObj)]),
+    Routes = [<<"^\\+?", Prefix/binary, ".+", ?DOLLAR_SIGN>>],
 
     Update = props:filter_undefined(
-               [{fun kzd_rate:set_name/2, maybe_generate_name(RateJObj)}
-               ,{fun kzd_rate:set_weight/2, maybe_generate_weight(RateJObj)}
-               ,{fun kzd_rate:set_routes/2, [<<"^\\+?", Prefix/binary, ".+$">>]}
-               ]),
+               [{fun kzd_rates:set_rate_name/2, maybe_generate_name(RateJObj)}
+               ,{fun kzd_rates:set_weight/2, maybe_generate_weight(RateJObj)}
+               ,{fun kzd_rates:set_routes/2, Routes}
+               ,{fun kzd_rates:set_caller_id_numbers/2, maybe_generate_caller_id_numbers(RateJObj)}
+               ]
+              ),
     kz_json:set_values(Update, RateJObj).
 
--spec save_rates(ne_binary(), kzd_rate:docs()) -> 'ok'.
+-spec save_rates(kz_term:ne_binary(), kzd_rates:docs()) -> 'ok'.
 save_rates(Db, Rates) ->
     case kz_datamgr:save_docs(Db, Rates) of
         {'ok', _Result} ->
@@ -323,7 +334,7 @@ save_rates(Db, Rates) ->
         {'error', 'timeout'} -> refresh_selectors_index(Db)
     end.
 
--spec delete_rates(ne_binary(), list(), dict:dict()) -> 'ok'.
+-spec delete_rates(kz_term:ne_binary(), list(), dict:dict()) -> 'ok'.
 delete_rates(Db, Keys, Dict) ->
     Options = [{'keys', Keys}
               ,'include_docs'
@@ -335,7 +346,7 @@ delete_rates(Db, Keys, Dict) ->
             do_delete_rates(Db, Docs)
     end.
 
--spec do_delete_rates(ne_binary(), kz_json:objects()) -> 'ok'.
+-spec do_delete_rates(kz_term:ne_binary(), kz_json:objects()) -> 'ok'.
 do_delete_rates(_Db, []) -> 'ok';
 do_delete_rates(Db, Docs) ->
     {Head, Rest} = case length(Docs) > ?BULK_LIMIT
@@ -352,13 +363,13 @@ do_delete_rates(Db, Docs) ->
     end,
     do_delete_rates(Db, Rest).
 
--spec refresh_selectors_index(ne_binary()) -> 'ok'.
+-spec refresh_selectors_index(kz_term:ne_binary()) -> 'ok'.
 refresh_selectors_index(Db) ->
     {'ok', _} = kz_datamgr:all_docs(Db, [{'limit', 1}]),
     {'ok', _} = kz_datamgr:get_results(Db, <<"rates/lookup">>, [{'limit', 1}]),
     'ok'.
 
--spec init_db(ne_binary()) -> 'ok'.
+-spec init_db(kz_term:ne_binary()) -> 'ok'.
 init_db(Db) ->
     _Created = kz_datamgr:db_create(Db),
     lager:debug("created ~s: ~s", [Db, _Created]),
@@ -389,19 +400,21 @@ maybe_delete_rate(JObj, Dict) ->
 maybe_default(0, Default) -> Default;
 maybe_default(Value, _Default) -> Value.
 
--spec maybe_generate_name(kzd_rate:doc()) -> ne_binary().
--spec maybe_generate_name(kzd_rate:doc(), api_ne_binary()) -> ne_binary().
--spec generate_name(ne_binary(), api_ne_binary(), ne_binaries()) -> ne_binary().
+-spec maybe_generate_name(kzd_rates:doc()) -> kz_term:ne_binary().
 maybe_generate_name(RateJObj) ->
-    maybe_generate_name(RateJObj, kzd_rate:name(RateJObj)).
+    maybe_generate_name(RateJObj, kzd_rates:rate_name(RateJObj)).
 
+-spec maybe_generate_name(kzd_rates:doc(), kz_term:api_ne_binary()) -> kz_term:ne_binary().
 maybe_generate_name(RateJObj, 'undefined') ->
-    generate_name(kzd_rate:prefix(RateJObj)
-                 ,kzd_rate:iso_country_code(RateJObj)
-                 ,kzd_rate:direction(RateJObj, [])
+    generate_name(kzd_rates:prefix(RateJObj)
+                 ,kzd_rates:iso_country_code(RateJObj)
+                 ,kzd_rates:direction(RateJObj, [])
                  );
 maybe_generate_name(_RateJObj, Name) -> Name.
 
+-spec generate_name(kz_term:ne_binary() | pos_integer(), kz_term:api_ne_binary(), kz_term:ne_binaries()) -> kz_term:ne_binary().
+generate_name(Prefix, ISO, Directions) when is_integer(Prefix) ->
+    generate_name(kz_term:to_binary(Prefix), ISO, Directions);
 generate_name(Prefix, 'undefined', []) when is_binary(Prefix) ->
     Prefix;
 generate_name(Prefix, ISO, []) ->
@@ -413,23 +426,37 @@ generate_name(Prefix, ISO, Directions) ->
     Direction = kz_binary:join(Directions, <<"_">>),
     <<Direction/binary, "_", ISO/binary, "_", Prefix/binary>>.
 
--spec maybe_generate_weight(kzd_rate:doc()) -> integer().
--spec maybe_generate_weight(kzd_rate:doc(), api_integer()) -> integer().
+-spec maybe_generate_weight(kzd_rates:doc()) -> integer().
 maybe_generate_weight(RateJObj) ->
-    maybe_generate_weight(RateJObj, kzd_rate:weight(RateJObj, 'undefined')).
+    maybe_generate_weight(RateJObj, kzd_rates:weight(RateJObj, 'undefined')).
 
+-spec maybe_generate_weight(kzd_rates:doc(), kz_term:api_integer()) -> integer().
 maybe_generate_weight(RateJObj, 'undefined') ->
-    generate_weight(kzd_rate:prefix(RateJObj)
-                   ,kzd_rate:rate_cost(RateJObj)
-                   ,kzd_rate:private_cost(RateJObj)
+    generate_weight(kzd_rates:prefix(RateJObj)
+                   ,kzd_rates:rate_cost(RateJObj)
+                   ,kzd_rates:private_cost(RateJObj)
                    );
-maybe_generate_weight(_RateJObj, Weight) -> kzd_rate:constrain_weight(Weight).
+maybe_generate_weight(_RateJObj, Weight) -> kzd_rates:constrain_weight(Weight).
 
--spec generate_weight(ne_binary(), kz_transaction:units(), kz_transaction:units()) ->
-                             kzd_rate:weight_range().
+-spec generate_weight(kz_term:ne_binary() | pos_integer(), kz_transaction:units(), kz_transaction:units()) ->
+                             kzd_rates:weight_range().
+generate_weight(Prefix, UnitCost, UnitIntCost) when is_integer(Prefix) ->
+    generate_weight(kz_term:to_binary(Prefix), UnitCost, UnitIntCost);
 generate_weight(?NE_BINARY = Prefix, UnitCost, UnitIntCost) ->
     UnitCostToUse = maybe_default(UnitIntCost, UnitCost),
     CostToUse = wht_util:units_to_dollars(UnitCostToUse),
 
     Weight = (byte_size(Prefix) * 10) - trunc(CostToUse * 100),
-    kzd_rate:constrain_weight(Weight).
+    kzd_rates:constrain_weight(Weight).
+
+-spec maybe_generate_caller_id_numbers(kzd_rates:doc()) -> kz_term:ne_binaries()|'undefined'.
+maybe_generate_caller_id_numbers(RateJObj) ->
+    maybe_generate_caller_id_numbers(RateJObj, kz_json:get_value(<<"caller_id_numbers">>, RateJObj)).
+
+-spec maybe_generate_caller_id_numbers(kzd_rates:doc(), kz_term:ne_binary()) -> kz_term:api_ne_binaries().
+maybe_generate_caller_id_numbers(_RateJObj, CID_Numbers)  when is_binary(CID_Numbers) ->
+    lists:map(fun(X) -> <<"^\\+?", X/binary, ".+", ?DOLLAR_SIGN>> end
+             ,binary:split(CID_Numbers, <<":">>, ['global'])
+             );
+maybe_generate_caller_id_numbers(_RateJObj, _CID_Numbers) ->
+    'undefined'.

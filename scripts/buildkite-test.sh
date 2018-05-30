@@ -3,7 +3,7 @@
 set -x
 set -e
 
-CHANGED='git --no-pager diff --name-only HEAD origin/4.1-develop -- applications core'
+CHANGED='git --no-pager diff --name-only HEAD origin/4.2-develop -- applications core'
 
 echo "--- Changed"
 echo $($CHANGED)
@@ -15,9 +15,7 @@ echo "--- Script code_checks"
 ./scripts/code_checks.bash $($CHANGED)
 
 echo "--- Make fmt"
-if [[ ! -z "$($CHANGED)" ]]; then
-  TO_FMT="$(echo $($CHANGED))" make fmt
-fi
+make fmt
 
 echo "--- Make clean"
 make clean
@@ -31,7 +29,7 @@ echo "--- Make deps"
 make deps
 
 echo "--- Make compile-test"
-make compile-test
+ERLC_OPTS='-DPROPER' make compile-test
 
 echo "--- Make eunit"
 make eunit
@@ -45,6 +43,9 @@ make
 echo "--- Make code_checks"
 make code_checks
 
+echo "--- Make app_applications"
+make app_applications
+
 echo "--- Script validate-js"
 ./scripts/validate-js.sh $($CHANGED)
 
@@ -56,6 +57,9 @@ make apis
 
 echo "--- Make validate-schemas"
 make validate-schemas
+
+echo "--- Script state-of-edoc"
+./scripts/state-of-edoc.escript
 
 echo "--- Make validate-swagger"
 set +e
@@ -88,10 +92,10 @@ if [[ ! -z "$($CHANGED)" ]]; then
   TO_DIALYZE="$(echo $($CHANGED))" make dialyze
 fi
 
-echo "--- Make sdks"
+echo "--- Make elvis"
 make elvis
 
-echo "--- Make sdks"
+# echo "--- Make sdks"
 # made sdks
 
 echo "--- Make build-ci-release"

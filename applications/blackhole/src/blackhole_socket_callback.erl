@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(blackhole_socket_callback).
 
 -include("blackhole.hrl").
@@ -16,7 +14,7 @@
 
 -type cb_return() :: {'ok', bh_context:context()}.
 
--spec open(pid(), binary(), any()) -> cb_return().
+-spec open(pid(), binary(), inet:ip_address()) -> cb_return().
 open(Pid, Id, Ipaddr) ->
     IPBin = kz_term:to_binary(inet_parse:ntoa(Ipaddr)),
     lager:debug("opening socket (~p) ~p, peer: ~p", [Pid, Id, IPBin]),
@@ -59,20 +57,23 @@ send_error(#bh_context{websocket_pid=SessionPid
     blackhole_data_emitter:reply(SessionPid, RequestId, <<"error">>, Data),
     'error'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec close(bh_context:context()) -> bh_context:context().
 close(Context) ->
     Routing = <<"blackhole.session.close">>,
     blackhole_bindings:fold(Routing, Context).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 rate(Context, _Action, _Payload) ->
     Bucket = bh_context:websocket_session_id(Context),
     case kz_buckets:consume_token(?APP_NAME, Bucket) of

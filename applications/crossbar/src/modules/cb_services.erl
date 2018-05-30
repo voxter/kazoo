@@ -1,13 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
-%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_services).
 
 -export([init/0
@@ -23,8 +20,6 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".services">>).
 
--define(PVT_TYPE, <<"service">>).
--define(PVT_FUNS, [fun add_pvt_type/2]).
 -define(CB_LIST, <<"services/crossbar_listing">>).
 -define(AUDIT_LOG_LIST, <<"services/audit_logs_by_creation">>).
 
@@ -32,16 +27,14 @@
 -define(PATH_AUDIT, <<"audit">>).
 -define(PATH_STATUS, <<"status">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.services">>, ?MODULE, 'allowed_methods'),
@@ -53,17 +46,17 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.post.services">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.services">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_POST].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?PATH_PLAN) ->
     [?HTTP_GET];
 allowed_methods(?PATH_AUDIT) ->
@@ -71,18 +64,22 @@ allowed_methods(?PATH_AUDIT) ->
 allowed_methods(?PATH_STATUS) ->
     [?HTTP_GET, ?HTTP_POST].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /services => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /services => []
 %%    /services/foo => [<<"foo">>]
 %%    /services/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> boolean().
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> boolean().
 resource_exists(?PATH_PLAN) -> 'true';
 resource_exists(?PATH_AUDIT) -> 'true';
 resource_exists(?PATH_STATUS) -> 'true';
@@ -95,19 +92,16 @@ content_types_provided(Context, ?PATH_AUDIT) ->
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
                                           ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /services mights load a list of service objects
 %% /services/123 might load the service object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
--spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_services(Context, cb_context:req_verb(Context)).
 
@@ -132,6 +126,7 @@ validate_services(Context, ?HTTP_POST) ->
             crossbar_util:response('error', kz_term:to_binary(Error), 400, R, Context)
     end.
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?PATH_PLAN) ->
     crossbar_util:response(kz_services:service_plan_json(cb_context:account_id(Context)), Context);
 validate(Context, ?PATH_AUDIT) ->
@@ -143,20 +138,18 @@ validate(Context0, ?PATH_STATUS) ->
         _Else -> Context1
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is a GET, execute necessary code to fulfill the GET
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is a GET, execute necessary code to fulfill the GET
 %% request. Generally, this will involve stripping pvt fields and loading
 %% the resource into the resp_data, resp_headers, etc...
 %% @end
-%%--------------------------------------------------------------------
--spec get(cb_context:context()) -> cb_context:context().
--spec get(cb_context:context(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec get(cb_context:context()) -> cb_context:context().
 get(Context) ->
     Context.
 
+-spec get(cb_context:context(), path_token()) -> cb_context:context().
 get(Context, ?PATH_PLAN) ->
     Context;
 get(Context, ?PATH_AUDIT) ->
@@ -164,13 +157,11 @@ get(Context, ?PATH_AUDIT) ->
 get(Context, ?PATH_STATUS) ->
     Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is POST, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec post(cb_context:context()) -> cb_context:context().
 post(Context) ->
     maybe_save_services(Context, cb_context:fetch(Context, 'services')).
@@ -239,46 +230,15 @@ maybe_save_services(Context, Services) ->
 
 -spec load_audit_logs(cb_context:context()) -> cb_context:context().
 load_audit_logs(Context) ->
-    case create_view_options(Context) of
-        {'ok', ViewOptions} ->
-            crossbar_doc:load_view(?AUDIT_LOG_LIST
-                                  ,ViewOptions
-                                  ,Context
-                                  ,fun normalize_audit_logs/2
-                                  );
-        Context1 -> Context1
-    end.
+    Options = [{'mapper', crossbar_view:map_doc_fun()}
+              ,'include_docs'
+              ],
+    crossbar_view:load_modb(Context, ?AUDIT_LOG_LIST, Options).
 
--spec normalize_audit_logs(kz_json:object(), kz_json:objects()) -> kz_json:objects().
-normalize_audit_logs(JObj, Acc) ->
-    [kz_json:get_value(<<"doc">>, JObj) | Acc].
-
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec create_view_options(cb_context:context()) ->
-                                 {'ok', kz_proplist()} |
-                                 cb_context:context().
-create_view_options(Context) ->
-    AccountId = cb_context:account_id(Context),
-    case cb_modules_util:range_view_options(Context) of
-        {CreatedFrom, CreatedTo} ->
-            {'ok', [{'startkey', CreatedTo}
-                   ,{'endkey', CreatedFrom}
-                   ,{'databases', lists:reverse(kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo))}
-                   ,'descending'
-                   ,'include_docs'
-                   ]};
-        Context1 -> Context1
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec load_services(cb_context:context()) -> cb_context:context().
 load_services(Context) ->
     Services = kz_services:fetch(cb_context:account_id(Context)),
@@ -289,11 +249,10 @@ load_services(Context) ->
                        ,{fun cb_context:set_resp_status/2, 'success'}
                        ]).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create_status_payload(cb_context:context()) -> cb_context:context().
 create_status_payload(Context) ->
     JObj = kz_services:to_json(cb_context:fetch(Context, 'services')),

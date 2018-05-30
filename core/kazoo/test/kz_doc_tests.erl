@@ -1,26 +1,34 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @Copyright (C) 2010-2016, 2600Hz
-%%% @doc
-%%% Test utilities for manipulating Kazoo/Kazoo documents
+%%% @doc Test utilities for manipulating Kazoo/Kazoo documents
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_doc_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-define(APP, 'kazoo').
 
 latest_attachment_id_test_() ->
-    JObj1 = json_fixture(<<"doc_no_attachment.json">>),
-    JObj2 = json_fixture(<<"doc_one_attachment.json">>),
-    JObj3 = json_fixture(<<"doc_multiple_attachments.json">>),
+    {'ok', JObj1} = kz_json:fixture(?APP, <<"fixtures/doc_no_attachment.json">>),
+    {'ok', JObj2} = kz_json:fixture(?APP, <<"fixtures/doc_one_attachment.json">>),
+    {'ok', JObj3} = kz_json:fixture(?APP, <<"fixtures/doc_multiple_attachments.json">>),
     [?_assertEqual('undefined', kz_doc:latest_attachment_id(JObj1))
     ,?_assertEqual(<<"csv.csv">>, kz_doc:latest_attachment_id(JObj2))
     ,?_assertEqual(<<"newest">>, kz_doc:latest_attachment_id(JObj3))
     ].
 
-%%% Internals
+read_only_test_() ->
+    {'ok', JObj} = kz_json:fixture(?APP, <<"fixtures/doc_no_attachment.json">>),
+    Leaked = kz_doc:leak_private_fields(JObj),
 
--spec json_fixture(file:name()) -> kz_json:object().
-json_fixture(Filename) ->
-    kz_json:load_fixture_from_file('kazoo', <<"fixtures">>, Filename).
+    {Tests, _} = kz_json:foldl(fun read_only_fold/3, {[], Leaked}, JObj),
+    Tests.
+
+read_only_fold(Key, Value, {Tests, Leaked}) ->
+    {[{"has leaked key " ++ kz_term:to_list(kz_doc:remove_pvt(Key)), ?_assertEqual(Value, kz_json:get_value([<<"_read_only">>, kz_doc:remove_pvt(Key)], Leaked))}
+     ,{"doesn't have private key " ++ kz_term:to_list(Key), ?_assert(not kz_json:is_defined(Key, Leaked))}
+      | Tests
+     ]
+    ,Leaked
+    }.

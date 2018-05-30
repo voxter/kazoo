@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
-%%% @doc
-%%% Handlers for various AMQP payloads
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
+%%% @doc Handlers for various AMQP payloads
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(skel_handlers).
 
 -export([handle_route_req/2
@@ -14,7 +12,7 @@
 
 -include("skel.hrl").
 
--spec handle_route_req(kz_json:object(), kz_proplist()) -> any().
+-spec handle_route_req(kz_json:object(), kz_term:proplist()) -> any().
 handle_route_req(JObj, Props) ->
     %% First validate the JSON
     'true' = kapi_route:req_v(JObj),
@@ -47,7 +45,7 @@ handle_route_req(JObj, Props) ->
     kapps_call:cache(Call, ?APP_NAME).
 
 %% receiving the route_win means we are in control of the call
--spec handle_route_win(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_route_win(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_route_win(JObj, _Props) ->
     %% Yay, we have control of the call
     %% First, validate the JSON

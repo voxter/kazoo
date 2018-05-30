@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
+%%% @author Peter Defebvre
+%%% @author Ben Wann
 %%% @end
-%%% @contributors
-%%% James Aimonetti
-%%% Peter Defebvre
-%%% Ben Wann
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(bh_skel).
 
 -export([init/0
@@ -41,7 +39,7 @@ bindings(_Context, #{account_id := AccountId
         ,listeners => Listeners
         }.
 
--spec skel_bind_options(ne_binary(), ne_binary()) -> gen_listener:bindings().
+-spec skel_bind_options(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 skel_bind_options(AccountId, MyId) ->
     [{'restrict_to', ['skel.updates']}
     ,{'account_id', AccountId}

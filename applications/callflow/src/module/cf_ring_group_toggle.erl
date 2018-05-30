@@ -1,10 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @doc
-%%% Logs a user in or out of a ring group
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Logs a user in or out of a ring group.
+%%% @author Max Lay
 %%% @end
-%%% @contributors
-%%%   Max Lay
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_ring_group_toggle).
 
 -behaviour(gen_cf_action).
@@ -20,14 +19,12 @@
 
 -define(MAX_SAVE_RETRIES, 3).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     _ = kapps_call_command:answer(Call),
@@ -97,7 +94,7 @@ alter_endpoints(Module, Call, DisableUntil) ->
     kapps_call_command:play(Media, Call),
     kz_json:set_value(EndpointsPath, EndPoints, Module).
 
--spec maybe_alter_disable_until(ne_binary(), kz_json:object(), kapps_call:call(), integer()) -> {boolean(), kz_json:object()}.
+-spec maybe_alter_disable_until(kz_term:ne_binary(), kz_json:object(), kapps_call:call(), integer()) -> {boolean(), kz_json:object()}.
 maybe_alter_disable_until(<<"user">>, Endpoint, Call, DisableUntil) ->
     lager:debug("comparing owner ~p, to endpoint ~p", [kapps_call:owner_id(Call), Endpoint]),
     case kapps_call:owner_id(Call)

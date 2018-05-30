@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kt_cleanup).
 %% behaviour: tasks_provider
 
@@ -23,17 +21,21 @@
         kapps_config:get_integer(?CONFIG_CAT, <<"soft_delete_pause_ms">>, 10 * ?MILLISECONDS_IN_SECOND)).
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = tasks_bindings:bind(?TRIGGER_ALL_DBS, ?MODULE, 'cleanup_soft_deletes').
 
 %%% Triggerables
 
--spec cleanup_soft_deletes(ne_binary()) -> ok.
+-spec cleanup_soft_deletes(kz_term:ne_binary()) -> ok.
 cleanup_soft_deletes(?KZ_ACCOUNTS_DB) ->
     do_cleanup(?KZ_ACCOUNTS_DB);
 cleanup_soft_deletes(Account) ->
@@ -46,16 +48,20 @@ cleanup_soft_deletes(Account) ->
             'ok'
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
--spec cleanup_account_soft_deletes(ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec cleanup_account_soft_deletes(kz_term:ne_binary()) -> 'ok'.
 cleanup_account_soft_deletes(Account) ->
     AccountDb = kz_util:format_account_id(Account, 'encoded'),
     do_cleanup(AccountDb).
 
--spec do_cleanup(ne_binary()) -> 'ok'.
+-spec do_cleanup(kz_term:ne_binary()) -> 'ok'.
 do_cleanup(Db) ->
     View = <<"maintenance/soft_deletes">>,
     ViewOptions = [{'limit', kz_datamgr:max_bulk_insert()}],

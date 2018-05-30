@@ -87,28 +87,50 @@ prop_iolist_t() ->
 
 
 to_x_test_() ->
-    TS = kz_time:current_tstamp(),
+    TS = kz_time:now_s(),
     [?_assertError(badarg, kz_term:to_integer(1.0, strict))
     ,?_assertEqual(1, kz_term:to_integer(1.0, notstrict))
+    ,?_assertEqual(42, kz_term:to_integer(<<"42">>, strict))
+    ,?_assertEqual(42, kz_term:to_integer("42.0", notstrict))
     ,?_assertError(badarg, kz_term:to_float(1, strict))
     ,?_assertEqual(1.0, kz_term:to_float(1, notstrict))
+    ,?_assertEqual(42.0, kz_term:to_float(<<"42.0">>, strict))
+    ,?_assertEqual(42.0, kz_term:to_float(<<"42">>, notstrict))
+    ,?_assertError(badarg, kz_term:to_float("42", strict))
+    ,?_assertEqual(42.0, kz_term:to_float("42", notstrict))
     ,?_assertEqual(list_to_binary(pid_to_list(self())), kz_term:to_binary(self()))
     ,?_assertEqual(to_atom, kz_term:to_atom(to_atom))
     ,?_assertEqual(to_atom, kz_term:to_atom("to_atom"))
     ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>))
     ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>, false))
     ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>, ["to_atom"]))
+    ,?_assertEqual('42', kz_term:to_atom(42))
+    ,?_assertEqual(a, kz_term:to_atom(a, true))
+    ,?_assertEqual(a, kz_term:to_atom("a", true))
+    ,?_assertEqual(a, kz_term:to_atom(<<"a">>, true))
+    ,?_assertEqual('1', kz_term:to_atom(1, true))
     ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(TS))
     ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(kz_term:to_list(TS)))
     ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(kz_term:to_binary(TS)))
     ,?_assertEqual("63611209435.0", kz_term:to_list(63611209435.0))
     ,?_assertEqual(<<"63611209435.0">>, kz_term:to_binary(63611209435.0))
     ,?_assertEqual(<<"63657597518.515564">>, kz_term:to_binary(63657597518.515564))
+    ,?_assertEqual(1, kz_term:to_number(1))
+    ,?_assertEqual(42, kz_term:to_number(<<"42">>))
+    ,?_assertEqual(4.2, kz_term:to_number(<<"4.2">>))
+    ,?_assertEqual(42, kz_term:to_number("42"))
+    ,?_assertEqual(4.2, kz_term:to_number("4.2"))
+    ,?_assertEqual(undefined, kz_term:to_api_binary(undefined))
+    ,?_assertEqual(<<"bla">>, kz_term:to_api_binary(bla))
+    ,?_assertEqual(true, kz_term:is_api_ne_binary(undefined))
+    ,?_assertEqual(false, kz_term:is_api_ne_binary("undefined"))
+    ,?_assertEqual(true, kz_term:is_api_ne_binary(<<"oh boy">>))
     ].
 
 shuffle_list_test_() ->
     [?_assertEqual([], kz_term:shuffle_list([]))
     ,?_assertEqual([42], kz_term:shuffle_list([42]))
+    ,?_assertMatch([_,_,_], kz_term:shuffle_list(lists:seq(1, 3)))
     ].
 
 to_hex_test_() ->
@@ -192,10 +214,13 @@ float_bounds_test_() ->
     ,?_assertEqual(1, kz_term:floor(1.2))
     ,?_assertEqual(1, kz_term:floor(1.5))
     ,?_assertEqual(1, kz_term:floor(1.7))
+    ,?_assertEqual(-1, kz_term:floor(-1))
+    ,?_assertEqual(-2, kz_term:floor(-1.5))
     ,?_assertEqual(1, kz_term:ceiling(1.0))
     ,?_assertEqual(2, kz_term:ceiling(1.2))
     ,?_assertEqual(2, kz_term:ceiling(1.5))
     ,?_assertEqual(2, kz_term:ceiling(1.7))
+    ,?_assertEqual(-1, kz_term:ceiling(-1))
     ].
 
 error_to_binary_test_() ->
@@ -256,9 +281,9 @@ is_empty_test_() ->
     ,?_assertEqual(true, kz_term:is_empty(null))
     ,?_assertEqual(true, kz_term:is_empty("NULL"))
     ,?_assertEqual(true, kz_term:is_empty(<<"NULL">>))
-    ,?_assertEqual(true, kz_term:is_empty(false))
-    ,?_assertEqual(true, kz_term:is_empty("false"))
-    ,?_assertEqual(true, kz_term:is_empty(<<"false">>))
+    ,?_assertEqual(false, kz_term:is_empty(false))
+    ,?_assertEqual(false, kz_term:is_empty("false"))
+    ,?_assertEqual(false, kz_term:is_empty(<<"false">>))
     ,?_assertEqual(false, kz_term:is_empty(1))
     ,?_assertEqual(false, kz_term:is_empty(1.0))
     ,?_assertEqual(false, kz_term:is_empty(true))
@@ -282,9 +307,9 @@ is_not_empty_test_() ->
     ,?_assertEqual(false, kz_term:is_not_empty(null))
     ,?_assertEqual(false, kz_term:is_not_empty("NULL"))
     ,?_assertEqual(false, kz_term:is_not_empty(<<"NULL">>))
-    ,?_assertEqual(false, kz_term:is_not_empty(false))
-    ,?_assertEqual(false, kz_term:is_not_empty("false"))
-    ,?_assertEqual(false, kz_term:is_not_empty(<<"false">>))
+    ,?_assertEqual(true, kz_term:is_not_empty(false))
+    ,?_assertEqual(true, kz_term:is_not_empty("false"))
+    ,?_assertEqual(true, kz_term:is_not_empty(<<"false">>))
     ,?_assertEqual(true, kz_term:is_not_empty(1))
     ,?_assertEqual(true, kz_term:is_not_empty(1.0))
     ,?_assertEqual(true, kz_term:is_not_empty(true))
@@ -307,6 +332,24 @@ is_proplist_test_() ->
 id_test() ->
     ?assertEqual(bla, kz_term:identity(bla)).
 
+to_pid_test_() ->
+    {'setup'
+    ,fun() ->
+             Pid = spawn(fun() -> receive X -> X end end),
+             'true' = register('foobarbaz', Pid),
+             Pid
+     end
+    ,fun(Pid) -> Pid ! 'stop' end
+    ,fun(Pid) ->
+             [?_assertEqual('undefined', kz_term:to_pid('undefined'))
+             ,?_assertEqual(Pid, kz_term:to_pid(Pid))
+             ,?_assertEqual(Pid, kz_term:to_pid('foobarbaz'))
+             ,?_assertEqual('undefined', kz_term:to_pid('someothername'))
+             ,?_assertEqual(Pid, kz_term:to_pid(pid_to_list(Pid)))
+             ,?_assertEqual(Pid, kz_term:to_pid(list_to_binary(pid_to_list(Pid))))
+             ]
+     end
+    }.
 
 -ifdef(PERF).
 -define(REPEAT, 100000).

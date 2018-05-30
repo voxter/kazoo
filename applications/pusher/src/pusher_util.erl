@@ -1,16 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(pusher_util).
 
-%% ====================================================================
+%%==============================================================================
 %% API functions
-%% ====================================================================
+%%==============================================================================
+
 -export([binary_to_keycert/1]).
 -export([user_agent_push_properties/1]).
 
@@ -34,14 +33,18 @@
 
 -type keycert() :: {'undefined' |
                     {'PrivateKeyInfo' | 'RSAPrivateKey', binary()}
-                   ,api_binary()
+                   ,kz_term:api_binary()
                    }.
 -export_type([keycert/0]).
 
-%% ====================================================================
+%%==============================================================================
 %% Internal functions
-%% ====================================================================
+%%==============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec binary_to_keycert(binary()) -> keycert().
 binary_to_keycert(Binary) ->
     RSAEntries = public_key:pem_decode(Binary),
@@ -61,12 +64,12 @@ keycert_fold({'RSAPrivateKey', Bin, 'not_encrypted'}, {'undefined', Cert}) ->
 keycert_fold(_Entry, KeyCert) ->
     KeyCert.
 
--spec user_agent_push_properties(ne_binary()) -> api_object().
--spec user_agent_push_properties(ne_binary(), kz_json:objects()) -> api_object().
+-spec user_agent_push_properties(kz_term:ne_binary()) -> kz_term:api_object().
 user_agent_push_properties(UserAgent) ->
     UAs = kapps_config:get_json(?CONFIG_CAT, <<"User-Agents">>, kz_json:new()),
     user_agent_push_properties(UserAgent, kz_json:values(UAs)).
 
+-spec user_agent_push_properties(kz_term:ne_binary(), kz_json:objects()) -> kz_term:api_object().
 user_agent_push_properties(_UserAgent, []) -> 'undefined';
 user_agent_push_properties(UserAgent, [JObj|UAs]) ->
     case re:run(UserAgent, kz_json:get_value(<<"regex">>, JObj, <<"^\$">>)) of

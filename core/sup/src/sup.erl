@@ -1,13 +1,12 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%% A really simple escript to accept RPC request and push them
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc A really simple escript to accept RPC request and push them
 %%% into a running kazoo virtual machine.
+%%%
+%%% @author Karl Anderson
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   Pierre Fenoll
-%%%------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(sup).
 
 -export([main/1]).
@@ -67,13 +66,15 @@ main(CommandLineArgs, Loops) ->
                     String = io_lib:print(Reason, 1, ?MAX_CHARS, -1),
                     stderr("Command failed: ~s~n", [String]),
                     halt(3);
-                no_return when IsMaintenanceCommand ->
+                {'no_return', Code} ->
+                    halt(Code);
+                'no_return' when IsMaintenanceCommand ->
                     halt(0);
                 Result when IsMaintenanceCommand ->
                     print_result(Result, IsVerbose),
-                    Code = case ok =:= Result of
-                               true -> 0;
-                               false -> 2
+                    Code = case 'ok' =:= Result of
+                               'true' -> 0;
+                               'false' -> 2
                            end,
                     halt(Code);
                 'no_return' ->
@@ -86,7 +87,7 @@ main(CommandLineArgs, Loops) ->
 
 %%% Internals
 
--spec in_kazoo(atom(), module(), atom(), binaries()) -> no_return().
+-spec in_kazoo(atom(), module(), atom(), kz_term:binaries()) -> no_return().
 in_kazoo(SUPName, M, F, As) ->
     kz_util:put_callid(SUPName),
     lager:notice("~s: ~s ~s ~s", [?MODULE, M, F, kz_util:iolist_join($,, As)]),
@@ -94,21 +95,21 @@ in_kazoo(SUPName, M, F, As) ->
     lager:notice("~s result: ~p", [?MODULE, R]),
     R.
 
--spec print_result(any(), boolean()) -> ok.
-print_result(Result, true) ->
+-spec print_result(any(), boolean()) -> 'ok'.
+print_result(Result, 'true') ->
     String = io_lib:print(Result, 1, ?MAX_CHARS, -1),
     try stdout("Result: ~s", [String])
     catch
-        erro:badarg -> stdout("Result: ~p", [String])
+        'error':'badarg' -> stdout("Result: ~p", [String])
     end;
-print_result(Result, false) ->
+print_result(Result, 'false') ->
     String = io_lib:print(Result, 1, ?MAX_CHARS, -1),
     try stdout("~s", [String])
     catch
-        erro:badarg -> stdout("~p", [String])
+        'error':'badarg' -> stdout("~p", [String])
     end.
 
--spec get_target(kz_proplist(), boolean()) -> atom().
+-spec get_target(kz_term:proplist(), boolean()) -> atom().
 get_target(Options, Verbose) ->
     Node = props:get_value('node', Options),
     Host = get_host(),
@@ -124,7 +125,7 @@ get_target(Options, Verbose) ->
             print_ping_failed(Target, Cookie)
     end.
 
--spec get_cookie(kz_proplist(), atom()) -> atom().
+-spec get_cookie(kz_term:proplist(), atom()) -> atom().
 get_cookie(Options, Node) ->
     CookieStr =
         case { props:get_value('cookie', Options, "")
@@ -174,7 +175,7 @@ print_invalid_cli_args() ->
     stderr("Invalid command or wrong number of arguments, please try again", []),
     halt(1).
 
--spec parse_args(string()) -> {'ok', kz_proplist(), list()}.
+-spec parse_args(string()) -> {'ok', kz_term:proplist(), list()}.
 parse_args(CommandLineArgs) ->
     case getopt:parse(option_spec_list(), CommandLineArgs) of
         {'ok', {Options, Args}} when is_list(Options) ->
@@ -225,12 +226,19 @@ stderr(Format, Things) ->
 -spec option_spec_list() -> list().
 option_spec_list() ->
     [{'help', $?, "help", 'undefined', "Show the program options"}
-    ,{'node', $n, "node", {'string', "kazoo_apps"}, "Node name"}
-    ,{'cookie', $c, "cookie", {'string', "change_me"}, "Erlang cookie"}
+    ,{'node', $n, "node", {'string', from_env("KAZOO_NODE", "kazoo_apps")}, "Node name"}
+    ,{'cookie', $c, "cookie", {'string', from_env("KAZOO_COOKIE", "change_me")}, "Erlang cookie"}
     ,{'timeout', $t, "timeout", {'integer', 0}, "Command timeout"}
     ,{'verbose', $v, "verbose", 'undefined', "Be verbose"}
     ,{'module', 'undefined', 'undefined', 'string', "The name of the remote module"}
     ,{'function', 'undefined', 'undefined', 'string', "The name of the remote module's function"}
     ].
+
+-spec from_env(list(), list()) -> list().
+from_env(Name, Default) ->
+    case os:getenv(Name) of
+        false -> Default;
+        Value -> Value
+    end.
 
 %%% End of Module

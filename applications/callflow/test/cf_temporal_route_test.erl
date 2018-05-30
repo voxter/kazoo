@@ -1,16 +1,28 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_temporal_route_test).
 
 -include("callflow.hrl").
 -include("module/cf_temporal_route.hrl").
+
+-ifdef(PROPER).
+-include_lib("proper/include/proper.hrl").
+-endif.
+
 -include_lib("eunit/include/eunit.hrl").
 
+-define(SORTED_WDAYS, [<<"monday">>
+                      ,<<"tuesday">>
+                      ,<<"wednesday">>
+                      ,<<"thursday">>
+                      ,<<"friday">>
+                      ,<<"saturday">>
+                      ,<<"sunday">>
+                      ]).
 -define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">>
                 ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">>
                 ]).
@@ -22,24 +34,51 @@
 -define(ELEVEN_AM_START, 39600).
 -define(FIVE_PM_STOP, 61200).
 
+-ifdef(PROPER).
+proper_test_() ->
+    {"Runs " ?MODULE_STRING " PropEr tests"
+    ,[{atom_to_list(F)
+      ,fun () ->
+               ?assert(proper:quickcheck(?MODULE:F(), [{'to_file', 'user'}
+                                                      ,{'numtests', 500}
+                                                      ]))
+       end
+      }
+      || {F, 0} <- ?MODULE:module_info('exports'),
+         F > 'prop_',
+         F < 'prop`'
+     ]
+    }.
+-endif.
+
+sort_wdays_test_() ->
+    Shuffled = kz_term:shuffle_list(?SORTED_WDAYS),
+    ?_assertEqual(?SORTED_WDAYS, cf_temporal_route:sort_wdays(Shuffled)).
+
 monday_failure_test_() ->
     Date = {Y=2017,M=6,D=12},
     Time = {11,47,7},
     Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}),
 
-    Rule = {rule,<<"TESTRULEID">>,undefined,<<"TODTest">>,<<"weekly">>,1,[],[<<"monday">>],<<"first">>,1,Date,0,86400},
-    #rule{wtime_start=TStart}=Rule,
+    Rule = #rule{id = <<"TESTRULEID">>
+                ,enabled = 'undefined'
+                ,name = <<"TODTest">>
+                ,cycle = <<"weekly">>
+                ,interval = 1
+                ,days = []
+                ,wdays = [<<"monday">>]
+                ,ordinal = <<"first">>
+                ,month = 1
+                ,start_date = Date
+                ,wtime_start = TStart = 0
+                ,wtime_stop = 86400
+                },
 
     PrevDay  = kz_date:normalize({Y, M, D - 1}),
     BaseDate = cf_temporal_route:next_rule_date(Rule, PrevDay),
     BaseTime = calendar:datetime_to_gregorian_seconds({BaseDate, {0,0,0}}),
 
     ?_assertNot(Seconds < (BaseTime + TStart)).
-
-sort_wdays_test() ->
-    Sorted = [<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>, <<"saturday">>, <<"sunday">>],
-    Shuffled = kz_term:shuffle_list(Sorted),
-    ?assertEqual(Sorted, cf_temporal_route:sort_wdays(Shuffled)).
 
 date_range_test() ->
     Temporal = get_temporal_route(),
@@ -50,11 +89,15 @@ date_range_test() ->
 %%% MOCKS
 %%% =====
 
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
 get_temporal_route() ->
     Timezone = ?TIMEZONE,
     {LocalDate, LocalTime} = localtime:utc_to_local(
                                ?DATETIME
-                                                   ,kz_term:to_list(Timezone)
+                              ,kz_term:to_list(Timezone)
                               ),
     #temporal{local_sec=calendar:datetime_to_gregorian_seconds({LocalDate, LocalTime})
              ,local_date=LocalDate

@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_amqp_sup).
 
 -behaviour(supervisor).
@@ -49,6 +47,7 @@
          ,{'name', {'local', Pool}}
          ,{'size', Size}
          ,{'max_overflow', Overflow}
+         ,{'strategy', 'fifo'}
          ,{'neg_resp_threshold', ?POOL_THRESHOLD}
          ,{'amqp_broker', Broker}
          ,{'amqp_queuename_start', Pool}
@@ -57,15 +56,15 @@
          ,{'amqp_server_confirms', ServerAck}
          ]]).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
@@ -83,41 +82,42 @@ pools() ->
 pool_name() ->
     case get('$amqp_pool') of
         'undefined' -> ?POOL_NAME;
-        Name -> Name
+        Name -> lager:debug("using pool with name ~s", [Name]),
+                Name
     end.
 
--spec add_amqp_pool(atom() | binary(), binary(), integer(), integer()) -> sup_startchild_ret().
+-spec add_amqp_pool(atom() | binary(), binary(), integer(), integer()) -> kz_types:sup_startchild_ret().
 add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow) ->
     add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, []).
 
--spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings) -> sup_startchild_ret() when
+-spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings) -> kz_types:sup_startchild_ret() when
       UUID :: atom() | binary(),
       Broker :: binary(),
       PoolSize :: integer(),
       PoolOverflow :: integer(),
-      Bindings :: kz_proplist().
+      Bindings :: kz_term:proplist().
 add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings) ->
     add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, []).
 
--type exchange() :: {ne_binary(), ne_binary(), kz_proplist()}.
+-type exchange() :: {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()}.
 -type exchanges() :: [exchange()].
 
--spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges) -> sup_startchild_ret() when
+-spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges) -> kz_types:sup_startchild_ret() when
       UUID :: atom() | binary(),
       Broker :: binary(),
       PoolSize :: integer(),
       PoolOverflow :: integer(),
-      Bindings :: kz_proplist(),
+      Bindings :: kz_term:proplist(),
       Exchanges :: exchanges().
 add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges) ->
     add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, 'false').
 
--spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, ServerAck) -> sup_startchild_ret() when
+-spec add_amqp_pool(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, ServerAck) -> kz_types:sup_startchild_ret() when
       UUID :: atom() | binary(),
       Broker :: binary(),
       PoolSize :: integer(),
       PoolOverflow :: integer(),
-      Bindings :: kz_proplist(),
+      Bindings :: kz_term:proplist(),
       Exchanges :: exchanges(),
       ServerAck :: boolean().
 add_amqp_pool(Uuid, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, ServerAck) ->
@@ -125,7 +125,7 @@ add_amqp_pool(Uuid, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, ServerA
     Args = ?ADD_POOL_ARGS(UUID, Broker, PoolSize, PoolOverflow, Bindings, Exchanges, ServerAck),
     supervisor:start_child(?SERVER, ?POOL_NAME_ARGS(UUID, Args)).
 
--spec pool_pid(atom() | binary()) -> api_pid().
+-spec pool_pid(atom() | binary()) -> kz_term:api_pid().
 pool_pid(Pool) ->
     ID = kz_term:to_atom(Pool, 'true'),
     case [ Pid || {Id,Pid,_,_} <- supervisor:which_children(?SERVER), Id == ID] of
@@ -134,20 +134,18 @@ pool_pid(Pool) ->
     end.
 
 
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
@@ -176,6 +174,7 @@ init([]) ->
                ,{'name', {'local', ?POOL_NAME}}
                ,{'size', PoolSize}
                ,{'max_overflow', PoolOverflow}
+               ,{'strategy', 'fifo'}
                ,{'neg_resp_threshold', PoolThreshold}
                ],
 

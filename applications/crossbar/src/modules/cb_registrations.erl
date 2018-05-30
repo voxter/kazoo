@@ -1,8 +1,6 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Registration viewer / creator
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Registration viewer / creator
 %%% GET /v1/accounts/{account_id}/registrations :
 %%%   Get a list of account registrations
 %%% GET /v1/accounts/{account_id}/registrations/count :
@@ -10,10 +8,10 @@
 %%% GET /v1/registrations :
 %%%   Get a count of system-wide registrations - for superduper admins only
 %%%
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_registrations).
 
 -export([init/0
@@ -40,16 +38,14 @@
 
 -define(COUNT_PATH_TOKEN, <<"count">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.registrations">>, ?MODULE, 'allowed_methods'),
@@ -58,39 +54,39 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.validate.registrations">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.registrations">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_DELETE].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?COUNT_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(_Username) ->
     [?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(?COUNT_PATH_TOKEN) -> 'true';
 resource_exists(_Username) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authorize(cb_context:context(), path_token()) -> boolean().
 
 authorize(Context, ?COUNT_PATH_TOKEN) ->
@@ -101,17 +97,15 @@ authorize(_, _) -> 'false'.
 authorize_admin(Context, [{<<"registrations">>, [?COUNT_PATH_TOKEN]}]) ->
     cb_context:is_superduper_admin(Context).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_registrations(Context, cb_context:req_verb(Context)).
 
@@ -121,6 +115,7 @@ validate_registrations(Context, ?HTTP_GET) ->
 validate_registrations(Context, ?HTTP_DELETE) ->
     crossbar_util:response(<<"ok">>, Context).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?COUNT_PATH_TOKEN) ->
     validate_count(Context);
 validate(Context, Username) ->
@@ -128,12 +123,11 @@ validate(Context, Username) ->
 
 -spec validate_count(cb_context:context()) -> cb_context:context().
 validate_count(Context) ->
-    crossbar_util:response(
-      kz_json:from_list([{<<"count">>, count_registrations(Context)}])
+    crossbar_util:response(kz_json:from_list([{<<"count">>, count_registrations(Context)}])
                           ,Context
-     ).
+                          ).
 
--spec validate_sip_username(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec validate_sip_username(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 validate_sip_username(Context, Username) ->
     case sip_username_exists(Context, Username) of
         'true' ->
@@ -142,7 +136,7 @@ validate_sip_username(Context, Username) ->
             crossbar_util:response_bad_identifier(Username, Context)
     end.
 
--spec sip_username_exists(cb_context:context(), ne_binary()) -> boolean().
+-spec sip_username_exists(cb_context:context(), kz_term:ne_binary()) -> boolean().
 sip_username_exists(Context, Username) ->
     ViewOptions = [{'key', kz_term:to_lower_binary(Username)}],
     case kz_datamgr:get_results(cb_context:account_db(Context)
@@ -155,11 +149,11 @@ sip_username_exists(Context, Username) ->
     end.
 
 -spec delete(cb_context:context()) -> cb_context:context().
--spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context) ->
     crossbar_util:flush_registrations(Context),
     crossbar_util:response(<<"ok">>, Context).
 
+-spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, Username) ->
     crossbar_util:flush_registration(Username, Context),
     crossbar_util:response(<<"ok">>, Context).
@@ -194,15 +188,15 @@ merge_responses([JObj|JObjs], Regs) ->
 -spec merge_response(kz_json:object(), dict:dict()) -> dict:dict().
 merge_response(JObj, Regs) ->
     lists:foldl(fun(J, R) ->
-                        Username = kz_json:get_ne_value(<<"Username">>, J),
                         case kz_json:get_ne_value(<<"Contact">>, J) of
                             'undefined' -> R;
-                            Contact -> dict:store(<<Contact/binary, Username/binary>>, J, R)
+                            Contact ->
+                                Username = kz_json:get_binary_value(<<"Username">>, J, <<>>),
+                                dict:store(<<Username/binary, Contact/binary>>, J, R)
                         end
-
                 end, Regs, kz_json:get_value(<<"Fields">>, JObj, [])).
 
--spec maybe_default_port(integer(), nklib:scheme(), api_binary()) -> integer().
+-spec maybe_default_port(integer(), nklib:scheme(), kz_term:api_binary()) -> integer().
 maybe_default_port(0, 'sips', _) -> 5061;
 maybe_default_port(0, 'sip', <<"TLS">>) -> 5061;
 maybe_default_port(0, 'sip', <<"tls">>) -> 5061;
@@ -241,9 +235,9 @@ count_registrations(Context) ->
         {'timeout', _} -> lager:debug("timed out query for counting regs"), 0
     end.
 
--spec get_realm(cb_context:context()) -> ne_binary().
+-spec get_realm(cb_context:context()) -> kz_term:ne_binary().
 get_realm(Context) ->
     case cb_context:account_id(Context) of
         'undefined' -> <<"all">>;
-        AccountId -> kz_util:get_account_realm(AccountId)
+        AccountId -> kzd_accounts:fetch_realm(AccountId)
     end.

@@ -1,12 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%% Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_whitelabel).
+-behaviour(kz_gen_service).
 
 -export([reconcile/1, reconcile/2]).
 
@@ -15,16 +14,14 @@
 -define(ITEM, <<"whitelabel">>).
 -define(DESIGN_DOC, <<"whitelabel/crossbar_listing">>).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec reconcile(kz_services:services()) -> kz_services:services().
--spec reconcile(kz_services:services(), ne_binary()) -> kz_services:services().
 reconcile(Services) ->
     AccountId = kz_services:account_id(Services),
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -33,14 +30,14 @@ reconcile(Services) ->
             lager:debug("unable to get current whitelabel docs: ~p for account: ~s", [_R, AccountId]),
             Services;
         {'ok', Count} ->
-            kz_services:update(
-              ?CATEGORY
+            kz_services:update(?CATEGORY
                               ,?ITEM
                               ,Count
                               ,kz_services:reset_category(?CATEGORY, Services)
-             )
+                              )
     end.
 
+-spec reconcile(kz_services:services(), kz_term:ne_binary()) -> kz_services:services().
 reconcile(Services0, ?ITEM=Item) ->
     Services1 = reconcile(Services0),
     Quantity = kz_services:updated_quantity(?CATEGORY, Item, Services1),

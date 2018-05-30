@@ -1,12 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Handle AMQP requests to write system configuration data.
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle AMQP requests to write system configuration data.
 %%% Support nested keys like key#subkey#subsubkey
+%%%
+%%% @author Edouard Swiac
 %%% @end
-%%% @contributors
-%%%   Edouard Swiac
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(sysconf_set).
 
 -export([init/0
@@ -18,7 +17,7 @@
 -spec init() -> 'ok'.
 init() -> 'ok'.
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(ApiJObj, _Props) ->
     'true' = kapi_sysconf:set_req_v(ApiJObj),
     kz_util:put_callid(ApiJObj),

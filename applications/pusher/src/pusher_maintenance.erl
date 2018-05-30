@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
-%%% @doc
-%%% Maintenance functions for all
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
+%%% @doc Maintenance functions for all
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(pusher_maintenance).
 
 -include("pusher.hrl").
@@ -20,10 +18,10 @@ add_google_app(AppId, Secret) ->
     'ok'.
 
 -spec add_apple_app(binary(), binary()) -> 'ok' | {'error', any()}.
--spec add_apple_app(binary(), binary(), binary()) -> 'ok' | {'error', any()}.
 add_apple_app(AppId, Certfile) ->
     add_apple_app(AppId, Certfile, ?DEFAULT_APNS_HOST).
 
+-spec add_apple_app(binary(), binary(), binary()) -> 'ok' | {'error', any()}.
 add_apple_app(AppId, Certfile, Host) ->
     case file:read_file(Certfile) of
         {'ok', Binary} ->

@@ -1,16 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
-%%% @doc
-%%%
-%%%  Read `tries`, 'try_interval' and 'stop_after' from app's config
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Read `tries`, 'try_interval' and 'stop_after' from app's config
 %%%  document.
 %%%
 %%%  Ring to offnet number, parks it and bridge with reqester.
 %%%
+%%%
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(camper_offnet_handler).
 -behaviour(gen_listener).
 
@@ -31,16 +29,16 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {exten :: api_binary()
+-record(state, {exten :: kz_term:api_binary()
                ,stored_call :: kapps_call:call()
-               ,queue :: api_binary()
+               ,queue :: kz_term:api_binary()
                ,n_try :: non_neg_integer()
                ,max_tries :: non_neg_integer()
                ,try_after :: non_neg_integer()
                ,stop_timer :: 'undefined' | timer:tref()
-               ,parked_call :: api_binary()
-               ,offnet_ctl_q :: api_binary()
-               ,moh :: api_binary()
+               ,parked_call :: kz_term:api_binary()
+               ,offnet_ctl_q :: kz_term:api_binary()
+               ,moh :: kz_term:api_binary()
                }).
 -type state() :: #state{}.
 
@@ -59,10 +57,11 @@
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(list()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(list()) -> kz_types:startlink_ret().
 start_link(Args) ->
     gen_listener:start_link(?SERVER, [{'responders', ?RESPONDERS}
                                      ,{'bindings', ?BINDINGS}
@@ -88,7 +87,7 @@ init([JObj]) ->
 
     {'ok', StopTimerRef} = timer:apply_after(StopAfter, 'gen_listener', 'cast', [self(), 'stop_campering']),
 
-    Moh = case kz_account:fetch(kapps_call:account_id(Call)) of
+    Moh = case kzd_accounts:fetch(kapps_call:account_id(Call)) of
               {'ok', JObj} ->
                   kz_media_util:media_path(
                     kz_json:get_value([<<"music_on_hold">>, <<"media_id">>], JObj)
@@ -106,36 +105,20 @@ init([JObj]) ->
                  ,moh = Moh
                  }}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled request from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'gen_listener', {'created_queue', Q}}, #state{queue = 'undefined'} = S) ->
     gen_listener:cast(self(), 'count'),
     {'noreply', S#state{queue = Q}};
@@ -211,20 +194,14 @@ handle_cast(_Msg, State) ->
 add_request(JObj) ->
     Exten = kz_json:get_value(<<"Number">>, JObj),
     lager:info("adding offnet request to ~s", [Exten]),
-    camper_offnet_sup:new(JObj),
+    _ = camper_offnet_sup:new(JObj),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
@@ -233,7 +210,7 @@ handle_info(_Info, State) ->
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
--spec handle_resource_response(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_resource_response(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_resource_response(JObj, Props) ->
     Srv = props:get_value('server', Props),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -265,37 +242,35 @@ handle_resource_response(JObj, Props) ->
         _Ev -> lager:info("Unhandled event ~p", [_Ev])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec build_bridge_request(ne_binary(), kapps_call:call(), ne_binary()) -> kz_proplist().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec build_bridge_request(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) -> kz_term:proplist().
 build_bridge_request(ParkedCallId, Call, Q) ->
     CIDNumber = kapps_call:kvs_fetch('cf_capture_group', Call),
     MsgId = kz_binary:rand_hex(6),
@@ -320,11 +295,11 @@ build_bridge_request(ParkedCallId, Call, Q) ->
                             | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
                            ]).
 
--spec originate_park(ne_binary(), kapps_call:call(), ne_binary()) -> 'ok'.
+-spec originate_park(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 originate_park(<<_/binary>> = Exten, Call, <<_/binary>> = Q) ->
     kapi_offnet_resource:publish_req(build_offnet_request(Exten, Call, Q)).
 
--spec handle_originate_ready(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_originate_ready(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_originate_ready(JObj, Props) ->
     Srv = props:get_value('server', Props),
     case {kz_json:get_value(<<"Event-Category">>, JObj)
@@ -345,7 +320,7 @@ handle_originate_ready(JObj, Props) ->
         _Ev -> lager:info("unkown event: ~p", [_Ev])
     end.
 
--spec build_offnet_request(ne_binary(), kapps_call:call(), ne_binary()) -> kz_proplist().
+-spec build_offnet_request(kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) -> kz_term:proplist().
 build_offnet_request(Exten, Call, Q) ->
     {ECIDNum, ECIDName} = kz_attributes:caller_id(<<"emergency">>, Call),
     {CIDNumber, CIDName} = kz_attributes:caller_id(<<"external">>, Call),

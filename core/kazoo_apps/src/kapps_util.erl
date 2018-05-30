@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Utilities shared by a subset of kapps
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Utilities shared by a subset of `kapps'.
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kapps_util).
 
 -export([update_all_accounts/1]).
@@ -24,8 +22,7 @@
 -export([is_account_db/1
         ,is_account_mod/1
         ]).
--export([get_account_by_id/1
-        ,get_account_by_realm/1
+-export([get_account_by_realm/1
         ,get_ccvs_by_ip/1
         ,get_accounts_by_name/1
 
@@ -39,9 +36,7 @@
 -export([account_has_descendants/1
         ,account_descendants/1
         ]).
--export([get_account_name/1]).
 -export([find_oldest_doc/1]).
--export([get_event_type/1]).
 -export([get_call_termination_reason/1]).
 -export([get_view_json/1, get_view_json/2]).
 -export([get_views_json/2]).
@@ -78,28 +73,24 @@
 -define(ACCT_BY_IP_CACHE(IP), {?MODULE, 'account_by_ip', IP}).
 -define(GET_BY_CACHE_ORIGIN, [{'origin', [{'db', ?KZ_ACCOUNTS_DB, <<"account">>}]}]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Update a document in each crossbar account database with the
-%% file contents.  This is intended for _design docs....
+%%------------------------------------------------------------------------------
+%% @doc Update a document in each crossbar account database with the
+%% file contents.  This is intended for `_design' docs.
 %%
-%% @spec update_all_accounts() -> ok | error
 %% @end
-%%--------------------------------------------------------------------
--spec update_all_accounts(ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec update_all_accounts(kz_term:ne_binary()) -> 'ok'.
 update_all_accounts(File) ->
     lists:foreach(fun(AccountDb) ->
                           timer:sleep(2 * ?MILLISECONDS_IN_SECOND),
                           kz_datamgr:revise_doc_from_file(AccountDb, 'crossbar', File)
                   end, get_all_accounts(?REPLICATE_ENCODING)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function will import every .json file found in the given
-%% application priv/couchdb/views/ folder into every account
+%%------------------------------------------------------------------------------
+%% @doc This function will import every `.json' file found in the given
+%% application `priv/couchdb/views/' folder into every account database.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec revise_whapp_views_in_accounts(atom()) -> 'ok'.
 revise_whapp_views_in_accounts(App) ->
     lists:foreach(fun(AccountDb) ->
@@ -107,28 +98,24 @@ revise_whapp_views_in_accounts(App) ->
                           kz_datamgr:revise_views_from_folder(AccountDb, App)
                   end, get_all_accounts(?REPLICATE_ENCODING)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function will replicate the results of the filter from each
-%% account db into the target database
+%%------------------------------------------------------------------------------
+%% @doc This function will replicate the results of the filter from each
+%% account db into the target database.
 %% @end
-%%--------------------------------------------------------------------
--spec replicate_from_accounts(ne_binary(), ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec replicate_from_accounts(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 replicate_from_accounts(TargetDb, FilterDoc) when is_binary(FilterDoc) ->
     lists:foreach(fun(AccountDb) ->
                           timer:sleep(2 * ?MILLISECONDS_IN_SECOND),
                           replicate_from_account(AccountDb, TargetDb, FilterDoc)
                   end, get_all_accounts(?REPLICATE_ENCODING)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function will replicate the results of the filter from the
-%% source database into the target database
+%%------------------------------------------------------------------------------
+%% @doc This function will replicate the results of the filter from the
+%% source database into the target database.
 %% @end
-%%--------------------------------------------------------------------
--spec replicate_from_account(ne_binary(), ne_binary(), ne_binary()) ->
+%%------------------------------------------------------------------------------
+-spec replicate_from_account(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                                     'ok' | {'error', 'matching_dbs'}.
 replicate_from_account(AccountDb, AccountDb, _) ->
     lager:debug("requested to replicate from db ~s to self, skipping", [AccountDb]),
@@ -149,14 +136,12 @@ replicate_from_account(AccountDb, TargetDb, FilterDoc) ->
             lager:debug("replicate ~s to ~s using filter ~s error", [AccountDb, TargetDb, FilterDoc])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Find the system admin from the system_config if set, if not
-%% set it to the oldest acccount and return that.
+%%------------------------------------------------------------------------------
+%% @doc Find the system admin from the `system_config' if set, if not
+%% set it to the oldest account and return that.
 %% @end
-%%--------------------------------------------------------------------
--spec get_master_account_id() -> {'ok', ne_binary()} |
+%%------------------------------------------------------------------------------
+-spec get_master_account_id() -> {'ok', kz_term:ne_binary()} |
                                  {'error', atom()}.
 get_master_account_id() ->
     case kapps_config:get_ne_binary(?KZ_SYSTEM_CONFIG_ACCOUNT, <<"master_account_id">>) of
@@ -177,7 +162,12 @@ find_master_account_id({'ok', Accounts}) ->
     {'ok', _} = kapps_config:set(?KZ_SYSTEM_CONFIG_ACCOUNT, <<"master_account_id">>, OldestAccountId),
     Ok.
 
--spec get_master_account_db() -> {'ok', ne_binary()} |
+%%------------------------------------------------------------------------------
+%% @doc Find the system admin database.
+%% @see get_master_account_id/0
+%% @end
+%%------------------------------------------------------------------------------
+-spec get_master_account_db() -> {'ok', kz_term:ne_binary()} |
                                  {'error', any()}.
 get_master_account_db() ->
     case get_master_account_id() of
@@ -186,7 +176,11 @@ get_master_account_db() ->
             {'ok', kz_util:format_account_db(AccountId)}
     end.
 
--spec is_master_account(ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+%% @doc Returns whether or not the  Account' is system admin or not.
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_master_account(kz_term:ne_binary()) -> boolean().
 is_master_account(Account) ->
     AccountId = kz_util:format_account_id(Account),
     case get_master_account_id() of
@@ -194,65 +188,47 @@ is_master_account(Account) ->
         _Else -> 'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
+%%------------------------------------------------------------------------------
+%% @doc Returns length of the given account tree.
 %% @end
-%%--------------------------------------------------------------------
--spec account_depth(ne_binary()) -> api_non_neg_integer().
+%%------------------------------------------------------------------------------
+-spec account_depth(kz_term:ne_binary()) -> kz_term:api_non_neg_integer().
 account_depth(Account) ->
-    {'ok', JObj} = kz_account:fetch(Account),
-    length(kz_account:tree(JObj)).
+    {'ok', JObj} = kzd_accounts:fetch(Account),
+    length(kzd_accounts:tree(JObj)).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% List an account's descendants (including the provided AccountId).
+%%------------------------------------------------------------------------------
+%% @doc List an account's descendants (including the provided AccountId).
 %% @end
-%%--------------------------------------------------------------------
--spec account_descendants(ne_binary()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+-spec account_descendants(kz_term:ne_binary()) -> kz_term:ne_binaries().
 account_descendants(?MATCH_ACCOUNT_RAW(AccountId)) ->
     View = <<"accounts/listing_by_descendants">>,
-    ViewOptions = [{startkey, [AccountId]}
-                  ,{endkey, [AccountId, kz_json:new()]}
+    ViewOptions = [{'startkey', [AccountId]}
+                  ,{'endkey', [AccountId, kz_json:new()]}
                   ],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, View, ViewOptions) of
-        {ok, JObjs} -> [kz_account:id(JObj) || JObj <- JObjs];
-        {error, _R} ->
+        {'ok', JObjs} -> [kz_doc:id(JObj) || JObj <- JObjs];
+        {'error', _R} ->
             lager:debug("unable to get descendants of ~s: ~p", [AccountId, _R]),
             []
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
+%%------------------------------------------------------------------------------
+%% @doc Checks if account has descendants or not.
 %% @end
-%%--------------------------------------------------------------------
--spec account_has_descendants(ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec account_has_descendants(kz_term:ne_binary()) -> boolean().
 account_has_descendants(Account) ->
     AccountId = kz_util:format_account_id(Account),
     [] =/= (account_descendants(AccountId) -- [AccountId]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
+%%------------------------------------------------------------------------------
+%% @doc Given a list of accounts this returns the id of the oldest.
 %% @end
-%%--------------------------------------------------------------------
--spec get_account_name(ne_binary()) -> ne_binary().
-get_account_name(Account) ->
-    case kz_account:fetch(Account) of
-        {'error', _} -> 'undefined';
-        {'ok', JObj} -> kz_account:name(JObj)
-    end.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given a list of accounts this returns the id of the oldest
-%% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec find_oldest_doc(kz_json:objects()) ->
-                             {'ok', ne_binary()} |
+                             {'ok', kz_term:ne_binary()} |
                              {'error', 'no_docs'}.
 find_oldest_doc([]) -> {'error', 'no_docs'};
 find_oldest_doc([First|Docs]) ->
@@ -268,17 +244,16 @@ find_oldest_doc([First|Docs]) ->
                    ,Docs),
     {'ok', OldestDocID}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function will return a list of all account database names
-%% in the requested encoding
+%%------------------------------------------------------------------------------
+%% @doc This function will return a list of all account database names
+%% in the requested encoding.
 %% @end
-%%--------------------------------------------------------------------
--spec get_all_accounts() -> ne_binaries().
--spec get_all_accounts(kz_util:account_format()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+
+-spec get_all_accounts() -> kz_term:ne_binaries().
 get_all_accounts() -> get_all_accounts(?REPLICATE_ENCODING).
 
+-spec get_all_accounts(kz_util:account_format()) -> kz_term:ne_binaries().
 get_all_accounts(Encoding) ->
     {'ok', Dbs} = kz_datamgr:db_list([{'startkey', <<"account/">>}
                                      ,{'endkey', <<"account/\ufff0">>}
@@ -287,11 +262,11 @@ get_all_accounts(Encoding) ->
      || Db <- Dbs, is_account_db(Db)
     ].
 
--spec get_all_accounts_and_mods() -> ne_binaries().
--spec get_all_accounts_and_mods(kz_util:account_format()) -> ne_binaries().
+-spec get_all_accounts_and_mods() -> kz_term:ne_binaries().
 get_all_accounts_and_mods() ->
     get_all_accounts_and_mods(?REPLICATE_ENCODING).
 
+-spec get_all_accounts_and_mods(kz_util:account_format()) -> kz_term:ne_binaries().
 get_all_accounts_and_mods(Encoding) ->
     {'ok', Databases} = kz_datamgr:db_info(),
     [format_db(Db, Encoding)
@@ -300,7 +275,7 @@ get_all_accounts_and_mods(Encoding) ->
             orelse is_account_mod(Db)
     ].
 
--spec format_db(ne_binary(), kz_util:account_format()) -> ne_binary().
+-spec format_db(kz_term:ne_binary(), kz_util:account_format()) -> kz_term:ne_binary().
 format_db(Db, Encoding) ->
     Fs = [{fun is_account_db/1, fun kz_util:format_account_id/2}
          ,{fun is_account_mod/1, fun kz_util:format_account_modb/2}
@@ -313,11 +288,11 @@ format_db(Db, Encoding, [{Predicate, Formatter}|Fs]) ->
         'false' -> format_db(Db, Encoding, Fs)
     end.
 
--spec get_all_account_mods() -> ne_binaries().
--spec get_all_account_mods(kz_util:account_format()) -> ne_binaries().
+-spec get_all_account_mods() -> kz_term:ne_binaries().
 get_all_account_mods() ->
     get_all_account_mods(?REPLICATE_ENCODING).
 
+-spec get_all_account_mods(kz_util:account_format()) -> kz_term:ne_binaries().
 get_all_account_mods(Encoding) ->
     {'ok', Databases} = kz_datamgr:db_info(),
     [kz_util:format_account_modb(Db, Encoding)
@@ -325,11 +300,11 @@ get_all_account_mods(Encoding) ->
         is_account_mod(Db)
     ].
 
--spec get_account_mods(ne_binary()) -> ne_binaries().
--spec get_account_mods(ne_binary(), kz_util:account_format()) -> ne_binaries().
+-spec get_account_mods(kz_term:ne_binary()) -> kz_term:ne_binaries().
 get_account_mods(Account) ->
     get_account_mods(Account, ?REPLICATE_ENCODING).
 
+-spec get_account_mods(kz_term:ne_binary(), kz_util:account_format()) -> kz_term:ne_binaries().
 get_account_mods(Account, Encoding) ->
     AccountId = kz_util:format_account_id(Account, Encoding),
     [MOD
@@ -338,7 +313,7 @@ get_account_mods(Account, Encoding) ->
         is_matched_account_mod(Encoding, MOD, AccountId)
     ].
 
--spec is_matched_account_mod(kz_util:account_format(), ne_binary(), ne_binary()) -> boolean().
+-spec is_matched_account_mod(kz_util:account_format(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 is_matched_account_mod('unencoded'
                       ,?MATCH_MODB_SUFFIX_UNENCODED(A, B, Rest, _, _)
                       ,?MATCH_ACCOUNT_UNENCODED(A, B, Rest)
@@ -357,49 +332,30 @@ is_matched_account_mod('raw'
 is_matched_account_mod(_, _, _) ->
     'false'.
 
--spec is_account_mod(ne_binary()) -> boolean().
+-spec is_account_mod(kz_term:ne_binary()) -> boolean().
 is_account_mod(Db) ->
     kz_datamgr:db_classification(Db) =:= 'modb'.
 
--spec is_account_db(ne_binary()) -> boolean().
+-spec is_account_db(kz_term:ne_binary()) -> boolean().
 is_account_db(Db) ->
     kz_datamgr:db_classification(Db) =:= 'account'.
 
 
--type getby_return() :: {'ok', ne_binary()} |
-                        {'multiples', ne_binaries()} |
+-type getby_return() :: {'ok', kz_term:ne_binary()} |
+                        {'multiples', kz_term:ne_binaries()} |
                         {'error', 'not_found'}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Ids are one->one with accounts.
+%%------------------------------------------------------------------------------
+%% @doc Get the account db by realm. Realms are one->one with accounts.
 %% @end
-%%--------------------------------------------------------------------
--spec get_account_by_id(ne_binary()) ->
-                               {'ok', ne_binary()} |
-                               {'error', 'not_found'}.
-get_account_by_id(Id) ->
-    case kz_datamgr:open_doc(?KZ_ACCOUNTS_DB, Id) of
-        {'ok', JObj} ->
-            AccountDb = kz_json:get_value(<<"pvt_account_db">>, JObj),
-            {'ok', AccountDb};
-        _E ->
-            lager:debug("error while fetching account by id: ~p", [_E]),
-            {'error', 'not_found'}
-    end.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Realms are one->one with accounts.
-%% @end
-%%--------------------------------------------------------------------
--spec get_account_by_realm(ne_binary()) -> getby_return().
+%%------------------------------------------------------------------------------
+-spec get_account_by_realm(kz_term:ne_binary()) -> getby_return().
 get_account_by_realm(RawRealm) ->
     Realm = kz_term:to_lower_binary(RawRealm),
     get_accounts_by(Realm, ?ACCT_BY_REALM_CACHE(Realm), ?AGG_LIST_BY_REALM).
 
--spec get_ccvs_by_ip(ne_binary()) ->
-                            {'ok', kz_proplist()} |
+-spec get_ccvs_by_ip(kz_term:ne_binary()) ->
+                            {'ok', kz_term:proplist()} |
                             {'error', 'not_found'}.
 get_ccvs_by_ip(IP) ->
     case kz_cache:peek_local(?KAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP)) of
@@ -408,8 +364,8 @@ get_ccvs_by_ip(IP) ->
         {'ok', _AccountCCVs} = OK -> OK
     end.
 
--spec do_get_ccvs_by_ip(ne_binary()) ->
-                               {'ok', kz_proplist()} |
+-spec do_get_ccvs_by_ip(kz_term:ne_binary()) ->
+                               {'ok', kz_term:proplist()} |
                                {'error', 'not_found'}.
 do_get_ccvs_by_ip(IP) ->
     case kapps_config:get_is_true(<<"registrar">>, <<"use_aggregate">>, 'true')
@@ -435,7 +391,7 @@ do_get_ccvs_by_ip(IP) ->
             Error
     end.
 
--spec account_ccvs_from_ip_auth(kz_json:object()) -> kz_proplist().
+-spec account_ccvs_from_ip_auth(kz_json:object()) -> kz_term:proplist().
 account_ccvs_from_ip_auth(Doc) ->
     AccountId = kz_json:get_value([<<"value">>, <<"account_id">>], Doc),
     OwnerId = kz_json:get_value([<<"value">>, <<"owner_id">>], Doc),
@@ -462,9 +418,9 @@ account_ccvs_from_ip_auth(Doc) ->
 -type not_enabled_error() :: 'device_disabled' |
                              'owner_disabled' |
                              'account_disabled'.
--spec are_all_enabled(kz_proplist()) ->
+-spec are_all_enabled(kz_term:proplist()) ->
                              'true' |
-                             {'false', {not_enabled_error(), ne_binary()}}.
+                             {'false', {not_enabled_error(), kz_term:ne_binary()}}.
 are_all_enabled(Things) ->
     ?MATCH_ACCOUNT_RAW(AccountId) = props:get_value(<<"account">>, Things),
     try lists:all(fun(Thing) -> is_enabled(AccountId, Thing) end, Things)
@@ -472,12 +428,12 @@ are_all_enabled(Things) ->
         'throw':{'error', Reason} -> {'false', Reason}
     end.
 
--spec is_enabled(ne_binary(), {ne_binary(), api_ne_binary()}) -> boolean().
+-spec is_enabled(kz_term:ne_binary(), {kz_term:ne_binary(), kz_term:api_ne_binary()}) -> boolean().
 is_enabled(_AccountId, {_Type, 'undefined'}) -> 'true';
 is_enabled(AccountId, {<<"device">>, DeviceId}) ->
     Default = kapps_config:get_is_true(<<"registrar">>, <<"device_enabled_default">>, 'true'),
     {'ok', DeviceJObj} = kz_datamgr:open_cache_doc(kz_util:format_account_db(AccountId), DeviceId),
-    kz_device:enabled(DeviceJObj, Default)
+    kzd_devices:enabled(DeviceJObj, Default)
         orelse throw({'error', {'device_disabled', DeviceId}});
 is_enabled(AccountId, {<<"owner">>, OwnerId}) ->
     case kz_datamgr:open_cache_doc(kz_util:format_account_db(AccountId), OwnerId) of
@@ -494,17 +450,16 @@ is_enabled(AccountId, {<<"account">>, AccountId}) ->
         orelse throw({'error', {'account_disabled', AccountId}});
 is_enabled(_AccountId, {_Type, _Thing}) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Names are one->many with accounts since account names are not
-%% unique.
+%%------------------------------------------------------------------------------
+%% @doc Get account db by account's name. Names are one->many with accounts
+%% since account names are not unique.
 %% @end
-%%--------------------------------------------------------------------
--spec get_accounts_by_name(ne_binary()) -> getby_return().
+%%------------------------------------------------------------------------------
+-spec get_accounts_by_name(kz_term:ne_binary()) -> getby_return().
 get_accounts_by_name(Name) ->
     get_accounts_by(Name, ?ACCT_BY_NAME_CACHE(Name), ?AGG_LIST_BY_NAME).
 
--spec get_accounts_by(ne_binary(), tuple(), ne_binary()) -> getby_return().
+-spec get_accounts_by(kz_term:ne_binary(), tuple(), kz_term:ne_binary()) -> getby_return().
 get_accounts_by(What, CacheKey, View) ->
     case kz_cache:peek_local(?KAPPS_GETBY_CACHE, CacheKey) of
         {'ok', [AccountDb]} -> {'ok', AccountDb};
@@ -513,7 +468,7 @@ get_accounts_by(What, CacheKey, View) ->
             do_get_accounts_by(What, CacheKey, View)
     end.
 
--spec do_get_accounts_by(ne_binary(), tuple(), ne_binary()) -> getby_return().
+-spec do_get_accounts_by(kz_term:ne_binary(), tuple(), kz_term:ne_binary()) -> getby_return().
 do_get_accounts_by(What, CacheKey, View) ->
     ViewOptions = [{'key', What}],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, View, ViewOptions) of
@@ -532,28 +487,16 @@ do_get_accounts_by(What, CacheKey, View) ->
             {'error', 'not_found'}
     end.
 
--spec cache(tuple(), ne_binaries()) -> 'ok'.
+-spec cache(tuple(), kz_term:ne_binaries()) -> 'ok'.
 cache(Key, AccountDbs) ->
     kz_cache:store_local(?KAPPS_GETBY_CACHE, Key, AccountDbs, ?GET_BY_CACHE_ORIGIN).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given an API JSON object extract the category and name into a
-%% tuple for easy processing
+%%------------------------------------------------------------------------------
+%% @doc Given an JSON Object for a hangup event, or bridge completion
+%% this returns the cause and code for the call termination.
 %% @end
-%%--------------------------------------------------------------------
--spec get_event_type(kz_json:object()) -> {ne_binary(), ne_binary()}.
-get_event_type(JObj) -> kz_util:get_event_type(JObj).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given an JSON Object for a hangup event, or bridge completion
-%% this returns the cause and code for the call termination
-%% @end
-%%--------------------------------------------------------------------
--spec get_call_termination_reason(kz_json:object()) -> {ne_binary(), ne_binary()}.
+%%------------------------------------------------------------------------------
+-spec get_call_termination_reason(kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_call_termination_reason(JObj) ->
     Cause = case kz_json:get_ne_value(<<"Application-Response">>, JObj) of
                 'undefined' ->
@@ -564,61 +507,48 @@ get_call_termination_reason(JObj) ->
     Code = kz_json:get_value(<<"Hangup-Code">>, JObj, <<"sip:600">>),
     {Cause, Code}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
+%%------------------------------------------------------------------------------
+%% @doc Reads all view files from given `Folder' in the given `App'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec get_views_json(atom(), string()) -> kz_datamgr:views_listing().
 get_views_json(App, Folder) ->
-    Files = filelib:wildcard(lists:flatten([code:priv_dir(App), "/couchdb/", Folder, "/*.json"])),
+    Pattern = filename:join([code:priv_dir(App), "couchdb", Folder, "*.json"]),
     [ViewListing
-     || File <- Files,
+     || File <- filelib:wildcard(Pattern),
         {?NE_BINARY,_}=ViewListing <- [catch get_view_json(File)]
     ].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get_view_json(atom(), text()) -> kz_datamgr:view_listing().
--spec get_view_json(text()) -> kz_datamgr:view_listing().
-
+-spec get_view_json(atom(), kz_term:text()) -> kz_datamgr:view_listing().
 get_view_json(App, File) ->
-    Path = list_to_binary([code:priv_dir(App), "/couchdb/", File]),
+    Path = filename:join([code:priv_dir(App), "couchdb", File]),
     get_view_json(Path).
 
+-spec get_view_json(kz_term:text()) -> kz_datamgr:view_listing().
 get_view_json(Path) ->
-    lager:debug("fetch view from ~s", [Path]),
+    lager:debug("fetching view from ~s", [Path]),
     {'ok', Bin} = file:read_file(Path),
     JObj = kz_json:decode(Bin),
     {kz_doc:id(JObj), JObj}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec update_views(ne_binary(), kz_datamgr:views_listing()) -> boolean().
--spec update_views(ne_binary(), kz_datamgr:views_listing(), boolean()) -> boolean().
-
+%% @equiv update_views(Db, Views, 'false')
+-spec update_views(kz_term:ne_binary(), kz_datamgr:views_listing()) -> boolean().
 update_views(Db, Views) ->
     update_views(Db, Views, 'false').
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec update_views(kz_term:ne_binary(), kz_datamgr:views_listing(), boolean()) -> boolean().
 update_views(Db, Views, ShouldRemove) ->
     kz_term:is_true(kz_datamgr:db_view_update(Db, Views, ShouldRemove)).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec add_aggregate_device(ne_binary(), api_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec add_aggregate_device(kz_term:ne_binary(), kz_term:api_binary()) -> 'ok'.
 add_aggregate_device(_, 'undefined') -> 'ok';
 add_aggregate_device(Db, Device) ->
     DeviceId = kz_doc:id(Device),
@@ -632,13 +562,11 @@ add_aggregate_device(Db, Device) ->
         end,
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec rm_aggregate_device(ne_binary(), api_object() | api_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec rm_aggregate_device(kz_term:ne_binary(), kz_term:api_object() | kz_term:api_binary()) -> 'ok'.
 rm_aggregate_device(_, 'undefined') -> 'ok';
 rm_aggregate_device(Db, DeviceId) when is_binary(DeviceId) ->
     case kz_datamgr:open_doc(?KZ_SIP_DB, DeviceId) of
@@ -651,19 +579,20 @@ rm_aggregate_device(Db, DeviceId) when is_binary(DeviceId) ->
 rm_aggregate_device(Db, Device) ->
     rm_aggregate_device(Db, kz_doc:id(Device)).
 
--spec amqp_pool_send(api_terms(), kz_amqp_worker:publish_fun()) ->
+-spec amqp_pool_send(kz_term:api_terms(), kz_amqp_worker:publish_fun()) ->
                             'ok' | {'error', any()}.
 amqp_pool_send(Api, PubFun) when is_function(PubFun, 1) ->
     kz_amqp_worker:cast(Api, PubFun).
 
--spec amqp_pool_request(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun()) ->
-                               kz_amqp_worker:request_return().
--spec amqp_pool_request(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), kz_timeout()) ->
+-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun()) ->
                                kz_amqp_worker:request_return().
 amqp_pool_request(Api, PubFun, ValidateFun)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1) ->
     amqp_pool_request(Api, PubFun, ValidateFun, kz_amqp_worker:default_timeout()).
+
+-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), timeout()) ->
+                               kz_amqp_worker:request_return().
 amqp_pool_request(Api, PubFun, ValidateFun, Timeout)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1),
@@ -673,14 +602,15 @@ amqp_pool_request(Api, PubFun, ValidateFun, Timeout)
         orelse Timeout =:= 'infinity') ->
     kz_amqp_worker:call(Api, PubFun, ValidateFun, Timeout).
 
--spec amqp_pool_request_custom(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), gen_listener:binding()) ->
-                                      kz_amqp_worker:request_return().
--spec amqp_pool_request_custom(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), kz_timeout(), gen_listener:binding()) ->
+-spec amqp_pool_request_custom(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), gen_listener:binding()) ->
                                       kz_amqp_worker:request_return().
 amqp_pool_request_custom(Api, PubFun, ValidateFun, Bind)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1) ->
     amqp_pool_request_custom(Api, PubFun, ValidateFun, kz_amqp_worker:default_timeout(), Bind).
+
+-spec amqp_pool_request_custom(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), timeout(), gen_listener:binding()) ->
+                                      kz_amqp_worker:request_return().
 amqp_pool_request_custom(Api, PubFun, ValidateFun, Timeout, Bind)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1),
@@ -690,36 +620,34 @@ amqp_pool_request_custom(Api, PubFun, ValidateFun, Timeout, Bind)
         orelse Timeout =:= 'infinity') ->
     kz_amqp_worker:call_custom(Api, PubFun, ValidateFun, Timeout, Bind).
 
--spec amqp_pool_collect(api_terms(), kz_amqp_worker:publish_fun()) ->
+-spec amqp_pool_collect(kz_term:api_terms(), kz_amqp_worker:publish_fun()) ->
                                {'ok', kz_json:objects()} |
                                {'timeout', kz_json:objects()} |
                                {'error', any()}.
 amqp_pool_collect(Api, PubFun) ->
     amqp_pool_collect(Api, PubFun, kz_amqp_worker:default_timeout()).
 
--spec amqp_pool_collect(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:timeout_or_until()) ->
+-spec amqp_pool_collect(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:timeout_or_until()) ->
                                {'ok', kz_json:objects()} |
                                {'timeout', kz_json:objects()} |
                                {'error', any()}.
 amqp_pool_collect(Api, PubFun, TimeoutOrUntil) ->
     kz_amqp_worker:call_collect(Api, PubFun, TimeoutOrUntil).
 
--spec amqp_pool_collect(api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:collect_until(), kz_timeout()) ->
+-spec amqp_pool_collect(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:collect_until(), timeout()) ->
                                {'ok', kz_json:objects()} |
                                {'timeout', kz_json:objects()} |
                                {'error', any()}.
 amqp_pool_collect(Api, PubFun, Until, Timeout) ->
     kz_amqp_worker:call_collect(Api, PubFun, Until, Timeout).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Extracts the User and Realm from either the Request or To field, configured
-%% in the system_config DB. Defaults to Request (To is the other option)
+%%------------------------------------------------------------------------------
+%% @doc Extracts the User and Realm from either the Request or To field, configured
+%% in the `system_config' DB. Defaults to Request (To is the other option).
 %% @end
-%%--------------------------------------------------------------------
--spec get_destination(kz_json:object(), ne_binary(), ne_binary()) ->
-                             {ne_binary(), ne_binary()}.
+%%------------------------------------------------------------------------------
+-spec get_destination(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                             {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_destination(JObj, Cat, Key) ->
     case kapps_config:get(Cat, Key, <<"Request">>) of
         <<"To">> ->
@@ -728,11 +656,11 @@ get_destination(JObj, Cat, Key) ->
             get_destination(JObj, [<<"Request">>, <<"To">>])
     end.
 
--spec get_destination(kz_json:object(), ne_binaries()) ->
-                             {ne_binary(), ne_binary()}.
+-spec get_destination(kz_json:object(), kz_term:ne_binaries()) ->
+                             {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_destination(JObj, [Key|Keys]) ->
-    case try_split(Key, JObj) of
-        {_,_}=UserRealm -> UserRealm;
+    case maybe_split(Key, JObj) of
+        [User,Realm] -> {User,Realm};
         'undefined' -> get_destination(JObj, Keys)
     end;
 get_destination(JObj, []) ->
@@ -740,22 +668,14 @@ get_destination(JObj, []) ->
     ,kz_json:get_value(<<"To-Realm">>, JObj)
     }.
 
--spec try_split(api_binary()) ->
-                       {ne_binary(), ne_binary()} |
-                       'undefined'.
--spec try_split(ne_binary(), kz_json:object()) ->
-                       {ne_binary(), ne_binary()} |
-                       'undefined'.
-try_split(Key, JObj) ->
-    try_split(kz_json:get_value(Key, JObj)).
+maybe_split(Key, JObj) ->
+    case kz_json:get_ne_binary_value(Key, JObj) of
+        undefined -> undefined;
+        <<"nouser@",_/binary>> -> undefined;
+        Bin -> binary:split(Bin, <<"@">>)
+    end.
 
-try_split('undefined') -> 'undefined';
-try_split(<<"nouser@", _/binary>>) -> 'undefined';
-try_split(<<_/binary>> = Bin) ->
-    [_, _] = Dest = binary:split(Bin, <<"@">>),
-    list_to_tuple(Dest).
-
--spec write_tts_file(ne_binary(), ne_binary()) ->
+-spec write_tts_file(kz_term:ne_binary(), kz_term:ne_binary()) ->
                             'ok' |
                             {'error', file:posix() | 'badarg' | 'terminated'}.
 write_tts_file(Path, Say) ->
@@ -763,16 +683,16 @@ write_tts_file(Path, Say) ->
     {'ok', _, Wav} = kazoo_tts:create(Say),
     file:write_file(Path, Wav).
 
--spec to_magic_hash(iodata()) -> ne_binary().
+-spec to_magic_hash(iodata()) -> kz_term:ne_binary().
 to_magic_hash(Bin) ->
     kz_term:to_hex_binary(zlib:zip(Bin)).
 
--spec from_magic_hash(ne_binary()) -> ne_binary().
+-spec from_magic_hash(kz_term:ne_binary()) -> kz_term:ne_binary().
 from_magic_hash(Bin) ->
     zlib:unzip(kz_binary:from_hex(Bin)).
 
 -spec media_local_store_url(kapps_call:call(), kz_json:object()) ->
-                                   {'ok', ne_binary()} |
+                                   {'ok', kz_term:ne_binary()} |
                                    {'proxy', tuple()} |
                                    {'error', any()}.
 media_local_store_url(Call, JObj) ->

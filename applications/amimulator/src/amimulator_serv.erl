@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_serv).
 -behaviour(gen_server).
 
@@ -10,7 +15,7 @@
                }).
 -type state() :: #state{}.
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
@@ -32,11 +37,11 @@ init([]) ->
     gen_server:cast(?MODULE, 'start_listeners'),
     {'ok', #state{listen_socket = ListenSocket}}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('start_listeners', #state{listen_socket=ListenSocket}=State) ->
     amimulator_supersup:start_listener_sup(),
     amimulator_sup:start_listeners(ListenSocket),
@@ -48,7 +53,7 @@ handle_cast('close_listen_socket', #state{listen_socket=ListenSocket}=State) ->
 handle_cast(_Request, State) ->
     {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     {'noreply', State}.
 

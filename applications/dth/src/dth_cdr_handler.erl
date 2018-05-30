@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @author James Aimonetti <james@2600hz.org>
-%%% @doc
-%%% Send a CDR payload to DTH
+%%% @doc Send a CDR payload to DTH
 %%% @end
 %%% Created : 29 Aug 2011 by James Aimonetti <james@2600hz.org>
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(dth_cdr_handler).
 
 -export([init/0, handle_req/2]).
@@ -37,7 +36,7 @@ init() ->
 
 %%     <<"outbound">> = CallDirection, %% b-leg only, though not the greatest way of determining this
 
-%%     Timestamp = kz_term:to_integer(kz_json:get_value(<<"Timestamp">>, JObj, kz_time:current_tstamp())),
+%%     Timestamp = kz_term:to_integer(kz_json:get_value(<<"Timestamp">>, JObj, kz_time:now_s())),
 %%     BillingSec = kz_term:to_integer(kz_json:get_value(<<"Billing-Seconds">>, JObj, 0)),
 
 %%     DateTime = now_to_datetime(Timestamp - BillingSec),
@@ -59,7 +58,7 @@ init() ->
 %%     WsdlModel = props:get_value(wsdl, Props),
 %%     detergent:call(WsdlModel, "SubmitCallRecord", [CallRecord]).
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, Props) ->
     'true' = kapi_call:event_v(JObj),
     CallID = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -71,7 +70,7 @@ handle_req(JObj, Props) ->
 
     <<"outbound">> = CallDirection, %% b-leg only, though not the greatest way of determining this
 
-    Timestamp = kz_term:to_integer(kz_json:get_value(<<"Timestamp">>, JObj, kz_time:current_tstamp())),
+    Timestamp = kz_term:to_integer(kz_json:get_value(<<"Timestamp">>, JObj, kz_time:now_s())),
     BillingSec = kz_term:to_integer(kz_json:get_value(<<"Billing-Seconds">>, JObj, 0)),
 
     DateTime = now_to_datetime(Timestamp - BillingSec),
@@ -143,14 +142,12 @@ get_from_user(JObj) ->
             From
     end.
 
--spec get_account_code(kz_json:object()) -> ne_binary().
+-spec get_account_code(kz_json:object()) -> kz_term:ne_binary().
 get_account_code(JObj) ->
-    AccountID = kz_binary:truncate_left(
-                  kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj)
+    AccountID = kz_binary:truncate_left(kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj)
                                        ,17
-                 ),
+                                       ),
     case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Inception">>], JObj) of
         'undefined' -> AccountID;
         _Else -> << AccountID/binary, "-IN">>
     end.
-

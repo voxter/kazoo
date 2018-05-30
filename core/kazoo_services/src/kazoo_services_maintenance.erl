@@ -1,17 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_services_maintenance).
 
 -export([flush/0]).
 -export([credit/2]).
 -export([debit/2]).
 -export([refresh/0]).
--export([reconcile/0, reconcile/1]).
+-export([reconcile/0, reconcile/1
+        ,remove_orphaned_services/0
+        ]).
 -export([sync/1]).
 -export([sync_descendants/1]).
 -export([make_reseller/1]).
@@ -22,28 +22,24 @@
         ,attempt_services_recovery/0
         ]).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
 -define(KZ_SERVICES_DB_TMP, <<"services_backup">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec flush() -> 'ok'.
 flush() ->
     kz_services:flush_services().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Add arbitrary credit to an account, without charging the accounts
+%%------------------------------------------------------------------------------
+%% @doc Add arbitrary credit to an account, without charging the accounts
 %% credit card
 %% @end
-%%--------------------------------------------------------------------
--spec credit(ne_binary(), text()) -> 'no_return'.
+%%------------------------------------------------------------------------------
+-spec credit(kz_term:ne_binary(), kz_term:text()) -> 'no_return'.
 credit(AccountId, Amount) ->
     Units = wht_util:dollars_to_units(Amount),
 
@@ -55,14 +51,12 @@ credit(AccountId, Amount) ->
     end,
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Add arbitrary debit to an account, without charging the accounts
+%%------------------------------------------------------------------------------
+%% @doc Add arbitrary debit to an account, without charging the accounts
 %% debit card
 %% @end
-%%--------------------------------------------------------------------
--spec debit(ne_binary(), text()) -> 'no_return'.
+%%------------------------------------------------------------------------------
+-spec debit(kz_term:ne_binary(), kz_term:text()) -> 'no_return'.
 debit(AccountId, Amount) ->
     Units = wht_util:dollars_to_units(Amount),
 
@@ -94,37 +88,33 @@ create_transaction(Transaction) ->
 -spec admin_discretion(kz_transaction:kz_transaction()) ->
                               kz_transaction:kz_transaction().
 admin_discretion(T) ->
-    kz_transaction:set_reason(<<"admin_discretion">>, T).
+    kz_transaction:set_reason(wht_util:admin_discretion(), T).
 
 -spec admin_description(kz_transaction:kz_transaction()) ->
                                kz_transaction:kz_transaction().
 admin_description(T) ->
-    kz_transaction:set_description(<<"system adminstrator credit modification">>, T).
+    kz_transaction:set_description(<<"system administrator credit modification">>, T).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% maintenance function for the services db
+%%------------------------------------------------------------------------------
+%% @doc maintenance function for the services db
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec refresh() -> 'ok'.
 refresh() ->
     kz_datamgr:db_create(?KZ_SERVICES_DB),
     kz_datamgr:revise_docs_from_folder(?KZ_SERVICES_DB, 'kazoo_services', "views").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% scheduals an eventual sync with the bookkeeper and will dirty the
+%%------------------------------------------------------------------------------
+%% @doc scheduals an eventual sync with the bookkeeper and will dirty the
 %% full reseller tree (as it normally does when changes occur)
 %% @end
-%%--------------------------------------------------------------------
--spec reconcile() -> 'no_return'.
--spec reconcile(text()) -> 'no_return'.
+%%------------------------------------------------------------------------------
 
+-spec reconcile() -> 'no_return'.
 reconcile() ->
     reconcile('all').
 
+-spec reconcile(kz_term:text()) -> 'no_return'.
 reconcile('all') ->
     Accounts = kapps_util:get_all_accounts('raw'),
     Total = length(Accounts),
@@ -143,21 +133,19 @@ reconcile(Account) ->
             io:format("failed to reconcile account ~s(~p):~n  ~p~n", [Account, _E, _R])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% runs an immediate sync with a bookkeeper without dirting the
+%%------------------------------------------------------------------------------
+%% @doc runs an immediate sync with a bookkeeper without dirting the
 %% reseller tree (only the one account is affected)
 %% @end
-%%--------------------------------------------------------------------
--spec sync(text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec sync(kz_term:text()) -> 'ok'.
 sync(Account) when not is_binary(Account) ->
     sync(kz_term:to_binary(Account));
 sync(Account) ->
-    kz_service_sync:sync(Account),
+    _ = kz_services:sync(Account),
     'ok'.
 
--spec sync_descendants(text()) -> 'ok'.
+-spec sync_descendants(kz_term:text()) -> 'ok'.
 sync_descendants(Account) when not is_binary(Account) ->
     sync_descendants(kz_term:to_binary(Account));
 sync_descendants(Account) ->
@@ -165,20 +153,18 @@ sync_descendants(Account) ->
     io:format("syncing ~p descendants of ~s", [length(Descendants), Account]),
     do_sync_descendants(Descendants).
 
--spec do_sync_descendants(ne_binaries()) -> 'ok'.
+-spec do_sync_descendants(kz_term:ne_binaries()) -> 'ok'.
 do_sync_descendants([]) -> 'ok';
 do_sync_descendants([Descendant|Descendants]) ->
     io:format("  syncing ~s, ~p accounts remaining", [Descendant, length(Descendants)]),
     _ = sync(Descendant),
     do_sync_descendants(Descendants).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set the reseller_id to the provided value on the provided account
+%%------------------------------------------------------------------------------
+%% @doc Set the reseller_id to the provided value on the provided account
 %% @end
-%%--------------------------------------------------------------------
--spec set_reseller_id(text(), text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec set_reseller_id(kz_term:text(), kz_term:text()) -> 'ok'.
 set_reseller_id(Reseller, Account) when not is_binary(Account) ->
     set_reseller_id(Reseller, kz_term:to_binary(Account));
 set_reseller_id(Reseller, Account) when not is_binary(Reseller) ->
@@ -186,14 +172,12 @@ set_reseller_id(Reseller, Account) when not is_binary(Reseller) ->
 set_reseller_id(Reseller, Account) ->
     whs_account_conversion:set_reseller_id(Reseller, Account).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set the reseller_id to the provided value on all the sub-accounts
+%%------------------------------------------------------------------------------
+%% @doc Set the reseller_id to the provided value on all the sub-accounts
 %% of the provided account
 %% @end
-%%--------------------------------------------------------------------
--spec cascade_reseller_id(text(), text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec cascade_reseller_id(kz_term:text(), kz_term:text()) -> 'ok'.
 cascade_reseller_id(Reseller, Account) when not is_binary(Account) ->
     cascade_reseller_id(Reseller, kz_term:to_binary(Account));
 cascade_reseller_id(Reseller, Account) when not is_binary(Reseller) ->
@@ -201,38 +185,32 @@ cascade_reseller_id(Reseller, Account) when not is_binary(Reseller) ->
 cascade_reseller_id(Reseller, Account) ->
     whs_account_conversion:cascade_reseller_id(Reseller, Account).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Remove reseller status from an account and set all its sub accounts
+%%------------------------------------------------------------------------------
+%% @doc Remove reseller status from an account and set all its sub accounts
 %% to the next higher reseller
 %% @end
-%%--------------------------------------------------------------------
--spec demote_reseller(text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec demote_reseller(kz_term:text()) -> 'ok'.
 demote_reseller(Account) when not is_binary(Account) ->
     demote_reseller(kz_term:to_binary(Account));
 demote_reseller(Account) ->
     whs_account_conversion:demote(Account).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Set the reseller status on the provided account and update all
+%%------------------------------------------------------------------------------
+%% @doc Set the reseller status on the provided account and update all
 %% sub accounts
 %% @end
-%%--------------------------------------------------------------------
--spec make_reseller(text()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec make_reseller(kz_term:text()) -> 'ok'.
 make_reseller(Account) when not is_binary(Account) ->
     make_reseller(kz_term:to_binary(Account));
 make_reseller(Account) ->
     whs_account_conversion:promote(Account).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec attempt_services_recovery() -> 'ok'.
 attempt_services_recovery() ->
     JObjs = fetch_all_service_docs(?KZ_SERVICES_DB_TMP),
@@ -305,7 +283,7 @@ log_services_backup_failures([JObj|JObjs]) ->
 find_services_backup_failures(JObjs) ->
     [JObj || JObj <- JObjs, kz_json:get_ne_value(<<"error">>, JObj) =/= 'undefined'].
 
--spec fetch_all_service_docs(ne_binary()) -> kz_json:objects().
+-spec fetch_all_service_docs(kz_term:ne_binary()) -> kz_json:objects().
 fetch_all_service_docs(Database) ->
     _ = io:format("fetching all service docs from '~s'~n", [Database]),
     {'ok', JObjs} = kz_datamgr:all_docs(Database, ['include_docs']),
@@ -322,3 +300,25 @@ not_design_doc(JObj) ->
 prepare_service_doc(JObj) ->
     Doc = kz_json:get_value(<<"doc">>, JObj),
     kz_json:delete_key(<<"_rev">>, Doc).
+
+-spec remove_orphaned_services() -> 'no_return'.
+remove_orphaned_services() ->
+    {'ok', ServiceDocs} = kz_datamgr:all_docs(?KZ_SERVICES_DB),
+    Count = lists:foldl(fun maybe_remove_orphan/2, 0, ServiceDocs),
+    Count > 0
+        andalso io:format("removed ~p service docs~n", [Count]),
+    'no_return'.
+
+-spec maybe_remove_orphan(kz_json:object() | kz_term:ne_binary(), non_neg_integer()) ->
+                                 non_neg_integer().
+maybe_remove_orphan(<<"_design/", _/binary>>, Count) -> Count;
+maybe_remove_orphan(<<_/binary>> = AccountId, Count) ->
+    case kzd_accounts:fetch(AccountId) of
+        {'ok', _AccountDoc} -> Count;
+        {'error', 'not_found'} ->
+            {'ok', _} = kz_datamgr:del_doc(?KZ_SERVICES_DB, AccountId),
+            io:format("account ~s not found, removing services~n", [AccountId]),
+            Count+1
+    end;
+maybe_remove_orphan(ViewResult, Count) ->
+    maybe_remove_orphan(kz_doc:id(ViewResult), Count).

@@ -28,5 +28,5 @@
 
 # When crashing, write dump with highest priority
 -env ERL_CRASH_DUMP_NICE 1
--s lager
+
 -s kazoo_apps_app

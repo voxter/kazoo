@@ -29,7 +29,7 @@ return 1
 script() {
     touch ${LOG_DIR}/debug.log
     touch ${LOG_DIR}/error.log
-    waitfor 600 "auto-started kapps" || shutdown
+    waitfor 180 "auto-started kapps" || shutdown
     echo "creating account"
     sup crossbar_maintenance create_account 'compte_maitre' 'royaume' 'superduperuser' 'pwd!' || shutdown
     echo "running account created"

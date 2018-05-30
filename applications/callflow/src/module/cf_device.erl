@@ -1,27 +1,23 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_device).
 
 -behaviour(gen_cf_action).
 
--include("callflow.hrl").
+-include_lib("callflow/src/callflow.hrl").
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, attempts to call an endpoint as defined
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, attempts to call an endpoint as defined
 %% in the Data payload.  Returns continue if fails to connect or
-%% stop when successfull.
+%% stop when successful.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     case bridge_to_endpoints(Data, Call) of
@@ -29,6 +25,12 @@ handle(Data, Call) ->
             lager:info("completed successful bridge to the device"),
             cf_exe:stop(Call);
         {'fail', _}=Reason -> maybe_handle_bridge_failure(Reason, Call);
+        {'error', 'invalid_endpoint'} ->
+            lager:info("failed to build endpoint from device"),
+            cf_exe:continue(Call);
+        {'error', _R} when is_atom(_R) ->
+            lager:info("failed to build endpoint from device: ~p", [_R]),
+            cf_exe:continue(Call);
         {'error', _R} ->
             lager:info("error bridging to device: ~s"
                       ,[kz_json:get_ne_binary_value(<<"Error-Message">>, _R)]
@@ -43,17 +45,16 @@ maybe_handle_bridge_failure(Reason, Call) ->
         'ok' -> 'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempts to bridge to the endpoints created to reach this device
+%%------------------------------------------------------------------------------
+%% @doc Attempts to bridge to the endpoints created to reach this device
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec bridge_to_endpoints(kz_json:object(), kapps_call:call()) ->
                                  cf_api_bridge_return().
 bridge_to_endpoints(Data, Call) ->
     EndpointId = maybe_use_variable(Data, Call),
     Params = kz_json:set_value(<<"source">>, kz_term:to_binary(?MODULE), Data),
+    Strategy = kz_json:get_ne_binary_value(<<"dial_strategy">>, Data, <<"simultaneous">>),
     case kz_endpoint:build(EndpointId, Params, Call) of
         {'error', _}=E -> E;
         {'ok', Endpoints} ->
@@ -61,12 +62,12 @@ bridge_to_endpoints(Data, Call) ->
             Timeout = kz_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
             IgnoreEarlyMedia = kz_endpoints:ignore_early_media(Endpoints),
 
-            kapps_call_command:b_bridge(Endpoints, Timeout, kapi_dialplan:dial_method_single(), IgnoreEarlyMedia
+            kapps_call_command:b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia
                                        ,'undefined', 'undefined', <<"false">>, FailOnSingleReject, Call
                                        )
     end.
 
--spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->

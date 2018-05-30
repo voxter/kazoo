@@ -1,18 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Sleeping before hanging up.
 %%%
-%%% data:{
-%%%   "duration":2 // how long to delay for
-%%%   "unit":"s" // optional unit of time, defaults to seconds
-%%% }
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`duration'</dt>
+%%%   <dd>How long to delay for. Default is zero.</dd>
 %%%
-%%% unit can be one of: "ms", "s", "m", "h"
+%%%   <dt>`unit'</dt>
+%%%   <dd><strong>Optional: </strong>Unit of time, defaults to `s' (seconds).</dd>
+%%% </dl>
 %%%
+%%% Unit can be one of: `ms', `s', `m', `h'.
+%%%
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_sleep).
 
 -behaviour(gen_cf_action).
@@ -21,12 +25,10 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     DurationMS = get_duration_ms(Data),
@@ -42,7 +44,7 @@ get_duration_ms(Data) ->
     Unit = kz_json:get_ne_binary_value(<<"unit">>, Data, <<"s">>),
     duration_to_ms(Duration, Unit).
 
--spec duration_to_ms(integer(), ne_binary()) -> non_neg_integer().
+-spec duration_to_ms(integer(), kz_term:ne_binary()) -> non_neg_integer().
 duration_to_ms(Duration, <<"ms">>) ->
     constrain_duration(Duration);
 duration_to_ms(Duration, <<"s">>) ->

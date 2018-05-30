@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% handler for route wins, bootstraps callflow execution
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc handler for route wins, bootstraps callflow execution
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(doodle_route_win).
 
 -include("doodle.hrl").
@@ -13,8 +11,8 @@
 -define(JSON(L), kz_json:from_list(L)).
 
 -define(DEFAULT_SERVICES, ?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
-                                ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
-                                ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
+                                ,{<<"video">>, ?JSON([{<<"enabled">>, 'true'}])}
+                                ,{<<"sms">>, ?JSON([{<<"enabled">>, 'true'}])}
                                 ])).
 
 -define(DEFAULT_LANGUAGE, <<"en-US">>).
@@ -23,8 +21,7 @@
 -define(RESTRICTED_MSG, <<"endpoint is restricted from making this call">>).
 -define(SCHEDULED(Call), kapps_call:custom_channel_var(<<"Scheduled-Delivery">>, 0, Call)).
 
--export([execute_text_flow/2
-        ]).
+-export([execute_text_flow/2]).
 
 -spec execute_text_flow(kz_json:object(), kapps_call:call()) -> 'ok' | {'ok', pid()}.
 execute_text_flow(JObj, Call) ->
@@ -35,7 +32,7 @@ execute_text_flow(JObj, Call) ->
             doodle_util:save_sms(doodle_util:set_flow_error(<<"error">>, ?RESTRICTED_MSG, Call)),
             'ok';
         'false' ->
-            maybe_scheduled_delivery(JObj, Call, ?SCHEDULED(Call) , kz_time:current_tstamp())
+            maybe_scheduled_delivery(JObj, Call, ?SCHEDULED(Call) , kz_time:now_s())
     end.
 
 -spec maybe_scheduled_delivery(kz_json:object(), kapps_call:call(), integer(), integer()) ->
@@ -81,7 +78,7 @@ maybe_service_unavailable(JObj, Call) ->
 -spec maybe_account_service_unavailable(kz_json:object(), kapps_call:call()) -> boolean().
 maybe_account_service_unavailable(JObj, Call) ->
     AccountId = kapps_call:account_id(Call),
-    {'ok', Doc} = kz_account:fetch(AccountId),
+    {'ok', Doc} = kzd_accounts:fetch(AccountId),
     Services = kz_json:merge(
                  kz_json:get_value(<<"services">>, Doc, ?DEFAULT_SERVICES),
                  kz_json:get_value(<<"pvt_services">>, Doc, kz_json:new())),
@@ -137,7 +134,7 @@ get_caller_groups(Groups, JObj, Call) ->
                         get_group_associations(Id, Groups, Set)
                 end, sets:new(), Ids).
 
--spec maybe_device_groups_intersect(ne_binary(), sets:set(), kz_json:objects(), kapps_call:call()) -> boolean().
+-spec maybe_device_groups_intersect(kz_term:ne_binary(), sets:set(), kz_json:objects(), kapps_call:call()) -> boolean().
 maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
     CalleeGroups = get_group_associations(CalleeId, Groups),
     case sets:size(sets:intersection(CallerGroups, CalleeGroups)) =:= 0 of
@@ -152,11 +149,11 @@ maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
             sets:size(sets:intersection(CallerGroups, UsersGroups)) =:= 0
     end.
 
--spec get_group_associations(ne_binary(), kz_json:objects()) -> sets:set().
+-spec get_group_associations(kz_term:ne_binary(), kz_json:objects()) -> sets:set().
 get_group_associations(Id, Groups) ->
     get_group_associations(Id, Groups, sets:new()).
 
--spec get_group_associations(ne_binary(), kz_json:objects(), sets:set()) -> sets:set().
+-spec get_group_associations(kz_term:ne_binary(), kz_json:objects(), sets:set()) -> sets:set().
 get_group_associations(Id, Groups, Set) ->
     lists:foldl(fun(Group, S) ->
                         case kz_json:get_value([<<"value">>, Id], Group) of
@@ -167,7 +164,7 @@ get_group_associations(Id, Groups, Set) ->
                         end
                 end, Set, Groups).
 
--spec get_callee_extension_info(kapps_call:call()) -> {ne_binary(), ne_binary()} | 'undefined'.
+-spec get_callee_extension_info(kapps_call:call()) -> {kz_term:ne_binary(), kz_term:ne_binary()} | 'undefined'.
 get_callee_extension_info(Call) ->
     Flow = kapps_call:kvs_fetch('cf_flow', Call),
     FirstModule = kz_json:get_value(<<"module">>, Flow),
@@ -187,12 +184,10 @@ get_callee_extension_info(Call) ->
         'false' -> 'undefined'
     end.
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec bootstrap_callflow_executer(kz_json:object(), kapps_call:call()) -> {'ok', pid()}.
 bootstrap_callflow_executer(_JObj, Call) ->
     Routines = [fun store_owner_id/1
@@ -202,23 +197,19 @@ bootstrap_callflow_executer(_JObj, Call) ->
                ],
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec store_owner_id(kapps_call:call()) -> kapps_call:call().
 store_owner_id(Call) ->
     OwnerId = kz_attributes:owner_id(Call),
     kapps_call:kvs_store('owner_id', OwnerId, Call).
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_ccvs(kapps_call:call()) -> kapps_call:call().
 update_ccvs(Call) ->
     CallerIdType = case kapps_call:inception(Call) of
@@ -235,7 +226,7 @@ update_ccvs(Call) ->
               ]),
     kapps_call:set_custom_channel_vars(Props, Call).
 
--spec get_incoming_security(kapps_call:call()) -> kz_proplist().
+-spec get_incoming_security(kapps_call:call()) -> kz_term:proplist().
 get_incoming_security(Call) ->
     case kz_endpoint:get(Call) of
         {'error', _R} -> [];
@@ -245,13 +236,11 @@ get_incoming_security(Call) ->
              )
     end.
 
-%%-----------------------------------------------------------------------------
-%% @private
-%% @doc
-%% executes the found call flow by starting a new doodle_exe process under the
+%%------------------------------------------------------------------------------
+%% @doc executes the found call flow by starting a new doodle_exe process under the
 %% doodle_exe_sup tree.
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec execute_callflow(kapps_call:call()) -> {'ok', pid()}.
 execute_callflow(Call) ->
     lager:info("message has been setup, beginning to process the message"),

@@ -1,29 +1,30 @@
 ### Callflow Privacy
 
-#### Overview
+### About Privacy
 
 The `privacy` callflow enables set caller privacy on calls, restricting the presentation some or full parts of Caller ID.
 
-##### Callflow fields
+#### Schema
 
-Key | Description | Type | Default | Required
---- | ----------- | ---- | ------- | --------
-`privacy_mode` | specifies privacy mode | `string` | `"full"` | `false`
+Validator for the privacy callflow's data object
 
-#### Description
 
-By calling this callflow, based on `privacy_mode` both or some part of Caller ID would be made anonymous.
 
-#### Privacy Mode
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`endpoint_strategy` | whether cf_privacy should overwrite or merge with the caller_id_options of the endpoint. | `string('overwrite' | 'merge')` | `overwrite` | `false` |  
+`mode` | set caller privacy on calls, restricting the presentation some or full parts of Caller ID | `string('full' | 'name' | 'number' | 'yes')` | `full` | `false` |  
 
-*`full`*
-:   anonymize both CIDName and CIDNumber
 
-*`name`*
-:   anonymize CIDName only
 
-*`number`*
-:   anonymize CIDNumber only
 
-*`yes`*
-:   anonymize both CIDName and CIDNumber
+
+
+#### Privacy Modes
+
+Mode | Description
+---- | -----------
+`full` | anonymize both CIDName and CIDNumber
+`name` | anonymize CIDName only
+`number` | anonymize CIDNumber only
+`yes` | anonymize both CIDName and CIDNumber

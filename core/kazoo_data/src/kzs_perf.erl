@@ -1,25 +1,22 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%%
-%%%   Profiling
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Profiling
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kzs_perf).
 
 -include("kz_data.hrl").
 
--define(CACHE_PROFILE_FROM_FILE, kz_json:load_fixture_from_file('kazoo_data', "defaults", "perf.json")).
+-define(CACHE_PROFILE_FROM_FILE, kz_json:load_fixture_from_file(?APP, "defaults", "perf.json")).
 -define(CACHE_PROFILE_OPTS, [{'origin', [{'db', ?KZ_CONFIG_DB, ?CONFIG_CAT}]}
                             ,{'expires', 'infinity'}
                             ]).
 
-%% ====================================================================
+%%==============================================================================
 %% API functions
-%% ====================================================================
+%%==============================================================================
+
 -export([profile/2]).
 
 -spec profile(mfa(), list()) -> any().
@@ -29,9 +26,14 @@ profile({Mod, Fun, Arity}=MFA, Args) ->
         _ -> erlang:apply(Mod, Fun, Args)
     end.
 
-%% ====================================================================
+%%==============================================================================
 %% Internal functions
-%% ====================================================================
+%%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec load_profile_config_from_disk() -> kz_json:object().
 load_profile_config_from_disk() ->
     Doc = ?CACHE_PROFILE_FROM_FILE,
@@ -39,7 +41,7 @@ load_profile_config_from_disk() ->
 
 -spec load_profile_config() -> kz_json:object().
 load_profile_config() ->
-    case kapps_config:get_json(?CONFIG_CAT, <<"performance">>) of
+    case kazoo_data_config:get_json(<<"performance">>) of
         'undefined' -> load_profile_config_from_disk();
         JObj -> JObj
     end.
@@ -78,7 +80,7 @@ profile_match(Mod, Fun, Arity) ->
 -spec do_profile({atom(), atom(), arity()}, list(), map()) -> any().
 do_profile({Mod, Fun, _Arity}, Args, PD) ->
     [Plan, DbName | Others] = Args,
-    {Time, Result} = timer:tc(fun() -> erlang:apply(Mod, Fun, Args) end),
+    {Time, Result} = timer:tc(Mod, Fun, Args),
     From = kz_util:calling_process(),
     FromList = [{kz_term:to_atom(<<"from_", (kz_term:to_binary(K))/binary>>, true), V} || {K,V} <- maps:to_list(From)],
     MD = FromList ++ maps:to_list(maps:merge(Plan, PD)),
@@ -90,6 +92,6 @@ do_profile({Mod, Fun, _Arity}, Args, PD) ->
                ,{'from', From}
                 | MD
                ],
-               "execution of {~s:~s} in database ~s with args ~p took ~b",
+               "execution of {~s:~s} in database ~s with args ~p took ~b μs",
                [Mod, Fun, DbName, Others, Time]),
     Result.

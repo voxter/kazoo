@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kapi_xmpp).
 
 -export([event/1, event_v/1
@@ -24,11 +22,13 @@
 
 -define(XMPP_EXCHANGE, <<"xmpp">>).
 
--define(XMPP_EVENT_ROUTING_KEY(Event, JID),
-        <<"xmpp."
-          ,(kz_term:to_binary(Event))/binary
-          ,"."
-          ,(amqp_util:encode(JID))/binary>>).
+-define(XMPP_EVENT_ROUTING_KEY(Event, JID)
+       ,list_to_binary(["xmpp."
+                       ,kz_term:to_binary(Event)
+                       ,"."
+                       ,amqp_util:encode(JID)
+                       ])
+       ).
 -define(XMPP_EVENT_HEADERS, [<<"JID">>]).
 -define(OPTIONAL_XMPP_EVENT_HEADERS, [<<"Application-Name">>
                                      ,<<"Application-Event">>
@@ -37,10 +37,7 @@
 -define(XMPP_EVENT_VALUES, [{<<"Event-Category">>, <<"xmpp_event">>}]).
 -define(XMPP_EVENT_TYPES, []).
 
-
-
-
--spec event(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+-spec event(kz_term:api_terms()) -> {'ok', iolist()} | {'error', string()}.
 event(Prop) when is_list(Prop) ->
     case event_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?XMPP_EVENT_HEADERS, ?OPTIONAL_XMPP_EVENT_HEADERS);
@@ -48,14 +45,12 @@ event(Prop) when is_list(Prop) ->
     end;
 event(JObj) -> event(kz_json:to_proplist(JObj)).
 
--spec event_v(api_terms()) -> boolean().
+-spec event_v(kz_term:api_terms()) -> boolean().
 event_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?XMPP_EVENT_HEADERS, ?XMPP_EVENT_VALUES, ?XMPP_EVENT_TYPES);
 event_v(JObj) -> event_v(kz_json:to_proplist(JObj)).
 
-
-
--spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
+-spec bind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     JID = props:get_value('jid', Props, <<"*">>),
     Events = props:get_value('restrict_to', Props, [<<"*">>]),
@@ -66,7 +61,7 @@ bind_q(Q, [Event|T], JID) ->
     bind_q(Q, T, JID);
 bind_q(_Q, [], _JID) -> 'ok'.
 
--spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
+-spec unbind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     JID = props:get_value('jid', Props, <<"*">>),
     Events = props:get_value('restrict_to', Props, [<<"*">>]),
@@ -77,19 +72,18 @@ unbind_q(Q, [Event|T], JID) ->
     unbind_q(Q, T, JID);
 unbind_q(_Q, [], _JID) -> 'ok'.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% declare the exchanges used by this API
+%%------------------------------------------------------------------------------
+%% @doc Declare the exchanges used by this API
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
     amqp_util:new_exchange(?XMPP_EXCHANGE, <<"fanout">>).
 
-
--spec publish_event(api_terms()) -> 'ok'.
--spec publish_event(api_terms(), ne_binary()) -> 'ok'.
+-spec publish_event(kz_term:api_terms()) -> 'ok'.
 publish_event(Event) -> publish_event(Event, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_event(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_event(Event, ContentType) when is_list(Event) ->
     JID = props:get_value(<<"JID">>, Event),
     EventName = props:get_value(<<"Event-Name">>, Event),
@@ -98,24 +92,23 @@ publish_event(Event, ContentType) when is_list(Event) ->
 publish_event(Event, ContentType) ->
     publish_event(kz_json:to_proplist(Event), ContentType).
 
-
 regexp_get(Jid, Regex) ->
     {'match', [ShortJid]} =
         re:run(Jid, Regex, [{'capture', 'all_but_first', 'binary'}]),
     ShortJid.
 
--spec jid_short(ne_binary()) -> ne_binary().
+-spec jid_short(kz_term:ne_binary()) -> kz_term:ne_binary().
 jid_short(JID) ->
     regexp_get(JID, <<"^([^/]*)">>).
 
--spec jid_username(ne_binary()) -> ne_binary().
+-spec jid_username(kz_term:ne_binary()) -> kz_term:ne_binary().
 jid_username(JID) ->
     regexp_get(JID, <<"^([^@]*)">>).
 
--spec jid_server(ne_binary()) -> ne_binary().
+-spec jid_server(kz_term:ne_binary()) -> kz_term:ne_binary().
 jid_server(JID) ->
     regexp_get(JID, <<"^[^@]*[@]([^/]*)">>).
 
--spec jid_resource(ne_binary()) -> ne_binary().
+-spec jid_resource(kz_term:ne_binary()) -> kz_term:ne_binary().
 jid_resource(JID) ->
     regexp_get(JID, <<"^[^/]*[/](.*)">>).

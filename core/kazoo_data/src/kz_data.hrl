@@ -8,11 +8,12 @@
 -define(CACHE_NAME, 'kazoo_data_cache').
 -define(KAZOO_DATA_PLAN_CACHE, 'kazoo_data_plan_cache').
 
--define(CONFIG_CAT, <<"datamgr">>).
+-define(APP, kazoo_data).
 -define(APP_NAME, <<"datamgr">>).
 -define(APP_VERSION, <<"4.0.0">>).
+-define(CONFIG_CAT, ?APP_NAME).
 
--record(data_connection, {id = {kz_time:current_tstamp(), kz_binary:rand_hex(4)}
+-record(data_connection, {id = {kz_time:now_s(), kz_binary:rand_hex(4)}
                          ,app :: atom() | '$1'
                          ,props = #{} :: map() | '_'
                          ,server :: any() | '$2'
@@ -24,7 +25,7 @@
 -record(db, {app :: atom()
             ,server :: any()
             ,db :: any()
-            ,name :: ne_binary()
+            ,name :: kz_term:ne_binary()
             }).
 
 -type data_connection() :: #data_connection{}.
@@ -32,13 +33,14 @@
 -type server() :: {atom(), any()} | 'undefined'.
 -type db() :: #db{}.
 
--record(copy_doc, {source_dbname  :: ne_binary()
-                  ,source_doc_id  :: ne_binary()
-                  ,dest_dbname = 'undefined' :: api_binary()
-                  ,dest_doc_id = 'undefined' :: api_binary()
+-record(copy_doc, {source_dbname  :: kz_term:ne_binary()
+                  ,source_doc_id  :: kz_term:ne_binary()
+                  ,dest_dbname :: kz_term:api_binary()
+                  ,dest_doc_id :: kz_term:api_binary()
                   }).
 -type copy_doc() :: #copy_doc{}.
 
+-type error_verbosity() :: 'default' | 'verbose'.
 -type data_errors() :: 'conflict' |
                        'db_not_found' |
                        'db_not_reachable' |
@@ -47,6 +49,7 @@
                        'invalid_db_name' |
                        'invalid_view_name' |
                        'not_found' |
+                       'no_results' |
                        'precondition_failed' |
                        'req_timedout' |
                        'retry_later' |
@@ -94,20 +97,28 @@
 
 -type view_options() :: [view_option()].
 
--type view_listing() :: {ne_binary(), kz_json:object()}.
+-type view_listing() :: {kz_term:ne_binary(), kz_json:object()}.
 -type views_listing() :: [view_listing()].
 
--type db_classifications() :: 'account' | 'modb' |
-                              'numbers' | 'aggregate' | 'system' |
-                              'resource_selectors' | 'deprecated' |
-                              'undefined' | 'external' | 'provisioner'.
+-type db_classification() :: 'account' |
+                             'acdc' |
+                             'aggregate' |
+                             'deprecated' |
+                             'external' |
+                             'modb' |
+                             'numbers' |
+                             'provisioner' |
+                             'ratedeck' |
+                             'resource_selectors' |
+                             'system' |
+                             'undefined'.
 
 -type db_create_options() :: [{'q',integer()} | {'n',integer()} | 'ensure_other_dbs'].
 -type db_delete_options() :: ['ensure_other_dbs'].
 
--type ddoc() :: ne_binary() | 'all_docs' | 'design_docs'.
+-type ddoc() :: kz_term:ne_binary() | 'all_docs' | 'design_docs'.
 
--type docid() :: ne_binary() | {ne_binary(), ne_binary()}.
+-type docid() :: kz_term:ne_binary() | {kz_term:ne_binary(), kz_term:ne_binary()}.
 -type docids() :: [docid()].
 
 -type get_results_return() :: {'ok', kz_json:objects() | kz_json:path()} |

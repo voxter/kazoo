@@ -1,13 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
-%%%
+%%% @author Peter Defebvre
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_carriers).
 
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
@@ -33,59 +30,59 @@
         ,is_local/1
         ]).
 
--define(DEFAULT_CARRIER_MODULE
-       ,kapps_config:get_binary(?KNM_CONFIG_CAT, <<"available_module_name">>, ?CARRIER_LOCAL)).
-
--define(DEFAULT_CARRIER_MODULES, [?DEFAULT_CARRIER_MODULE]).
-
--define(CARRIER_MODULES
-       ,kapps_config:get_ne_binaries(?KNM_CONFIG_CAT, <<"carrier_modules">>, ?DEFAULT_CARRIER_MODULES)).
-
 -ifdef(TEST).
 -define(CARRIER_MODULES(AccountId)
        ,(fun (?CHILD_ACCOUNT_ID) ->
                  %% CHILD_ACCOUNT_ID is not a reseller but that's okay
                  [?CARRIER_LOCAL, <<"knm_bandwidth2">>];
-             (_) ->
-                 kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)
+             (_) -> ?CARRIER_MODULES
          end)(AccountId)).
 -else.
 -define(CARRIER_MODULES(AccountId)
-       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)).
+       ,kapps_account_config:get_ne_binaries(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)
+       ).
 -endif.
+
+-define(CARRIER_MODULES
+       ,kapps_config:get_ne_binaries(?KNM_CONFIG_CAT, <<"carrier_modules">>, ?DEFAULT_CARRIER_MODULES)
+       ).
+
+-define(DEFAULT_CARRIER_MODULE
+       ,kapps_config:get_binary(?KNM_CONFIG_CAT, <<"available_module_name">>, ?CARRIER_LOCAL)
+       ).
+
+-define(DEFAULT_CARRIER_MODULES, [?DEFAULT_CARRIER_MODULE]).
 
 -ifdef(TEST).
 -type option() :: {'quantity', pos_integer()} |
-                  {'carriers', ne_binaries()} |
-                  {'phonebook_url', ne_binary()} |
+                  {'carriers', kz_term:ne_binaries()} |
+                  {'phonebook_url', kz_term:ne_binary()} |
                   {'tollfree', boolean()} |
-                  {'prefix', ne_binary()} |
+                  {'prefix', kz_term:ne_binary()} |
                   {'country', knm_util:country_iso3166a2()} |
                   {'offset', non_neg_integer()} |
                   {'blocks', boolean()} |
-                  {'account_id', ne_binary()} |
-                  {'reseller_id', ne_binary()}.
+                  {'account_id', kz_term:ne_binary()} |
+                  {'reseller_id', kz_term:ne_binary()}.
 -else.
 -type option() :: {'quantity', pos_integer()} |
-                  {'prefix', ne_binary()} |
-                  {'dialcode', ne_binary()} |
+                  {'prefix', kz_term:ne_binary()} |
+                  {'dialcode', kz_term:ne_binary()} |
                   {'country', knm_util:country_iso3166a2()} |
                   {'offset', non_neg_integer()} |
                   {'blocks', boolean()} |
-                  {'account_id', ne_binary()} |
-                  {'reseller_id', ne_binary()}.
+                  {'account_id', kz_term:ne_binary()} |
+                  {'reseller_id', kz_term:ne_binary()}.
 -endif.
 -type options() :: [option()].
 -export_type([option/0, options/0]).
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Normalize then query the various providers for available numbers.
+%%------------------------------------------------------------------------------
+%% @doc Normalize then query the various providers for available numbers.
 %% @end
-%%--------------------------------------------------------------------
--spec check(ne_binaries()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec check(kz_term:ne_binaries()) -> kz_json:object().
 check(Numbers) ->
     Nums = lists:usort([knm_converters:normalize(Num) || Num <- Numbers]),
     lager:info("attempting to check ~p ", [Nums]),
@@ -112,13 +109,11 @@ check_numbers(Module, Nums) ->
             {#{}, maps:from_list([{Num,<<"error">>} || Num <- Nums])}
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Create a list of all carrier modules available to a subaccount.
+%%------------------------------------------------------------------------------
+%% @doc Create a list of all carrier modules available to a subaccount.
 %% @end
-%%--------------------------------------------------------------------
--spec available_carriers(options()) -> atoms().
+%%------------------------------------------------------------------------------
+-spec available_carriers(options()) -> kz_term:atoms().
 -ifdef(TEST).
 available_carriers(Options) ->
     case props:get_value('carriers', Options) of
@@ -130,33 +125,31 @@ available_carriers(Options) ->
     get_available_carriers(Options).
 -endif.
 
--spec get_available_carriers(options()) -> atoms().
+-spec get_available_carriers(options()) -> kz_term:atoms().
 get_available_carriers(Options) ->
     case account_id(Options) =:= undefined
         orelse reseller_id(Options) =:= undefined
     of
-        true -> keep_only_reachable(?CARRIER_MODULES);
-        false ->
+        'true' -> keep_only_reachable(?CARRIER_MODULES);
+        'false' ->
             ResellerId = reseller_id(Options),
             First = [?CARRIER_RESERVED, ?CARRIER_RESERVED_RESELLER, ?CARRIER_LOCAL],
             keep_only_reachable(First ++ (?CARRIER_MODULES(ResellerId) -- First))
     end.
 
--spec default_carriers() -> atoms().
+-spec default_carriers() -> kz_term:atoms().
 default_carriers() ->
     keep_only_reachable(?DEFAULT_CARRIER_MODULES).
 
--spec default_carrier() -> ne_binary().
+-spec default_carrier() -> kz_term:ne_binary().
 default_carrier() ->
     ?DEFAULT_CARRIER_MODULE.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% List all carrier modules.
+%%------------------------------------------------------------------------------
+%% @doc List all carrier modules.
 %% @end
-%%--------------------------------------------------------------------
--spec all_modules() -> ne_binaries().
+%%------------------------------------------------------------------------------
+-spec all_modules() -> kz_term:ne_binaries().
 all_modules() ->
     [<<"knm_bandwidth2">>
     ,<<"knm_bandwidth">>
@@ -174,13 +167,11 @@ all_modules() ->
     ,<<"knm_voip_innovations">>
     ].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Get information on the available carriers
+%%------------------------------------------------------------------------------
+%% @doc Get information on the available carriers
 %% @end
-%%--------------------------------------------------------------------
--spec info(api_ne_binary(), api_ne_binary(), api_ne_binary()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec info(kz_term:api_ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) -> kz_json:object().
 info(AuthAccountId, AccountId, ResellerId) ->
     AvailableCarriers = available_carriers([{account_id, AccountId}
                                            ,{reseller_id, ResellerId}
@@ -208,17 +199,17 @@ info_fold(Module, Info=#{?CARRIER_INFO_MAX_PREFIX := MaxPrefix}) ->
             Info
     end.
 
--spec usable_carriers() -> ne_binaries().
+-spec usable_carriers() -> kz_term:ne_binaries().
 usable_carriers() ->
     Modules = all_modules() -- [?CARRIER_RESERVED
                                ,?CARRIER_RESERVED_RESELLER
                                ],
     [CarrierName || <<"knm_",CarrierName/binary>> <- Modules].
 
--spec allowed_creation_states(api_ne_binary()) -> ne_binaries().
+-spec allowed_creation_states(kz_term:api_ne_binary()) -> kz_term:ne_binaries().
 -ifdef(TEST).
 allowed_creation_states(AccountId=?RESELLER_ACCOUNT_ID) ->
-    AccountJObj = kz_account:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, true),
+    AccountJObj = kzd_accounts:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, true),
     Options = [{<<"auth_by_account">>, AccountJObj}],
     knm_number:allowed_creation_states(Options, AccountId);
 allowed_creation_states(AccountId) ->
@@ -228,12 +219,10 @@ allowed_creation_states(AccountId) ->
     knm_number:allowed_creation_states(AccountId).
 -endif.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Buy a number from its carrier module
+%%------------------------------------------------------------------------------
+%% @doc Buy a number from its carrier module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire(knm_number:knm_number()) -> knm_number:knm_number();
              (knm_numbers:collection()) -> knm_numbers:collection().
 acquire(T0=#{todo := Ns}) ->
@@ -250,7 +239,7 @@ acquire(Number) ->
     DryRun = knm_phone_number:dry_run(PhoneNumber),
     acquire(Number, Module, DryRun).
 
--spec acquire(knm_number:knm_number(), api_ne_binary(), boolean()) ->
+-spec acquire(knm_number:knm_number(), kz_term:api_ne_binary(), boolean()) ->
                      knm_number:knm_number().
 acquire(Number, 'undefined', _DryRun) ->
     knm_errors:carrier_not_specified(Number);
@@ -264,11 +253,10 @@ acquire(Number, ?NE_BINARY=Mod, 'false') ->
             Number
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect(knm_number:knm_number()) -> knm_number:knm_number();
                 (knm_numbers:collection()) -> knm_numbers:collection().
 disconnect(T0=#{todo := Ns}) ->
@@ -287,18 +275,19 @@ disconnect(Number) ->
         Result -> Result
     catch
         'error':_ ->
-            lager:debug("non-existant carrier module ~p, allowing disconnect", [Module]),
+            lager:debug("nonexistent carrier module ~p, allowing disconnect", [Module]),
             Number
     end.
 
--spec prefix(options()) -> ne_binary().
--spec prefix(options(), ne_binary()) -> ne_binary().
+-spec prefix(options()) -> kz_term:ne_binary().
 prefix(Options) ->
     props:get_ne_binary_value('prefix', Options).
+
+-spec prefix(options(), kz_term:ne_binary()) -> kz_term:ne_binary().
 prefix(Options, Default) ->
     props:get_ne_binary_value('prefix', Options, Default).
 
--spec dialcode(options()) -> ne_binary().
+-spec dialcode(options()) -> kz_term:ne_binary().
 dialcode(Options) ->
     props:get_ne_binary_value('dialcode', Options).
 
@@ -319,41 +308,37 @@ offset(Options) ->
 blocks(Options) ->
     props:get_value('blocks', Options).
 
--spec account_id(options()) -> api_ne_binary().
+-spec account_id(options()) -> kz_term:api_ne_binary().
 account_id(Options) ->
     props:get_value('account_id', Options).
 
--spec reseller_id(options()) -> api_ne_binary().
+-spec reseller_id(options()) -> kz_term:api_ne_binary().
 reseller_id(Options) ->
     props:get_value('reseller_id', Options).
 
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Returns whether carrier handles numbers local to the system.
+%%------------------------------------------------------------------------------
+%% @doc Returns whether carrier handles numbers local to the system.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(PhoneNumber) ->
     Carrier = knm_phone_number:module_name(PhoneNumber),
-    try apply(Carrier, is_number_billable, [PhoneNumber])
+    try apply(Carrier, 'is_number_billable', [PhoneNumber])
     catch
         'error':_R -> 'true'
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns whether carrier handles numbers local to the system.
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Returns whether carrier handles numbers local to the system.
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
--spec is_local(ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_local(kz_term:ne_binary()) -> boolean().
 is_local(Carrier) ->
     try apply(Carrier, is_local, [])
     catch
@@ -362,12 +347,11 @@ is_local(Carrier) ->
             true
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec apply(module() | ne_binary() | knm_number:knm_number(), atom(), list()) -> any().
+%%------------------------------------------------------------------------------
+-spec apply(module() | kz_term:ne_binary() | knm_number:knm_number(), atom(), list()) -> any().
 apply(Module, FName, Args) when is_atom(Module), Module =/= undefined ->
     lager:debug("contacting carrier ~s for ~s", [Module, FName]),
     erlang:apply(Module, FName, Args);
@@ -378,14 +362,13 @@ apply(Number, FName, Args) ->
     Carrier = knm_phone_number:module_name(knm_number:phone_number(Number)),
     apply(Carrier, FName, Args).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec keep_only_reachable([ne_binary()]) -> atoms().
+%%------------------------------------------------------------------------------
+-spec keep_only_reachable([kz_term:ne_binary()]) -> kz_term:atoms().
 keep_only_reachable(ModuleNames) ->
-    lager:debug("resolving carrier modules: ~p", [ModuleNames]),
+    ?LOG_DEBUG("resolving carrier modules: ~p", [ModuleNames]),
     [Module
      || M <- ModuleNames,
         (Module = kz_util:try_load_module(M)) =/= 'false'

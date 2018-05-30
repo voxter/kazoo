@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(crossbar_app).
 -behaviour(application).
 
@@ -16,21 +14,22 @@
 
 -include("crossbar.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application start behaviour
-%%--------------------------------------------------------------------
--spec start(application:start_type(), any()) -> startapp_ret().
+%%------------------------------------------------------------------------------
+%% @doc Implement the application start behaviour.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     declare_exchanges(),
     _ = kapps_maintenance:bind('migrate', 'crossbar_maintenance', 'migrate'),
     _ = kapps_maintenance:bind({'refresh_account', <<"*">>}, 'crossbar_util', 'descendants_count'),
+    _ = crossbar_maintenance:db_init(),
     crossbar_sup:start_link().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application stop behaviour
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Implement the application stop behaviour.
+%% @end
+%%------------------------------------------------------------------------------
 -spec stop(any()) -> any().
 stop(_State) ->
     _ = kapps_maintenance:unbind('migrate', 'crossbar_maintenance', 'migrate'),
@@ -40,10 +39,10 @@ stop(_State) ->
     _ = crossbar_bindings:flush(),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Ensures that all exchanges used are declared
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Ensures that all exchanges used are declared.
+%% @end
+%%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
     _ = kapi_money:declare_exchanges(),

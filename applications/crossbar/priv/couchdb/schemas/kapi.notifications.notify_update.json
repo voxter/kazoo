@@ -26,7 +26,7 @@
         },
         "Event-Name": {
             "enum": [
-                "update"
+                "notify_update"
             ],
             "type": "string"
         },
@@ -39,8 +39,11 @@
         "HTML": {
             "type": "string"
         },
-        "Preview": {
+        "Metadata": {
             "type": "string"
+        },
+        "Preview": {
+            "type": "boolean"
         },
         "Reply-To": {
             "type": "string"
@@ -48,7 +51,9 @@
         "Status": {
             "enum": [
                 "completed",
+                "disabled",
                 "failed",
+                "ignored",
                 "pending"
             ],
             "type": "string"

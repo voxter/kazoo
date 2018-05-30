@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016-2017, 2600Hz INC
-%%% @doc
-%%% Utilities for tasks validation & stuff.
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
+%%% @doc Utilities for tasks validation and stuff.
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_tasks).
 
 -export([all/0
@@ -36,39 +34,39 @@
 -define(TASK_ID_SIZE, 15).
 -type id() :: <<_:(8*2*?TASK_ID_SIZE)>>.
 
--type task() :: #{worker_pid => api_pid()
-                 ,worker_node => api_ne_binary()
-                 ,account_id => ne_binary()
-                 ,auth_account_id => ne_binary()
+-type task() :: #{worker_pid => kz_term:api_pid()
+                 ,worker_node => kz_term:api_ne_binary()
+                 ,account_id => kz_term:ne_binary()
+                 ,auth_account_id => kz_term:ne_binary()
                  ,id => id()
-                 ,category => ne_binary()
-                 ,action => ne_binary()
-                 ,file_name => api_ne_binary()
-                 ,created => gregorian_seconds() %% Time of task creation (PUT)
-                 ,started => api_seconds() %% Time of task start (PATCH)
-                 ,finished => api_seconds() %% Time of task finish (> started)
-                 ,total_rows => api_pos_integer() %% CSV rows (undefined for a noinput task)
-                 ,total_rows_failed => api_non_neg_integer() %% Rows that crashed or didn't return ok
-                 ,total_rows_succeeded => api_non_neg_integer() %% Rows that returned 'ok'
-                 ,was_stopped => api_boolean() %% true if stopped, undefined of false otherwise
+                 ,category => kz_term:ne_binary()
+                 ,action => kz_term:ne_binary()
+                 ,file_name => kz_term:api_ne_binary()
+                 ,created => kz_time:gregorian_seconds() %% Time of task creation (PUT)
+                 ,started => kz_time:api_seconds() %% Time of task start (PATCH)
+                 ,finished => kz_time:api_seconds() %% Time of task finish (> started)
+                 ,total_rows => kz_term:api_pos_integer() %% CSV rows (undefined for a noinput task)
+                 ,total_rows_failed => kz_term:api_non_neg_integer() %% Rows that crashed or didn't return ok
+                 ,total_rows_succeeded => kz_term:api_non_neg_integer() %% Rows that returned 'ok'
+                 ,was_stopped => kz_term:api_boolean() %% true if stopped, undefined of false otherwise
                  }.
 
--type input() :: api_ne_binary() | kz_json:objects().
+-type input() :: kz_term:api_ne_binary() | kz_json:objects().
 
 -type output_header() :: kz_csv:header() | {replace, kz_csv:header()}.
 
--type columns() :: sets:set(ne_binary()).
+-type columns() :: sets:set(kz_term:ne_binary()).
 
 -type help_error() :: {'error', 'unknown_category_action'}.
 
--type return() :: 'ok' | api_ne_binary() |
+-type return() :: 'ok' | kz_term:api_ne_binary() |
                   kz_csv:row() | [kz_csv:row()] |
                   kz_csv:mapped_row() | [kz_csv:mapped_row()].
 
 -type iterator() :: 'init' | 'stop' | any().
 
--type extra_args() :: #{account_id => ne_binary()
-                       ,auth_account_id => ne_binary()
+-type extra_args() :: #{account_id => kz_term:ne_binary()
+                       ,auth_account_id => kz_term:ne_binary()
                        }.
 
 -type args() :: map().
@@ -89,51 +87,52 @@
 -define(API_OPTIONAL, <<"optional">>).
 -define(API_INPUT_MIME, <<"expected_content">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
--spec mandatory(kz_json:object()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec mandatory(kz_json:object()) -> kz_term:ne_binaries().
 mandatory(APIJObj) ->
     kz_json:get_list_value(?API_MANDATORY, APIJObj, []).
 
--spec optional(kz_json:object()) -> ne_binaries().
+-spec optional(kz_json:object()) -> kz_term:ne_binaries().
 optional(APIJObj) ->
     kz_json:get_list_value(?API_OPTIONAL, APIJObj, []).
 
--spec possible_fields(kz_json:object()) -> ne_binaries().
+-spec possible_fields(kz_json:object()) -> kz_term:ne_binaries().
 possible_fields(APIJObj) ->
     mandatory(APIJObj) ++ optional(APIJObj).
 
--spec input_mime(kz_json:object()) -> ne_binary().
+-spec input_mime(kz_json:object()) -> kz_term:ne_binary().
 input_mime(APIJObj) ->
     kz_json:get_ne_binary_value(?API_INPUT_MIME, APIJObj, ?NIL_MIME).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec all() -> kz_json:objects().
 all() -> view([]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec all(ne_binary()) -> kz_json:objects().
+%%------------------------------------------------------------------------------
+-spec all(kz_term:ne_binary()) -> kz_json:objects().
 all(?MATCH_ACCOUNT_RAW(AccountId)) ->
-    view([{startkey, [AccountId, kz_time:current_tstamp(), kz_json:new()]}
+    view([{startkey, [AccountId, kz_time:now_s(), kz_json:new()]}
          ,{endkey, [AccountId]}
          ,descending
          ]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec read(id()) -> {ok, kz_json:object()} |
                     {error, not_found}.
 read(TaskId=?NE_BINARY) ->
@@ -142,14 +141,12 @@ read(TaskId=?NE_BINARY) ->
         [] -> {'error', 'not_found'}
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Verify a task previous to its creation in DB.
+%%------------------------------------------------------------------------------
+%% @doc Verify a task previous to its creation in DB.
 %% @end
-%%--------------------------------------------------------------------
--spec new(ne_binary(), ne_binary()
-         ,ne_binary(), ne_binary(), api_pos_integer(), input(), api_binary()) ->
+%%------------------------------------------------------------------------------
+-spec new(kz_term:ne_binary(), kz_term:ne_binary()
+         ,kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_pos_integer(), input(), kz_term:api_binary()) ->
                  {'ok', kz_json:object()} |
                  help_error() |
                  {'error', kz_json:object()}.
@@ -183,7 +180,7 @@ new(?MATCH_ACCOUNT_RAW(AuthAccountId), ?MATCH_ACCOUNT_RAW(AccountId)
                             ,category => Category
                             ,action => Action
                             ,file_name => InputName
-                            ,created => kz_time:current_tstamp()
+                            ,created => kz_time:now_s()
                             ,started => 'undefined'
                             ,finished => 'undefined'
                             ,total_rows => TotalRows
@@ -200,12 +197,15 @@ new(?MATCH_ACCOUNT_RAW(AuthAccountId), ?MATCH_ACCOUNT_RAW(AccountId)
 new_id() ->
     kz_binary:rand_hex(?TASK_ID_SIZE).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%% @private
--spec help(ne_binary(), ne_binary()) ->
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec help(kz_term:ne_binary(), kz_term:ne_binary()) ->
                   kz_json:object() |
                   {'error', 'unknown_category_action'}.
 help(Category, Action) ->
@@ -261,7 +261,7 @@ find_input_errors(API, InputRecord=[_|_]) ->
     Fields = kz_json:get_keys(hd(InputRecord)),
     find_API_errors(API, Fields, 'true').
 
--spec find_API_errors(kz_json:object(), ne_binaries(), boolean()) -> map().
+-spec find_API_errors(kz_json:object(), kz_term:ne_binaries(), boolean()) -> map().
 find_API_errors(API, Fields, HasInputData) ->
     Mandatory = mandatory(API),
     Routines =
@@ -282,7 +282,7 @@ find_API_errors(API, Fields, HasInputData) ->
         ],
     lists:foldl(fun (F, Errors) -> F(Errors) end, #{}, Routines).
 
--spec are_mandatories_unset(nonempty_list(boolean()), nonempty_list(ne_binary())) -> boolean().
+-spec are_mandatories_unset(nonempty_list(boolean()), nonempty_list(kz_term:ne_binary())) -> boolean().
 are_mandatories_unset(IsMandatory, Row) ->
     MapF = fun (Mandatory, Value) ->
                    Mandatory
@@ -366,7 +366,7 @@ to_json(#{id := TaskId
       ,{?PVT_ACTION, Action}
       ,{?PVT_FILENAME, InputName}
       ,{?PVT_CREATED, Created}
-      ,{?PVT_MODIFIED, kz_time:current_tstamp()}
+      ,{?PVT_MODIFIED, kz_time:now_s()}
       ,{?PVT_STARTED_AT, Started}
       ,{?PVT_FINISHED_AT, Finished}
       ,{?PVT_TOTAL_ROWS, TotalRows}
@@ -399,12 +399,10 @@ to_public_json(Task) ->
       ]).
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whether task has been started and is still running.
+%%------------------------------------------------------------------------------
+%% @doc Whether task has been started and is still running.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_processing(task()) -> boolean().
 is_processing(#{started := Started
                ,finished := Finished
@@ -415,8 +413,7 @@ is_processing(#{started := Started
 is_processing(_) ->
     false.
 
-%% @private
--spec status(task()) -> ne_binary().
+-spec status(task()) -> kz_term:ne_binary().
 status(#{was_stopped := true}) ->
     ?STATUS_STOPPED;
 

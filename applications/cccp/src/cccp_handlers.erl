@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author OnNet (Kirill Sysoev github.com/onnet)
 %%% @end
-%%% @contributors
-%%%   OnNet (Kirill Sysoev github.com/onnet)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cccp_handlers).
 
 -export([handle_route_req/2
@@ -20,7 +18,7 @@
 -define(CC_NUMBER
        ,knm_converters:normalize(kapps_config:get_ne_binary(?CCCP_CONFIG_CAT, <<"cccp_cc_number">>))).
 
--spec handle_route_req(kz_json:object(), kz_proplist()) -> any().
+-spec handle_route_req(kz_json:object(), kz_term:proplist()) -> any().
 handle_route_req(JObj, Props) ->
     'true' = kapi_route:req_v(JObj),
     Call = kapps_call:from_route_req(JObj),
@@ -32,7 +30,7 @@ handle_route_req(JObj, Props) ->
         _ -> 'ok'
     end.
 
--spec park_call(kz_json:object(), kz_proplist(), kapps_call:call()) -> 'ok'.
+-spec park_call(kz_json:object(), kz_term:proplist(), kapps_call:call()) -> 'ok'.
 park_call(JObj, Props, Call) ->
     Q = props:get_value('queue', Props),
     Resp = props:filter_undefined([{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
@@ -44,7 +42,7 @@ park_call(JObj, Props, Call) ->
     kapps_util:amqp_pool_send(Resp, Publisher),
     kapps_call:cache(Call, ?APP_NAME).
 
--spec handle_route_win(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_route_win(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_route_win(JObj, _Props) ->
     'true' = kapi_route:win_v(JObj),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -56,14 +54,18 @@ handle_route_win(JObj, _Props) ->
             lager:debug("Unable to find call record during route_win")
     end.
 
--spec handle_config_change(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_config_change(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_config_change(_JObj, _Props) ->
     'ok'.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec handle_cccp_call(kapps_call:call()) -> 'ok'.
 handle_cccp_call(Call) ->
     CB_Number = ?CB_NUMBER,

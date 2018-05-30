@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_maintenance).
 
 -export([acct_restart/1
@@ -22,7 +20,7 @@
 -spec status() -> 'ok'.
 status() -> acdc_agents_sup:status().
 
--spec acct_status(text()) -> 'ok'.
+-spec acct_status(kz_term:text()) -> 'ok'.
 acct_status(AcctId) when not is_binary(AcctId) ->
     acct_status(kz_term:to_binary(AcctId));
 acct_status(AcctId) ->
@@ -33,7 +31,7 @@ acct_status(AcctId) ->
             lists:foreach(fun acdc_agent_sup:status/1, As)
     end.
 
--spec agent_status(text(), text()) -> 'ok'.
+-spec agent_status(kz_term:text(), kz_term:text()) -> 'ok'.
 agent_status(AcctId, AgentId) when not is_binary(AcctId);
                                    not is_binary(AgentId) ->
     agent_status(kz_term:to_binary(AcctId), kz_term:to_binary(AgentId));
@@ -43,7 +41,7 @@ agent_status(AcctId, AgentId) ->
         S -> acdc_agent_sup:status(S)
     end.
 
--spec acct_restart(text()) -> 'ok'.
+-spec acct_restart(kz_term:text()) -> 'ok'.
 acct_restart(AcctId) when not is_binary(AcctId) ->
     acct_restart(kz_term:to_binary(AcctId));
 acct_restart(AcctId) ->
@@ -57,7 +55,7 @@ acct_restart(AcctId) ->
             'ok'
     end.
 
--spec agent_restart(text(), text()) -> 'ok'.
+-spec agent_restart(kz_term:text(), kz_term:text()) -> 'ok'.
 agent_restart(AcctId, AgentId) when not is_binary(AcctId);
                                     not is_binary(AgentId) ->
     agent_restart(kz_term:to_binary(AcctId), kz_term:to_binary(AgentId));
@@ -68,6 +66,6 @@ agent_restart(AcctId, AgentId) ->
             lager:info("Terminating existing agent process ~p", [S]),
             exit(S, 'kill'),
             lager:info("Restarting agent ~s in ~s", [AgentId, AcctId]),
-            acdc_agents_sup:new(AcctId, AgentId),
+            _ = acdc_agents_sup:new(AcctId, AgentId),
             'ok'
     end.

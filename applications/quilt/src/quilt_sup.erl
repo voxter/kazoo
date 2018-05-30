@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications Inc
-%%% @doc
-%%% Asterisk queue_log translator for Kazoo
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Asterisk queue_log translator for Kazoo
+%%%
+%%% @author Lucas Bussey
 %%% @end
-%%% @contributors
-%%%   Lucas Bussey
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(quilt_sup).
 -behaviour(supervisor).
 
@@ -22,11 +21,11 @@
                                                 %,?WORKER_TYPE('quilt_store', 'transient')
                   ]).
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
--spec init([]) -> sup_init_ret().
+-spec init([]) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
@@ -38,12 +37,12 @@ init([]) ->
 %% Queue member fsm
 %%
 
--spec start_member_fsm(ne_binary()) -> sup_startchild_ret().
+-spec start_member_fsm(kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 start_member_fsm(CallId) ->
     FSM = erlang:iolist_to_binary([<<"quilt_member_fsm-">>, CallId]),
     supervisor:start_child(?MODULE, ?WORKER_NAME_ARGS_TYPE(FSM, 'quilt_member_fsm', [CallId], 'transient')).
 
--spec retrieve_member_fsm(ne_binary()) -> {'ok', pid()} | {'error', 'not_found'}.
+-spec retrieve_member_fsm(kz_term:ne_binary()) -> {'ok', pid()} | {'error', 'not_found'}.
 retrieve_member_fsm(CallId) ->
     Fsms = [Pid || {Name, Pid, 'worker', ['quilt_member_fsm']} <- supervisor:which_children(?MODULE), Name == erlang:iolist_to_binary([<<"quilt_member_fsm-">>, CallId])],
     case length(Fsms) of
@@ -51,7 +50,7 @@ retrieve_member_fsm(CallId) ->
         _ -> {'ok', hd(Fsms)}
     end.
 
--spec stop_member_fsm(ne_binary()) -> 'ok' | {'error', atom()}.
+-spec stop_member_fsm(kz_term:ne_binary()) -> 'ok' | {'error', atom()}.
 stop_member_fsm(CallId) ->
     Name = erlang:iolist_to_binary([<<"quilt_member_fsm-">>, CallId]),
     case retrieve_member_fsm(CallId) of
@@ -70,7 +69,7 @@ stop_member_fsm(CallId) ->
 %% Queue agent fsm
 %%
 
--spec start_agent_fsm(ne_binary(), ne_binary()) -> sup_startchild_ret().
+-spec start_agent_fsm(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 start_agent_fsm(AccountId, AgentId) ->
     FSM = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
     supervisor:start_child(?MODULE
@@ -84,7 +83,7 @@ start_agent_fsm(AccountId, AgentId) ->
                                                  ,'transient'
                                                  )).
 
--spec retrieve_agent_fsm(ne_binary(), ne_binary()) ->
+-spec retrieve_agent_fsm(kz_term:ne_binary(), kz_term:ne_binary()) ->
                                 {'ok', pid()} | {'error', 'not_found'}.
 retrieve_agent_fsm(AccountId, AgentId) ->
     Fsms = [Pid || {Name, Pid, 'worker', ['quilt_agent_fsm']} <- supervisor:which_children(?MODULE), Name == erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId])],
@@ -93,7 +92,7 @@ retrieve_agent_fsm(AccountId, AgentId) ->
         _ -> {'ok', hd(Fsms)}
     end.
 
--spec stop_agent_fsm(ne_binary(), ne_binary()) -> 'ok' | {'error', atom()}.
+-spec stop_agent_fsm(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok' | {'error', atom()}.
 stop_agent_fsm(AccountId, AgentId) ->
     Name = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
     case retrieve_agent_fsm(AccountId, AgentId) of

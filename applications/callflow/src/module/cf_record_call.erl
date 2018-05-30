@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
-%%% @doc
-%%% Handles starting/stopping a call recording
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Handles starting/stopping a call recording.
+%%% @author James Aimonetti
+%%% @author Sponsored by Velvetech LLC, Implemented by SIPLABS LLC
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%
-%%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_record_call).
 
 -behaviour(gen_cf_action).
@@ -17,13 +13,12 @@
 
 -include("callflow.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
--spec handle(kz_json:object(), kapps_call:call(), ne_binary()) -> kapps_call:call().
 handle(Data0, Call) ->
     Label = kz_json:get_ne_binary_value(<<"label">>, Data0, kapps_call:kvs_fetch('cf_flow_name', Call)),
     Origin = <<"callflow : ", Label/binary>>,
@@ -32,14 +27,14 @@ handle(Data0, Call) ->
       handle(Data, Call, get_action(Data))
      ).
 
+-spec handle(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) -> kapps_call:call().
 handle(Data, Call, <<"start">>) ->
     cf_exe:update_call(kapps_call:start_recording(Data, Call));
 
 handle(_Data, Call, <<"stop">>) ->
     cf_exe:update_call(kapps_call:stop_recording(Call)).
 
--spec get_action(api_object()) -> ne_binary().
-get_action('undefined') -> <<"start">>;
+-spec get_action(kz_json:object()) -> kz_term:ne_binary().
 get_action(Data) ->
     case kz_json:get_ne_binary_value(<<"action">>, Data) of
         <<"stop">> -> <<"stop">>;

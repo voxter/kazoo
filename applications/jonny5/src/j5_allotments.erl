@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(j5_allotments).
 
 -export([authorize/2]).
@@ -12,18 +10,16 @@
 
 -include("jonny5.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authorize(j5_request:request(), j5_limits:limits()) -> j5_request:request().
 authorize(Request, Limits) ->
     Allotment = find_allotment(Request, Limits),
     maybe_consume_allotment(Allotment, Request, Limits).
 
--spec maybe_consume_allotment(api_object(), j5_request:request(), j5_limits:limits()) -> j5_request:request().
+-spec maybe_consume_allotment(kz_term:api_object(), j5_request:request(), j5_limits:limits()) -> j5_request:request().
 maybe_consume_allotment('undefined', Request, _) ->
     lager:debug("account has no allotment", []),
     Request;
@@ -53,7 +49,7 @@ maybe_consume_allotment(Allotment, Request, Limits) ->
             j5_request:authorize(<<"allotment_", Classification/binary>>, Request, Limits)
     end.
 
--spec maybe_group_consumed(binaries(), kz_json:object(), j5_limits:limits(), non_neg_integer()) -> non_neg_integer().
+-spec maybe_group_consumed(kz_term:binaries(), kz_json:object(), j5_limits:limits(), non_neg_integer()) -> non_neg_integer().
 maybe_group_consumed([], _Allotment, _Limits, Acc) -> Acc;
 maybe_group_consumed([Member|Group], Allotment, Limits, Acc) when is_binary(Member) ->
     NewAllotment = kz_json:set_value(<<"classification">>, Member, Allotment),
@@ -62,12 +58,10 @@ maybe_group_consumed([Member|Group], Allotment, Limits, Acc) when is_binary(Memb
         Consumed -> maybe_group_consumed(Group, Allotment, Limits, Acc+Consumed)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_cdr(j5_request:request(), j5_limits:limits()) -> 'ok'.
 reconcile_cdr(Request, Limits) ->
     case j5_request:billing(Request, Limits) of
@@ -102,7 +96,7 @@ reconcile_allotment(Seconds, Allotment, Request, Limits) ->
     CallId = j5_request:call_id(Request),
     AccountId = j5_limits:account_id(Limits),
     LedgerDb = kz_util:format_account_mod_id(AccountId),
-    Timestamp = kz_time:current_tstamp(),
+    Timestamp = kz_time:now_s(),
     Id = <<CallId/binary, "-allotment-consumption">>,
     lager:debug("adding allotment debit ~s to ledger ~s for ~wsec"
                ,[Id, LedgerDb, Seconds]
@@ -126,13 +120,11 @@ reconcile_allotment(Seconds, Allotment, Request, Limits) ->
     _ = kz_datamgr:save_doc(LedgerDb, kz_json:from_list(Props)),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec find_allotment(j5_request:request(), j5_limits:limits()) -> api_object().
+%%------------------------------------------------------------------------------
+-spec find_allotment(j5_request:request(), j5_limits:limits()) -> kz_term:api_object().
 find_allotment(Request, Limits) ->
     case j5_request:classification(Request) of
         'undefined' -> 'undefined';
@@ -141,7 +133,7 @@ find_allotment(Request, Limits) ->
             find_allotment_by_classification(Direction, Classification, Limits)
     end.
 
--spec find_allotment_by_classification(ne_binary(), ne_binary(), j5_limits:limits()) -> api_object().
+-spec find_allotment_by_classification(kz_term:ne_binary(), kz_term:ne_binary(), j5_limits:limits()) -> kz_term:api_object().
 find_allotment_by_classification(Direction, Classification, Limits) ->
     DirectionalClassification = <<Direction/binary, "_", Classification/binary>>,
     case find_allotment_by_classification(DirectionalClassification, Limits) of
@@ -150,7 +142,7 @@ find_allotment_by_classification(Direction, Classification, Limits) ->
         Allotment -> Allotment
     end.
 
--spec find_allotment_by_classification(ne_binary(), j5_limits:limits()) -> api_object().
+-spec find_allotment_by_classification(kz_term:ne_binary(), j5_limits:limits()) -> kz_term:api_object().
 find_allotment_by_classification(Classification, Limits) ->
     Allotments = j5_limits:allotments(Limits),
     lager:debug("checking if account ~s has any allotments for ~s"
@@ -161,12 +153,10 @@ find_allotment_by_classification(Classification, Limits) ->
         Allotment -> kz_json:set_value(<<"classification">>, Classification, Allotment)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allotment_consumed_so_far(kz_json:object(), j5_limits:limits()) ->
                                        integer() |
                                        {'error', any()}.
@@ -182,7 +172,7 @@ allotment_consumed_so_far(Allotment, Limits) ->
             Consumed + j5_channels:allotment_consumed(CycleStart, CycleSpan, Classification, Limits)
     end.
 
--spec allotment_consumed_so_far(non_neg_integer(), non_neg_integer(), ne_binary(), j5_limits:limits(), 0..3) ->
+-spec allotment_consumed_so_far(non_neg_integer(), non_neg_integer(), kz_term:ne_binary(), j5_limits:limits(), 0..3) ->
                                        integer() |
                                        {'error', any()}.
 allotment_consumed_so_far(_, _, _, _, Attempts) when Attempts > 2 -> 0;
@@ -198,7 +188,7 @@ allotment_consumed_so_far(CycleStart, CycleEnd, Classification, Limits, Attempts
         {'error', 'not_found'} ->
             add_transactions_view(LedgerDb, CycleStart, CycleEnd, Classification, Limits, Attempts);
         {'error', _R}=Error ->
-            lager:debug("unable to get consumed quanity for ~s allotment from ~s: ~p"
+            lager:debug("unable to get consumed quantity for ~s allotment from ~s: ~p"
                        ,[Classification, LedgerDb, _R]
                        ),
             Error
@@ -220,20 +210,18 @@ sum_allotment_consumed_so_far([JObj|JObjs], CycleStart, Seconds) ->
             sum_allotment_consumed_so_far(JObjs, CycleStart, Seconds + (Timestamp - CycleStart))
     end.
 
--spec add_transactions_view(ne_binary(), non_neg_integer(), non_neg_integer(), ne_binary(), j5_limits:limits(), 0..3) ->
+-spec add_transactions_view(kz_term:ne_binary(), non_neg_integer(), non_neg_integer(), kz_term:ne_binary(), j5_limits:limits(), 0..3) ->
                                    integer() |
                                    {'error', any()}.
 add_transactions_view(LedgerDb, CycleStart, CycleEnd, Classification, Limits, Attempts) ->
     _ = kz_datamgr:revise_views_from_folder(LedgerDb, 'jonny5'),
     allotment_consumed_so_far(CycleStart, CycleEnd, Classification, Limits, Attempts + 1).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec cycle_start(ne_binary()) -> integer().
+%%------------------------------------------------------------------------------
+-spec cycle_start(kz_term:ne_binary()) -> integer().
 cycle_start(<<"monthly">>) ->
     {{Year, Month, _}, _} = calendar:universal_time(),
     calendar:datetime_to_gregorian_seconds({{Year, Month, 1}, {0, 0, 0}});
@@ -251,7 +239,7 @@ cycle_start(<<"minutely">>) ->
     {{Year, Month, Day}, {Hour, Min, _}} = calendar:universal_time(),
     calendar:datetime_to_gregorian_seconds({{Year, Month, Day}, {Hour, Min, 0}}).
 
--spec cycle_span(ne_binary()) -> integer().
+-spec cycle_span(kz_term:ne_binary()) -> integer().
 cycle_span(<<"monthly">>) -> 2629743; % avg days in month
 cycle_span(<<"weekly">>) -> ?SECONDS_IN_WEEK;
 cycle_span(<<"daily">>) -> ?SECONDS_IN_DAY;

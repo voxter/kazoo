@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(fax_smtp).
 -behaviour(gen_smtp_server_session).
 
@@ -35,24 +33,24 @@
 
 -define(ERROR_NO_VALID_ATTACHMENT, <<"no valid attachment">>).
 
--record(state, {options = [] :: kz_proplist()
-               ,from :: api_ne_binary()
-               ,to :: api_ne_binary()
-               ,doc :: api_object()
+-record(state, {options = [] :: kz_term:proplist()
+               ,from :: kz_term:api_ne_binary()
+               ,to :: kz_term:api_ne_binary()
+               ,doc :: kz_term:api_object()
                ,filename :: file:filename_all() | 'undefined'
-               ,content_type :: api_ne_binary()
+               ,content_type :: kz_term:api_ne_binary()
                ,peer_ip :: peer()
-               ,owner_id :: api_binary()
-               ,owner_email :: api_binary()
-               ,faxbox_email :: api_binary()
-               ,faxbox :: api_object()
+               ,owner_id :: kz_term:api_binary()
+               ,owner_email :: kz_term:api_binary()
+               ,faxbox_email :: kz_term:api_binary()
+               ,faxbox :: kz_term:api_object()
                ,has_smtp_errors = 'false' :: boolean()
-               ,errors = [] :: ne_binaries()
-               ,original_number :: api_binary()
-               ,number :: api_binary()
-               ,account_id :: api_binary()
-               ,session_id :: api_binary()
-               ,proxy :: api_binary()
+               ,errors = [] :: kz_term:ne_binaries()
+               ,original_number :: kz_term:api_binary()
+               ,number :: kz_term:api_binary()
+               ,account_id :: kz_term:api_binary()
+               ,session_id :: kz_term:api_binary()
+               ,proxy :: kz_term:api_binary()
                }).
 
 -type state() :: #state{}.
@@ -60,7 +58,7 @@
 
 -type peer() :: {inet:ip_address(), non_neg_integer()}.
 
--spec init(ne_binary(), non_neg_integer(), peer(), kz_proplist()) ->
+-spec init(kz_term:ne_binary(), non_neg_integer(), peer(), kz_term:proplist()) ->
                   {'ok', string(), #state{}} |
                   {'stop', _, string()}.
 init(Hostname, SessionCount, Address, Options) ->
@@ -103,7 +101,7 @@ handle_EHLO(Hostname, Extensions, #state{options=Options, proxy = Proxy}=State) 
                    end,
     {'ok', filter_extensions(MyExtensions, Options), State}.
 
--spec filter_extensions(kz_proplist(), kz_proplist()) -> kz_proplist().
+-spec filter_extensions(kz_term:proplist(), kz_term:proplist()) -> kz_term:proplist().
 filter_extensions(BuilIn, Options) ->
     Extensions = props:get_value('extensions', Options, ?SMTP_EXTENSIONS),
     lists:filter(fun({N,_}) -> not props:is_defined(N, Extensions) end, BuilIn) ++ Extensions.
@@ -144,7 +142,7 @@ handle_RCPT_extension(Extension, _State) ->
     lager:debug(Error),
     'error'.
 
--spec handle_DATA(binary(), ne_binaries(), binary(), state()) ->
+-spec handle_DATA(binary(), kz_term:ne_binaries(), binary(), state()) ->
                          {'ok', string(), state()} |
                          {'error', string(), state()}.
 handle_DATA(From, To, <<>>, State) ->
@@ -156,9 +154,6 @@ handle_DATA(From, [To|_]=ToList, Data, #state{to='undefined'}=State) ->
     handle_DATA(From, ToList, Data, State#state{to=To});
 handle_DATA(From, To, Data, #state{doc='undefined'}=State) ->
     case check_faxbox(State) of
-        {'ok', #state{doc='undefined'}=NewState} ->
-            lager:error("check_faxbox returned no error but also no doc : ~p", [NewState]),
-            {'error', "552 unable to process", NewState};
         {'ok', NewState} -> handle_DATA(From, To, Data, NewState);
         Error -> Error
     end;
@@ -189,7 +184,7 @@ handle_DATA(From, To, Data, #state{options=Options}=State) ->
                                                               }}
     end.
 
--spec handle_DATA_exception(kz_proplist(), list(), binary()) -> 'ok'.
+-spec handle_DATA_exception(kz_term:proplist(), list(), binary()) -> 'ok'.
 handle_DATA_exception(Options, Reference, Data) ->
     case props:get_is_true('dump', Options, 'false') of
         'false' -> 'ok';
@@ -303,7 +298,7 @@ maybe_faxbox_log(#state{faxbox='undefined', account_id=AccountId}=State) ->
 maybe_faxbox_log(#state{faxbox=JObj, account_id=AccountId}=State) ->
     maybe_faxbox_log(AccountId, JObj, State).
 
--spec maybe_faxbox_log(ne_binary(), kz_json:object(), state()) -> 'ok'.
+-spec maybe_faxbox_log(kz_term:ne_binary(), kz_json:object(), state()) -> 'ok'.
 maybe_faxbox_log(AccountId, JObj, State) ->
     case kz_json:is_true(<<"log_errors">>, JObj, 'false')
         orelse ( kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"log_faxbox_errors">>, 'true')
@@ -334,7 +329,7 @@ faxbox_log(#state{account_id=AccountId}=State) ->
               [{<<"pvt_account_id">>, AccountId}
               ,{<<"pvt_account_db">>, AccountDb}
               ,{<<"pvt_type">>, <<"fax_smtp_log">>}
-              ,{<<"pvt_created">>, kz_time:current_tstamp()}
+              ,{<<"pvt_created">>, kz_time:now_s()}
               ,{<<"_id">>, error_doc()}
                | to_proplist(State)
               ]
@@ -343,14 +338,16 @@ faxbox_log(#state{account_id=AccountId}=State) ->
     kazoo_modb:save_doc(AccountId, Doc),
     maybe_system_report(State).
 
--spec error_doc() -> ne_binary().
+-spec error_doc() -> kz_term:ne_binary().
 error_doc() ->
     {Year, Month, _} = erlang:date(),
-    <<(kz_term:to_binary(Year))/binary,(kz_date:pad_month(Month))/binary
-      ,"-",(kz_binary:rand_hex(16))/binary
-    >>.
+    list_to_binary([kz_term:to_binary(Year)
+                   ,kz_date:pad_month(Month)
+                   ,"-"
+                   ,kz_binary:rand_hex(16)
+                   ]).
 
--spec to_proplist(state()) -> kz_proplist().
+-spec to_proplist(state()) -> kz_term:proplist().
 to_proplist(#state{}=State) ->
     props:filter_undefined(
       [{<<"To">>, State#state.to}
@@ -369,14 +366,14 @@ to_proplist(#state{}=State) ->
       ]).
 
 
--spec faxbox_to_proplist(api_object()) -> kz_proplist().
+-spec faxbox_to_proplist(kz_term:api_object()) -> kz_term:proplist().
 faxbox_to_proplist('undefined') -> [];
 faxbox_to_proplist(JObj) ->
     props:filter_undefined(
       [{<<"FaxBox-ID">>, kz_doc:id(JObj)}]
      ).
 
--spec faxdoc_to_proplist(api_object()) -> kz_proplist().
+-spec faxdoc_to_proplist(kz_term:api_object()) -> kz_term:proplist().
 faxdoc_to_proplist('undefined') -> [];
 faxdoc_to_proplist(JObj) ->
     props:filter_undefined(
@@ -454,9 +451,6 @@ check_number(#state{faxbox=FaxBoxDoc, number=Number, errors=Errors}=State) ->
 -spec check_permissions(state()) ->
                                {'ok', state()} |
                                {'error', string(), state()}.
--spec check_permissions(state(), ne_binaries()) ->
-                               {'ok', state()} |
-                               {'error', string(), state()}.
 check_permissions(#state{from=_From
                         ,faxbox=FaxBoxDoc
                         }=State) ->
@@ -470,6 +464,9 @@ check_permissions(#state{from=_From
             check_permissions(State, Permissions)
     end.
 
+-spec check_permissions(state(), kz_term:ne_binaries()) ->
+                               {'ok', state()} |
+                               {'error', string(), state()}.
 check_permissions(#state{from=From
                         ,owner_email=OwnerEmail
                         ,faxbox=FaxBoxDoc
@@ -555,7 +552,7 @@ maybe_faxbox_domain(#state{faxbox_email=Domain}=State) ->
             State#state{errors=[Error]}
     end.
 
--spec maybe_faxbox_by_owner_email(ne_binary(), state()) -> state().
+-spec maybe_faxbox_by_owner_email(kz_term:ne_binary(), state()) -> state().
 maybe_faxbox_by_owner_email(AccountId, #state{errors=Errors
                                              ,from=From
                                              }=State) ->
@@ -579,7 +576,7 @@ maybe_faxbox_by_owner_email(AccountId, #state{errors=Errors
             maybe_faxbox_by_rules(AccountId, State#state{errors=[Error | Errors]})
     end.
 
--spec maybe_faxbox_by_owner_id(ne_binary(), ne_binary(),state()) -> state().
+-spec maybe_faxbox_by_owner_id(kz_term:ne_binary(), kz_term:ne_binary(),state()) -> state().
 maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{errors=Errors, from=From}=State) ->
     ViewOptions = [{'key', OwnerId}, 'include_docs'],
     AccountDb = kz_util:format_account_db(AccountId),
@@ -611,7 +608,7 @@ maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{errors=Errors, from=From}=St
                                  )
     end.
 
--spec maybe_faxbox_by_rules(ne_binary() | kz_json:objects(), state()) -> state().
+-spec maybe_faxbox_by_rules(kz_term:ne_binary() | kz_json:objects(), state()) -> state().
 maybe_faxbox_by_rules(AccountId, #state{errors=Errors}=State)
   when is_binary(AccountId) ->
     ViewOptions = ['include_docs'],
@@ -689,8 +686,8 @@ add_fax_document(#state{from=From
 
     Doc = kz_json:set_values([{<<"pvt_type">>, <<"fax">>}
                              ,{<<"pvt_job_status">>, <<"attaching files">>}
-                             ,{<<"pvt_created">>, kz_time:current_tstamp()}
-                             ,{<<"pvt_modified">>, kz_time:current_tstamp()}
+                             ,{<<"pvt_created">>, kz_time:now_s()}
+                             ,{<<"pvt_modified">>, kz_time:now_s()}
                              ,{<<"attempts">>, 0}
                              ,{<<"pvt_account_id">>, AccountId}
                              ,{<<"pvt_account_db">>, AccountDb}
@@ -701,10 +698,15 @@ add_fax_document(#state{from=From
     lager:debug("added fax document from smtp : ~p", [Doc]),
     {'ok', State#state{doc=Doc}}.
 
-%% ====================================================================
+%%==============================================================================
 %% Internal functions
-%% ====================================================================
--spec process_message(ne_binary(), ne_binary(), kz_proplist(), kz_proplist(), binary() | mimemail:mimetuple(), state()) ->
+%%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec process_message(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), kz_term:proplist(), binary() | mimemail:mimetuple(), state()) ->
                              {'ok', state()}.
 process_message(<<"multipart">>, Multipart, _Headers, _Parameters, Body, #state{errors=Errors}=State) ->
     lager:debug("processing multipart/~s", [Multipart]),
@@ -749,7 +751,7 @@ process_parts([{Type, SubType, _Headers, Parameters, BodyPart}
                             ),
     process_parts(Parts, maybe_ignore_no_valid_attachment(NewState)).
 
--spec maybe_process_part(ne_binary(), kz_proplist(), binary() | mimemail:mimetuple(), state()) ->
+-spec maybe_process_part(kz_term:ne_binary(), kz_term:proplist(), binary() | mimemail:mimetuple(), state()) ->
                                 {'ok', state()}.
 maybe_process_part(<<"multipart/", Multipart/binary>>, _Parameters, Body, #state{errors=Errors}=State) ->
     lager:debug("processing multipart/~s", [Multipart]),
@@ -772,8 +774,10 @@ maybe_process_part(<<"application/octet-stream">>, Parameters, Body, State) ->
     lager:debug("part is application/octet-stream, try check attachment filename extension"),
     case props:get_value(<<"disposition">>, Parameters) of
         <<"attachment">> ->
-            Props = props:get_value(<<"disposition-params">>, Parameters, []),
-            Filename = kz_term:to_lower_binary(props:get_value(<<"filename">>, Props, <<>>)),
+            DispositionParams = props:get_value(<<"disposition-params">>, Parameters, []),
+            ContentTypeParams = props:get_value(<<"content-type-params">>, Parameters, []),
+            Props = DispositionParams ++ ContentTypeParams,
+            Filename = kz_term:to_lower_binary(props:get_first_defined([<<"filename">>, <<"name">>], Props, <<>>)),
             case kz_mime:from_filename(Filename) of
                 <<"application/octet-stream">> ->
                     lager:debug("unable to determine content-type for extension : ~s", [Filename]),
@@ -798,7 +802,7 @@ maybe_process_part(CT, _Parameters, Body, State) ->
             {'ok', State}
     end.
 
--spec process_part(ne_binary(), binary() | mimemail:mimetuple(), state()) -> {'ok', state()}.
+-spec process_part(kz_term:ne_binary(), binary() | mimemail:mimetuple(), state()) -> {'ok', state()}.
 process_part(CT, Body, State) ->
     lager:debug("part is ~s", [CT]),
     Extension = kz_mime:to_extension(CT),
@@ -819,7 +823,7 @@ maybe_ignore_no_valid_attachment(#state{errors=Errors}=State) ->
                ,has_smtp_errors='true'
                }.
 
--spec is_allowed_content_type(ne_binary()) -> boolean().
+-spec is_allowed_content_type(kz_term:ne_binary()) -> boolean().
 is_allowed_content_type(CT) ->
     AllowedCT = kapps_config:get(?CONFIG_CAT, <<"allowed_content_types">>, ?DEFAULT_ALLOWED_CONTENT_TYPES),
     DeniedCT = kapps_config:get(?CONFIG_CAT, <<"denied_content_types">>, ?DEFAULT_DENIED_CONTENT_TYPES),
@@ -827,7 +831,7 @@ is_allowed_content_type(CT) ->
     DeniedBy = content_type_matched_by(CT, DeniedCT, <<>>),
     byte_size(AllowedBy) > byte_size(DeniedBy).
 
--spec content_type_matched_by(ne_binary(), [ne_binary() | kz_json:object()], binary()) -> binary().
+-spec content_type_matched_by(kz_term:ne_binary(), [kz_term:ne_binary() | kz_json:object()], binary()) -> binary().
 content_type_matched_by(CT, [CT | _T], _) ->
     CT;
 content_type_matched_by(CT, [Type | T], GreaterMatch) when is_binary(Type) ->
@@ -841,7 +845,7 @@ content_type_matched_by(CT, [Type | T], GreaterMatch) ->
 content_type_matched_by(_CT, [], GreaterMatch) ->
     GreaterMatch.
 
--spec content_type_matched_json(ne_binary(), kz_json:object()) -> binary().
+-spec content_type_matched_json(kz_term:ne_binary(), kz_json:object()) -> binary().
 content_type_matched_json(CT, Type) ->
     case kz_json:is_json_object(Type) of
         'false' -> <<>>;
@@ -849,7 +853,7 @@ content_type_matched_json(CT, Type) ->
             content_type_matched_json(CT, Type, <<"type">>)
     end.
 
--spec content_type_matched_json(ne_binary(), kz_json:object(), ne_binary()) -> binary().
+-spec content_type_matched_json(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> binary().
 content_type_matched_json(CT, Type, <<"type">> = Field) ->
     case kz_json:get_binary_value(Field, Type) of
         CT -> CT;
@@ -864,13 +868,13 @@ content_type_matched_json(CT, Type, <<"prefix">> = Field) ->
         {_, _} -> <<>>
     end.
 
--spec maybe_process_image(ne_binary(), binary() | mimemail:mimetuple(), state()) ->
+-spec maybe_process_image(kz_term:ne_binary(), binary() | mimemail:mimetuple(), state()) ->
                                  {'ok', state()}.
 maybe_process_image(CT, Body, State) ->
     Size = kapps_config:get_binary(?CONFIG_CAT, <<"image_min_size">>, <<"700x10">>),
     maybe_process_image(CT, Body, Size, State).
 
--spec maybe_process_image(ne_binary(), binary() | mimemail:mimetuple(), ne_binary(), state()) ->
+-spec maybe_process_image(kz_term:ne_binary(), binary() | mimemail:mimetuple(), kz_term:ne_binary(), state()) ->
                                  {'ok', state()}.
 maybe_process_image(CT, Body, Size, State) ->
     {MinX, MinY} = case re:split(Size, "x") of
@@ -893,21 +897,21 @@ maybe_process_image(CT, Body, Size, State) ->
             {'ok', State}
     end.
 
--spec write_tmp_file(ne_binary(), binary() | mimemail:mimetuple()) ->
-                            {'ok', api_binary()} |
-                            {'error', any()}.
--spec write_tmp_file(api_binary() , ne_binary(), binary() | mimemail:mimetuple()) ->
-                            {'ok', api_binary()} |
+-spec write_tmp_file(kz_term:ne_binary(), binary() | mimemail:mimetuple()) ->
+                            {'ok', kz_term:api_binary()} |
                             {'error', any()}.
 write_tmp_file(Extension, Body) ->
     write_tmp_file('undefined', Extension, Body).
 
+-spec write_tmp_file(kz_term:api_binary() , kz_term:ne_binary(), binary() | mimemail:mimetuple()) ->
+                            {'ok', kz_term:api_binary()} |
+                            {'error', any()}.
 write_tmp_file('undefined', Extension, ?NE_BINARY = Body) ->
     Basename = kz_term:to_hex_binary(erlang:md5(Body)),
     Filename = <<"/tmp/email_attachment_", Basename/binary>>,
     write_tmp_file(Filename, Extension, Body);
 write_tmp_file('undefined', Extension, Body) ->
-    Basename = kz_term:to_binary(kz_time:current_tstamp()),
+    Basename = kz_term:to_binary(kz_time:now_s()),
     Filename = <<"/tmp/email_attachment_", Basename/binary>>,
     write_tmp_file(Filename, Extension, Body);
 write_tmp_file(Filename, Extension, Body) ->

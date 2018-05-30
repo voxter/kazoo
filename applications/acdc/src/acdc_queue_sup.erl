@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_queue_sup).
 -behaviour(supervisor).
 
@@ -28,14 +26,15 @@
                   ,?WORKER_ARGS('acdc_queue_manager', [self() | Args])
                   ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% api functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link(ne_binary(), ne_binary()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:startlink_ret().
 start_link(AcctId, QueueId) ->
     supervisor:start_link(?SERVER, [AcctId, QueueId]).
 
@@ -43,11 +42,11 @@ start_link(AcctId, QueueId) ->
 stop(Super) ->
     supervisor:terminate_child('acdc_queues_sup', Super).
 
--spec manager(pid()) -> api_pid().
+-spec manager(pid()) -> kz_term:api_pid().
 manager(Super) ->
     hd([P || {_, P, 'worker', _} <- supervisor:which_children(Super)]).
 
--spec workers_sup(pid()) -> api_pid().
+-spec workers_sup(pid()) -> kz_term:api_pid().
 workers_sup(Super) ->
     hd([P || {_, P, 'supervisor', _} <- supervisor:which_children(Super)]).
 
@@ -71,20 +70,18 @@ status(Supervisor) ->
     _ = acdc_queue_workers_sup:status(WorkersSup),
     'ok'.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(list()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(list()) -> kz_types:sup_init_ret().
 init(Args) ->
     RestartStrategy = 'one_for_all',
     MaxRestarts = 2,
@@ -94,6 +91,6 @@ init(Args) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

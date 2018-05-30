@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_util).
 
 -include("amimulator.hrl").
@@ -60,11 +65,12 @@ format_binary([]) ->
     <<"\r\n">>.
 
 %% Format a set of events for publishing to AMQP
+
 -spec format_json_events(list()) -> list().
--spec format_json_events(list(), list()) -> list().
 format_json_events(Events) ->
     format_json_events(Events, []).
 
+-spec format_json_events(list(), list()) -> list().
 format_json_events([], Acc) ->
     Acc;
 format_json_events([{_K, _V}|_Other]=KVs, _Acc) ->
@@ -73,11 +79,12 @@ format_json_events([Event|Events], Acc) ->
     format_json_events(Events, Acc ++ [{Event}]).
 
 %% Find the index of an element in a list
+
 -spec index_of(any(), list()) -> pos_integer() | 'not_found'.
--spec index_of(any(), list(), pos_integer()) -> pos_integer() | 'not_found'.
 index_of(Element, List) ->
     index_of(Element, List, 1).
 
+-spec index_of(any(), list(), pos_integer()) -> pos_integer() | 'not_found'.
 index_of(_, [], _) ->
     'not_found';
 index_of(Element, [Element|_], Index) ->
@@ -92,7 +99,7 @@ create_call(EventJObj) ->
     lager:debug("call ~p", [UpdatedCall]),
     UpdatedCall.
 
--spec clear_call(ne_binary()) -> boolean().
+-spec clear_call(kz_term:ne_binary()) -> boolean().
 clear_call(CallId) ->
     case ami_sm:call(CallId) of
         'undefined' -> 'not_found';
@@ -116,7 +123,7 @@ clear_call(CallId) ->
     end.
 
 %% Fetches all active calls for an account
--spec initial_calls(ne_binary()) -> [amimulator_call:call(),...] | [].
+-spec initial_calls(kz_term:ne_binary()) -> [amimulator_call:call(),...] | [].
 initial_calls(AccountId) ->
     Req = [{<<"Account-ID">>, AccountId}
           ,{<<"Active-Only">>, 'true'}
@@ -211,11 +218,11 @@ update_initial_call(Call) ->
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec maybe_queue_call(amimulator_call:call()) -> amimulator_call:call().
--spec maybe_queue_call(api_object(), amimulator_call:call()) -> amimulator_call:call().
 maybe_queue_call(Call) ->
     %% TODO change to AMQP request
     maybe_queue_call(acdc_stats:find_call(amimulator_call:call_id(Call)), Call).
 
+-spec maybe_queue_call(kz_term:api_object(), amimulator_call:call()) -> amimulator_call:call().
 maybe_queue_call('undefined', Call) ->
     Call;
 maybe_queue_call(Stat, Call) ->
@@ -313,22 +320,22 @@ fork_agent_call_leg2(_, SipAgentCall, Call) ->
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec channel_string(amimulator_call:call()) -> binary().
--spec channel_string('local', amimulator_call:call(), pos_integer()) -> binary().
--spec channel_string('sip' | 'local', api_binary(), api_binary(), pos_integer()) -> binary().
 channel_string(Call) ->
     channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call)).
 
+-spec channel_string('local', amimulator_call:call(), pos_integer()) -> binary().
 channel_string('local', Call, Index) ->
     channel_string('local', amimulator_call:id_number(Call), amimulator_call:call_id(Call), Index).
 
+-spec channel_string('sip' | 'local', kz_term:api_binary(), kz_term:api_binary(), pos_integer()) -> binary().
 channel_string('sip', Number, CallId, _) ->
     <<"SIP/", Number/binary, "-", (channel_tail(CallId))/binary>>;
 channel_string('local', Number, CallId, Index) ->
     <<"Local/", Number/binary, "@from-queue-", (channel_tail(Index, CallId))/binary>>.
 
--spec channel_tail(api_binary()) -> binary().
--spec channel_tail(api_binary(), api_binary()) -> binary().
 %% Returns an 8-digit tail for channels for AMI calls
+
+-spec channel_tail(kz_term:api_binary()) -> binary().
 channel_tail(CallId) ->
     Seed = case binary:split(CallId, <<"-">>, ['global']) of
                List when length(List) =:= 5 ->
@@ -342,6 +349,7 @@ channel_tail(CallId) ->
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 
+-spec channel_tail(kz_term:api_binary(), kz_term:api_binary()) -> binary().
 channel_tail(Index, CallId) ->
     Seed = case binary:split(CallId, <<"-">>, ['global']) of
                List when length(List) =:= 5 ->
@@ -355,11 +363,11 @@ channel_tail(Index, CallId) ->
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
     list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ kz_term:to_list(Index)).
 
--spec endpoint_exten(kz_json:object()) -> api_binary().
--spec endpoint_exten(api_binary(), kz_json:object()) -> api_binary().
+-spec endpoint_exten(kz_json:object()) -> kz_term:api_binary().
 endpoint_exten(Endpoint) ->
     endpoint_exten(kz_json:get_value(<<"owner_id">>, Endpoint), Endpoint).
 
+-spec endpoint_exten(kz_term:api_binary(), kz_json:object()) -> kz_term:api_binary().
 endpoint_exten('undefined', Endpoint) ->
     case kz_json:get_value(<<"name">>, Endpoint) of
         'undefined' ->
@@ -376,7 +384,7 @@ endpoint_exten(OwnerId, Endpoint) ->
             endpoint_exten('undefined', Endpoint)
     end.
 
--spec queue_number(ne_binary(), ne_binary()) -> kz_json:json_term() | 'undefined'.
+-spec queue_number(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:json_term() | 'undefined'.
 queue_number(AccountDb, QueueId) ->
     case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         {'error', E} ->
@@ -833,7 +841,7 @@ queue_number(AccountDb, QueueId) ->
 
 
 
--spec find_id_number(ne_binary(), ne_binary()) -> {'ok', ne_binary()} | {'error', 'not_found'}.
+-spec find_id_number(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_term:ne_binary()} | {'error', 'not_found'}.
 find_id_number(Id, AccountDb) ->
     {ok, Results} = kz_datamgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
     maybe_id_in_callflows(Id, Results, AccountDb).
@@ -883,7 +891,7 @@ recurse_to_child_callflow(Id, Flow) ->
 
 
 
--spec queue_for_number(ne_binary(), ne_binary()) ->
+-spec queue_for_number(kz_term:ne_binary(), kz_term:ne_binary()) ->
                               {'ok', kz_json:object()} | {'error', atom()}.
 queue_for_number(Number, AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
@@ -926,12 +934,3 @@ maybe_queue_in_flow(Flow) ->
                                                 %     Digest = crypto:hash('md5', kz_term:to_binary(Seed)),
                                                 %     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
                                                 %     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
-
-
-
-
-
-
-
-
-

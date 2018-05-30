@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_vm).
 
 -export([init/1, bindings/1, responders/1, handle_event/2]).
@@ -8,11 +13,11 @@
 %% Public functions
 %%
 
--spec init(ne_binary()) -> 'ok'.
+-spec init(kz_term:ne_binary()) -> 'ok'.
 init(_AccountId) ->
     ok.
 
--spec bindings(kz_proplist()) -> kz_proplist().
+-spec bindings(kz_term:proplist()) -> kz_term:proplist().
 bindings(Props) ->
     [
      {notifications, [
@@ -21,13 +26,13 @@ bindings(Props) ->
                      ]}
     ].
 
--spec responders(kz_proplist()) -> kz_proplist().
+-spec responders(kz_term:proplist()) -> kz_term:proplist().
 responders(_Props) ->
     [
      {<<"notification">>, <<"voicemail_saved">>}
     ].
 
--spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).

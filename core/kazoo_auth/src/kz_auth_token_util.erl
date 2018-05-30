@@ -1,16 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
-
+%%%-----------------------------------------------------------------------------
 -module(kz_auth_token_util).
 
-%% ====================================================================
+%%==============================================================================
 %% API functions
-%% ====================================================================
+%%==============================================================================
+
 -export([add_application/1
         ,add_provider/1
         ,verify/1
@@ -105,11 +103,11 @@ create_claims(#{}=Token) -> Token.
 
 -type claim_map_input() :: map() | kz_json:objects().
 
--spec build_claims(kz_proplist(), claim_map_input()) -> kz_proplist().
+-spec build_claims(kz_term:proplist(), claim_map_input()) -> kz_term:proplist().
 build_claims(ClaimsMap, BuildFrom) ->
     build_claims(ClaimsMap, BuildFrom, []).
 
--spec build_claims(kz_proplist(), claim_map_input(), kz_proplist()) -> kz_proplist().
+-spec build_claims(kz_term:proplist(), claim_map_input(), kz_term:proplist()) -> kz_term:proplist().
 build_claims([], _, Claims) -> Claims;
 build_claims([{K1, K2} | KVs], Map, Claims)
   when is_map(Map) ->
@@ -133,6 +131,6 @@ id_token(#{id_token := IdToken}=Token) ->
     end;
 id_token(#{}=Token) -> Token#{claims => kz_json:new()}.
 
-%% ====================================================================
+%%==============================================================================
 %% Internal functions
-%% ====================================================================
+%%==============================================================================

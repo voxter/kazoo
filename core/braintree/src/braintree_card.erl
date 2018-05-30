@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(braintree_card).
 
 -export([url/0, url/1]).
@@ -29,32 +27,29 @@
 
 -include("bt.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Create the partial url for this module
+%%------------------------------------------------------------------------------
+%% @doc Create the partial URL for this module.
 %% @end
-%%--------------------------------------------------------------------
--spec url() -> string().
--spec url(ne_binary()) -> string().
--spec url(ne_binary(), _) -> string().
+%%------------------------------------------------------------------------------
 
+-spec url() -> string().
 url() ->
     "/payment_methods/".
 
+-spec url(kz_term:ne_binary()) -> string().
 url(Token) ->
     "/payment_methods/" ++ kz_term:to_list(Token).
 
+-spec url(kz_term:ne_binary(), _) -> string().
 url(Token, _) ->
     "/payment_methods/credit_card/" ++ kz_term:to_list(Token).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given a list of #bt_cards{} find the current default payment token.
+%%------------------------------------------------------------------------------
+%% @doc Given a list of {@link bt_cards()} find the current default payment token.
 %% @end
-%%--------------------------------------------------------------------
--spec default_payment_token(bt_cards()) -> api_binary().
+%%------------------------------------------------------------------------------
+
+-spec default_payment_token(bt_cards()) -> kz_term:api_binary().
 default_payment_token(Cards) ->
     case lists:keyfind('true', #bt_card.default, Cards) of
         'false' -> braintree_util:error_no_payment_token();
@@ -68,20 +63,19 @@ default_payment_card(Cards) ->
         Card -> Card
     end.
 
--spec payment_token(bt_card()) -> api_binary().
+-spec payment_token(bt_card()) -> kz_term:api_ne_binary().
 payment_token(#bt_card{token = Value}) -> Value.
 
--spec payment_tokens(bt_cards()) -> api_binaries().
+-spec payment_tokens(bt_cards()) -> kz_term:api_ne_binaries().
 payment_tokens(Cards) ->
     [payment_token(Card) || Card <- Cards].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Find a credit card by id
+%%------------------------------------------------------------------------------
+%% @doc Find a credit card by ID.
 %% @end
-%%--------------------------------------------------------------------
--spec find(ne_binary() | bt_card()) -> bt_card().
+%%------------------------------------------------------------------------------
+
+-spec find(kz_term:ne_binary() | bt_card()) -> bt_card().
 find(#bt_card{token = CardId}) -> find(CardId);
 find(Token) ->
     %% github.com/braintree/braintree_php/blob/master/lib/Braintree/CreditCardGateway.php#L149
@@ -93,30 +87,27 @@ find(Token) ->
           end,
     xml_to_record(Xml).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Creates a new credit card using the given record
+%%------------------------------------------------------------------------------
+%% @doc Creates a new credit card using the given record.
 %% @end
-%%--------------------------------------------------------------------
--spec create(bt_card()) -> bt_card().
--spec create(string() | ne_binary(), bt_card()) -> bt_card().
+%%------------------------------------------------------------------------------
 
+-spec create(bt_card()) -> bt_card().
 create(#bt_card{}=Card) ->
     Url = url(),
     Request = record_to_xml(Card, 'true'),
     Xml = braintree_request:post(Url, Request),
     xml_to_record(Xml).
 
+-spec create(string() | kz_term:ne_binary(), bt_card()) -> bt_card().
 create(CustomerId, Card) ->
     create(Card#bt_card{customer_id=CustomerId}).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Updates a credit card with the given record
+%%------------------------------------------------------------------------------
+%% @doc Updates a credit card with the given record.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec update(bt_card()) -> bt_card().
 update(#bt_card{token=Token}=Card) ->
     Url = url(Token),
@@ -124,24 +115,22 @@ update(#bt_card{token=Token}=Card) ->
     Xml = braintree_request:put(Url, Request),
     xml_to_record(Xml).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Deletes a credit card id from braintree's system
+%%------------------------------------------------------------------------------
+%% @doc Deletes a credit card id from Braintree's system.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec delete(bt_card() | binary() | string()) -> bt_card().
 delete(#bt_card{token=Token}) -> delete(Token);
 delete(Token) ->
     _ = braintree_request:delete(url(Token)),
     #bt_card{}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Finds the tokens of credit cards that have all expired
+%%------------------------------------------------------------------------------
+%% @doc Finds the tokens of credit cards that have all expired.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec expired() -> [bt_xml()].
 expired() ->
     Xml = braintree_request:post("/payment_methods/all/expired_ids", <<>>),
@@ -152,14 +141,13 @@ expired() ->
 -spec expired(bt_card()) -> boolean().
 expired(#bt_card{expired=Expired}) -> Expired.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Finds the tokens of credit cards expiring between the given
-%% start and end dates. Dates are given as MMYYYY
+%%------------------------------------------------------------------------------
+%% @doc Finds the tokens of credit cards expiring between the given
+%% start and end dates. Dates are given as `MMYYYY'.
 %% @end
-%%--------------------------------------------------------------------
--spec expiring(text(), text()) -> [bt_xml()].
+%%------------------------------------------------------------------------------
+
+-spec expiring(kz_term:text(), kz_term:text()) -> [bt_xml()].
 expiring(Start, End) ->
     Url = lists:append(["/payment_methods/all/expiring?start="
                        ,kz_term:to_list(Start)
@@ -171,32 +159,28 @@ expiring(Start, End) ->
      || Item <- xmerl_xpath:string("/payment-methods/credit-card", Xml)
     ].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Accessors for field 'make_default'.
+%%------------------------------------------------------------------------------
+%% @doc Accessors for field `make_default'.
 %% @end
-%%--------------------------------------------------------------------
--spec make_default(bt_card()) -> api_boolean().
--spec make_default(bt_card(), boolean()) -> bt_card().
+%%------------------------------------------------------------------------------
 
+-spec make_default(bt_card()) -> kz_term:api_boolean().
 make_default(#bt_card{make_default = Value}) -> Value.
 
+-spec make_default(bt_card(), boolean()) -> bt_card().
 make_default(#bt_card{}=Card, Value) ->
     Card#bt_card{make_default = Value}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert the given XML to a record
+%%------------------------------------------------------------------------------
+%% @doc Convert the given XML to a record.
 %% @end
-%%--------------------------------------------------------------------
--spec xml_to_record(bt_xml()) -> bt_card().
--spec xml_to_record(bt_xml(), kz_deeplist()) -> bt_card().
+%%------------------------------------------------------------------------------
 
+-spec xml_to_record(bt_xml()) -> bt_card().
 xml_to_record(Xml) ->
     xml_to_record(Xml, "/credit-card").
 
+-spec xml_to_record(bt_xml(), kz_term:deeplist()) -> bt_card().
 xml_to_record(Xml, Base) ->
     #bt_card{token = kz_xml:get_value([Base, "/token/text()"], Xml)
             ,bin = kz_xml:get_value([Base, "/bin/text()"], Xml)
@@ -216,18 +200,16 @@ xml_to_record(Xml, Base) ->
             ,billing_address_id = kz_xml:get_value([Base, "/billing-address/id/text()"], Xml)
             }.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert the given record to XML
+%%------------------------------------------------------------------------------
+%% @doc Convert the given record to XML.
 %% @end
-%%--------------------------------------------------------------------
--spec record_to_xml(bt_card()) -> kz_proplist() | bt_xml().
--spec record_to_xml(bt_card(), boolean()) -> kz_proplist() | bt_xml().
+%%------------------------------------------------------------------------------
 
+-spec record_to_xml(bt_card()) -> kz_term:proplist() | bt_xml().
 record_to_xml(Card) ->
     record_to_xml(Card, 'false').
 
+-spec record_to_xml(bt_card(), boolean()) -> kz_term:proplist() | bt_xml().
 record_to_xml(#bt_card{}=Card, ToString) ->
     Props = [{'token', Card#bt_card.token}
             ,{'cardholder-name', Card#bt_card.cardholder_name}
@@ -294,13 +276,12 @@ record_to_xml(#bt_card{}=Card, ToString) ->
         'false' -> Props1
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Convert a given json object into a record
+%%------------------------------------------------------------------------------
+%% @doc Convert a given JSON object into a record.
 %% @end
-%%--------------------------------------------------------------------
--spec json_to_record(api_object()) -> bt_card().
+%%------------------------------------------------------------------------------
+
+-spec json_to_record(kz_term:api_object()) -> bt_card().
 json_to_record('undefined') -> 'undefined';
 json_to_record(JObj) ->
     #bt_card{token = create_or_get_json_id(JObj)
@@ -319,12 +300,11 @@ json_to_record(JObj) ->
             ,payment_method_nonce = kz_json:get_binary_value(<<"payment_method_nonce">>, JObj)
             }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Convert a given record into a json object
+%%------------------------------------------------------------------------------
+%% @doc Convert a given record into a JSON object.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec record_to_json(bt_card()) -> kz_json:object().
 record_to_json(#bt_card{}=Card) ->
     kz_json:from_list(
@@ -348,14 +328,13 @@ record_to_json(#bt_card{}=Card) ->
       ,{<<"billing_address_id">>, Card#bt_card.billing_address_id}
       ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the object exists in but no id has been provided then generate
-%% a uuid to use during creation.
+%%------------------------------------------------------------------------------
+%% @doc If the object exists in but no ID has been provided then generate
+%% a UUID to use during creation.
 %% @end
-%%--------------------------------------------------------------------
--spec create_or_get_json_id(kz_json:object()) -> api_binary().
+%%------------------------------------------------------------------------------
+
+-spec create_or_get_json_id(kz_json:object()) -> kz_term:api_binary().
 create_or_get_json_id(JObj) ->
     case kz_json:get_value(<<"number">>, JObj) of
         'undefined' -> kz_doc:id(JObj);

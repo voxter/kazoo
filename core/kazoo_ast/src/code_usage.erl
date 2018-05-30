@@ -1,3 +1,9 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Modules to count usage of some specific case like `M:F/A' calls.
+%%% @author James Aimonetti
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(code_usage).
 
 -export([process/0, process/1
@@ -9,17 +15,17 @@
 -define(DEFAULT_TOP, 25).
 
 -spec tabulate() -> 'ok'.
--spec tabulate(atom() | pos_integer()) -> 'ok'.
--spec tabulate(atom(), pos_integer()) -> 'ok'.
 tabulate() ->
     print_usage(process(), ?DEFAULT_TOP).
 
+-spec tabulate(atom() | pos_integer()) -> 'ok'.
 tabulate(App) when is_atom(App) ->
     tabulate(App, ?DEFAULT_TOP);
 tabulate(Top) when is_integer(Top)
                    andalso Top > 0 ->
     print_usage(process(), Top).
 
+-spec tabulate(atom(), pos_integer()) -> 'ok'.
 tabulate(App, Top) when is_atom(App)
                         andalso is_integer(Top)
                         andalso Top > 0 ->

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% handler for route wins, bootstraps callflow execution
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handler for route wins, bootstraps callflow execution.
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_route_win).
 
 -export([execute_callflow/2
@@ -17,8 +15,8 @@
 
 -define(DEFAULT_SERVICES
        ,?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
-              ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
-              ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
+              ,{<<"video">>, ?JSON([{<<"enabled">>, 'true'}])}
+              ,{<<"sms">>, ?JSON([{<<"enabled">>, 'true'}])}
               ]
              )
        ).
@@ -52,7 +50,7 @@ should_restrict_call(Call) ->
     EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, DefaultEndpointId, Call),
     should_restrict_call(EndpointId, Call).
 
--spec should_restrict_call(api_ne_binary(), kapps_call:call()) -> boolean().
+-spec should_restrict_call(kz_term:api_ne_binary(), kapps_call:call()) -> boolean().
 should_restrict_call('undefined', _Call) -> 'false';
 should_restrict_call(EndpointId, Call) ->
     case kz_endpoint:get(EndpointId, Call) of
@@ -81,7 +79,7 @@ get_services(JObj) ->
 -spec maybe_account_service_unavailable(kz_json:object(), kapps_call:call()) -> boolean().
 maybe_account_service_unavailable(JObj, Call) ->
     AccountId = kapps_call:account_id(Call),
-    {'ok', Doc} = kz_account:fetch(AccountId),
+    {'ok', Doc} = kzd_accounts:fetch(AccountId),
     Services = get_services(Doc),
 
     case kz_json:is_true([<<"audio">>,<<"enabled">>], Services, 'true') of
@@ -113,7 +111,7 @@ maybe_classification_restriction(JObj, Call) ->
                ),
     kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], JObj) =:= <<"deny">>.
 
--spec find_request(kapps_call:call()) -> ne_binary().
+-spec find_request(kapps_call:call()) -> kz_term:ne_binary().
 find_request(Call) ->
     case kapps_call:kvs_fetch('cf_capture_group', Call) of
         'undefined' ->
@@ -157,7 +155,7 @@ get_caller_groups(Groups, JObj, Call) ->
                ,Ids
                ).
 
--spec maybe_device_groups_intersect(ne_binary(), sets:set(), kz_json:objects(), kapps_call:call()) -> boolean().
+-spec maybe_device_groups_intersect(kz_term:ne_binary(), sets:set(), kz_json:objects(), kapps_call:call()) -> boolean().
 maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
     CalleeGroups = get_group_associations(CalleeId, Groups),
     case sets:size(sets:intersection(CallerGroups, CalleeGroups)) =:= 0 of
@@ -175,11 +173,11 @@ maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
             sets:size(sets:intersection(CallerGroups, UsersGroups)) =:= 0
     end.
 
--spec get_group_associations(ne_binary(), kz_json:objects()) -> sets:set().
+-spec get_group_associations(kz_term:ne_binary(), kz_json:objects()) -> sets:set().
 get_group_associations(Id, Groups) ->
     get_group_associations(Id, Groups, sets:new()).
 
--spec get_group_associations(ne_binary(), kz_json:objects(), sets:set()) -> sets:set().
+-spec get_group_associations(kz_term:ne_binary(), kz_json:objects(), sets:set()) -> sets:set().
 get_group_associations(Id, Groups, Set) ->
     lists:foldl(fun(Group, S) ->
                         case kz_json:get_value([<<"value">>, Id], Group) of
@@ -188,12 +186,12 @@ get_group_associations(Id, Groups, Set) ->
                         end
                 end, Set, Groups).
 
--spec get_callee_extension_info(kapps_call:call()) -> {ne_binary(), ne_binary()} | 'undefined'.
+-spec get_callee_extension_info(kapps_call:call()) -> {kz_term:ne_binary(), kz_term:ne_binary()} | 'undefined'.
 get_callee_extension_info(Call) ->
     Flow = kapps_call:kvs_fetch('cf_flow', Call),
     FirstModule = kz_json:get_ne_binary_value(<<"module">>, Flow),
     FirstId = kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Flow),
-    SecondModule = kz_json:get_ne_binary_value([<<"_">>, <<"module">>], Flow),
+    SecondModule = kz_json:get_ne_binary_value([?DEFAULT_CHILD_KEY, <<"module">>], Flow),
     case (FirstModule =:= <<"device">>
               orelse FirstModule =:= <<"user">>
          )
@@ -206,12 +204,10 @@ get_callee_extension_info(Call) ->
         'false' -> 'undefined'
     end.
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec bootstrap_callflow_executer(kz_json:object(), kapps_call:call()) -> kapps_call:call().
 bootstrap_callflow_executer(_JObj, Call) ->
     Routines = [fun store_owner_id/1
@@ -223,23 +219,19 @@ bootstrap_callflow_executer(_JObj, Call) ->
                ],
     kapps_call:exec(Routines, Call).
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec store_owner_id(kapps_call:call()) -> kapps_call:call().
 store_owner_id(Call) ->
     OwnerId = kz_attributes:owner_id(Call),
     kapps_call:kvs_store('owner_id', OwnerId, Call).
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec set_language(kapps_call:call()) -> kapps_call:call().
 set_language(Call) ->
     Default = kz_media_util:prompt_language(kapps_call:account_id(Call)),
@@ -247,7 +239,7 @@ set_language(Call) ->
         Default ->
             case kz_endpoint:get(Call) of
                 {'ok', Endpoint} ->
-                    Language = kz_device:language(Endpoint, Default),
+                    Language = kzd_devices:language(Endpoint, Default),
                     lager:debug("setting language '~s' for this call", [Language]),
                     kapps_call:set_language(kz_term:to_lower_binary(Language), Call);
                 {'error', _E} ->
@@ -257,12 +249,10 @@ set_language(Call) ->
         _ -> Call
     end.
 
-%%-----------------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_ccvs(kapps_call:call()) -> kapps_call:call().
 update_ccvs(Call) ->
     CallerIdType = case kapps_call:inception(Call) of
@@ -289,10 +279,10 @@ update_ccvs(Call) ->
     kapps_call:set_custom_channel_vars(Props, Call1).
 
 -spec maybe_start_metaflow(kapps_call:call()) -> kapps_call:call().
--spec maybe_start_metaflow(kapps_call:call(), api_binary()) -> kapps_call:call().
 maybe_start_metaflow(Call) ->
     maybe_start_metaflow(Call, kapps_call:custom_channel_var(<<"Metaflow-App">>, Call)).
 
+-spec maybe_start_metaflow(kapps_call:call(), kz_term:api_binary()) -> kapps_call:call().
 maybe_start_metaflow(Call, 'undefined') ->
     maybe_start_endpoint_metaflow(Call, kapps_call:authorizing_id(Call)),
     Call;
@@ -300,7 +290,7 @@ maybe_start_metaflow(Call, App) ->
     lager:debug("metaflow app ~s", [App]),
     Call.
 
--spec maybe_start_endpoint_metaflow(kapps_call:call(), api_binary()) -> 'ok'.
+-spec maybe_start_endpoint_metaflow(kapps_call:call(), kz_term:api_binary()) -> 'ok'.
 maybe_start_endpoint_metaflow(_Call, 'undefined') -> 'ok';
 maybe_start_endpoint_metaflow(Call, EndpointId) ->
     lager:debug("looking up endpoint for ~s", [EndpointId]),
@@ -323,19 +313,21 @@ maybe_start_recording(Call) ->
                ],
     kapps_call:exec(Routines, Call).
 
--spec maybe_start_account_recording(ne_binary(), ne_binary(), kapps_call:call()) -> kapps_call:call().
+-spec maybe_start_account_recording(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
 maybe_start_account_recording(From, To, Call) ->
     {'ok', Endpoint} = kz_endpoint:get(kapps_call:account_id(Call), Call),
     case maybe_start_call_recording(?ACCOUNT_INBOUND_RECORDING(From)
                                    ,?ACCOUNT_INBOUND_RECORDING_LABEL(From)
                                    ,Endpoint
-                                   ,Call)
+                                   ,Call
+                                   )
     of
         Call ->
             case maybe_start_call_recording(?ACCOUNT_OUTBOUND_RECORDING(To)
                                            ,?ACCOUNT_OUTBOUND_RECORDING_LABEL(To)
                                            ,Endpoint
-                                           ,Call)
+                                           ,Call
+                                           )
             of
                 Call -> Call;
                 NewCall -> kapps_call:set_is_recording('true', NewCall)
@@ -343,7 +335,7 @@ maybe_start_account_recording(From, To, Call) ->
         NewCall -> kapps_call:set_is_recording('true', NewCall)
     end.
 
--spec maybe_start_endpoint_recording(ne_binary(), ne_binary, kapps_call:call()) -> kapps_call:call().
+-spec maybe_start_endpoint_recording(kz_term:ne_binary(), ne_binary, kapps_call:call()) -> kapps_call:call().
 maybe_start_endpoint_recording(<<"onnet">>, To, Call) ->
     DefaultEndpointId = kapps_call:authorizing_id(Call),
     EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, DefaultEndpointId, Call),
@@ -351,7 +343,7 @@ maybe_start_endpoint_recording(<<"onnet">>, To, Call) ->
 maybe_start_endpoint_recording(_, _, Call) ->
     Call.
 
--spec maybe_start_onnet_endpoint_recording(api_binary(), ne_binary(), kapps_call:call()) -> kapps_call:call().
+-spec maybe_start_onnet_endpoint_recording(kz_term:api_binary(), kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
 maybe_start_onnet_endpoint_recording('undefined', _To, Call) -> Call;
 maybe_start_onnet_endpoint_recording(EndpointId, To, Call) ->
     case kz_endpoint:get(EndpointId, Call) of
@@ -365,11 +357,11 @@ maybe_start_onnet_endpoint_recording(EndpointId, To, Call) ->
         _ -> Call
     end.
 
--spec maybe_start_call_recording(ne_binaries(), ne_binary(), kz_json:object(), kapps_call:call()) -> kapps_call:call().
+-spec maybe_start_call_recording(kz_term:ne_binaries(), kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> kapps_call:call().
 maybe_start_call_recording(Key, Label, Endpoint, Call) ->
     maybe_start_call_recording(kz_json:get_json_value(Key, Endpoint), Label, Call).
 
--spec maybe_start_call_recording(api_object(), ne_binary(), kapps_call:call()) -> kapps_call:call().
+-spec maybe_start_call_recording(kz_term:api_object(), kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
 maybe_start_call_recording('undefined', _, Call) ->
     Call;
 maybe_start_call_recording(Data, Label, Call) ->
@@ -378,7 +370,7 @@ maybe_start_call_recording(Data, Label, Call) ->
         'false' -> kapps_call:start_recording(kz_json:set_value(<<"origin">>, Label, Data), Call)
     end.
 
--spec get_incoming_security(kapps_call:call()) -> kz_proplist().
+-spec get_incoming_security(kapps_call:call()) -> kz_term:proplist().
 get_incoming_security(Call) ->
     case kz_endpoint:get(Call) of
         {'error', _R} -> [];
@@ -388,13 +380,11 @@ get_incoming_security(Call) ->
              )
     end.
 
-%%-----------------------------------------------------------------------------
-%% @private
-%% @doc
-%% executes the found call flow by starting a new cf_exe process under the
+%%------------------------------------------------------------------------------
+%% @doc executes the found call flow by starting a new cf_exe process under the
 %% cf_exe_sup tree.
 %% @end
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec execute_callflow(kapps_call:call()) -> kapps_call:call().
 execute_callflow(Call) ->
     lager:info("call has been setup, beginning to process the call"),

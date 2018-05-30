@@ -1,23 +1,21 @@
-%%==============================================================================
-%% @copyright (C) 2012, Jeremy Raymond
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%% http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-%%==============================================================================
-
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-, Jeremy Raymond
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%% http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%
 %%% @author Jeremy Raymond <jeraymond@gmail.com>
-%%% @doc
-%%% The amqp_cron module provides a distrubuted task scheduler for
+%%%
+%%% @doc The amqp_cron module provides a distributed task scheduler for
 %%% executing tasks periodically. The connected nodes elect a leader
 %%% to manage task scheduling and execution. Should the current leader
 %%% become unavailable a new leader node is elected who resumes task
@@ -34,10 +32,8 @@
 %%% currently are not supported.
 %%%
 %%% @see amqp_cron_task
-%%%
 %%% @end
-%%% Created : 31 Jan 2012 by Jeremy Raymond <jeraymond@gmail.com>
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(amqp_cron).
 
 %% API
@@ -75,69 +71,67 @@
 -type ident() :: name() | pid().
 %% The task pid() or name.
 
--type task() :: {ident(),
-                 amqp_cron_task:schedule(),
-                 amqp_cron_task:execargs()}.
-%% Task definition.
+-type task() :: {name()
+                ,pid()
+                ,amqp_cron_task:schedule()
+                ,amqp_cron_task:execargs()
+                }.
+-type tasks() :: [task()].
 
--record(state, {tasks = []
-               ,is_leader = 'false'
+-record(state, {tasks = [] :: tasks()
+               ,is_leader = 'false' :: boolean()
                }).
 -type state() :: #state{}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a linked process to manage scheduled tasks in coordination
+%%------------------------------------------------------------------------------
+%% @doc Creates a linked process to manage scheduled tasks in coordination
 %% with the given nodes. The current node must be part of the node
 %% list. Each amqp_cron node must be working with the same list of
 %% nodes to coordinate correctly.
 %%
 %% @end
-%%--------------------------------------------------------------------
--spec start_link([node()]) -> startlink_ret().
+%%------------------------------------------------------------------------------
+-spec start_link([node()]) -> kz_types:startlink_ret().
 start_link(Nodes) ->
     Opts = [],
     amqp_leader:start_link(?SERVER, Nodes, Opts, ?MODULE, [], []).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets the status of this scheduler.
-%%
+%%------------------------------------------------------------------------------
+%% @doc Gets the status of this scheduler.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec status() -> Status when
       Status :: {[any()]}.
 status() ->
     amqp_leader_proc:call(?SERVER, 'status').
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc
 %% Schedules a task. See {@link amqp_cron_task} for scheduling
 %% details.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec schedule_task(Schedule, Exec) -> {'ok', pid()} | {'error', any()} when
       Schedule :: amqp_cron_task:schedule(),
       Exec :: amqp_cron_task:execargs().
 schedule_task(Schedule, Exec) ->
     amqp_leader_proc:leader_call(?SERVER, {'schedule', {'undefined', Schedule, Exec}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules a named task. There cannot be more than one task with
+%%------------------------------------------------------------------------------
+%% @doc Schedules a named task. There cannot be more than one task with
 %% a given name at any one time. See {@link amqp_cron_task} for
 %% scheduling details.
 %%
-%% The name 'undefined' is reserved for all unnamed tasks and cannot
+%% The name `undefined' is reserved for all unnamed tasks and cannot
 %% be used.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec schedule_task(ident(), Schedule, Exec) ->
                            {'ok', pid()} | {'error', any()} when
       Schedule :: amqp_cron_task:schedule(),
@@ -146,23 +140,19 @@ schedule_task(Name, Schedule, Exec) when
       is_binary(Name); is_atom(Name), Name =/= 'undefined' ->
     amqp_leader_proc:leader_call(?SERVER, {'schedule', {Name, Schedule, Exec}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Cancels a task.
-%%
+%%------------------------------------------------------------------------------
+%% @doc Cancels a task.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec cancel_task(ident()) -> 'ok' | {'error', Reason} when
       Reason :: any().
 cancel_task(Ident) ->
     amqp_leader_proc:leader_call(?SERVER, {'cancel', Ident}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets the status of a task.
-%%
+%%------------------------------------------------------------------------------
+%% @doc Gets the status of a task.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec task_status(ident()) -> {Status, ScheduleTime, TaskPid} when
       Status :: amqp_cron_task:status(),
       ScheduleTime :: amqp_cron_task:datetime(),
@@ -170,30 +160,30 @@ cancel_task(Ident) ->
 task_status(Ident) ->
     amqp_leader_proc:leader_call(?SERVER, {'task_status', Ident}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets the list of tasks.
-%%
+%%------------------------------------------------------------------------------
+%% @doc Gets the list of tasks.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec task_list() -> [task()].
 task_list() ->
     amqp_leader_proc:leader_call(?SERVER, 'task_list').
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove tasks with a status of done.
-%%
+%%------------------------------------------------------------------------------
+%% @doc Remove tasks with a status of done.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec remove_done_tasks() -> 'ok'.
 remove_done_tasks() ->
     amqp_leader_proc:leader_call(?SERVER, 'remove_done_tasks').
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_leader callbacks
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     {'ok', #state{}}.
@@ -221,7 +211,7 @@ surrendered(State, Sync, _Election) ->
     State3 = State2#state{is_leader = 'false'},
     {'ok', State3}.
 
--spec handle_leader_call(any(), pid_ref(), state(), any()) -> handle_call_ret_state(state()).
+-spec handle_leader_call(any(), kz_term:pid_ref(), state(), any()) -> kz_types:handle_call_ret_state(state()).
 handle_leader_call({'cancel', Name}, From, State, Election) when
       is_binary(Name); is_atom(Name) ->
     case pid_for_name(Name, State#state.tasks) of
@@ -281,7 +271,7 @@ handle_leader_call('remove_done_tasks', _From, State, Election) ->
     'ok' = send_tasks(Tasks1, Election),
     {'reply', 'ok', State1}.
 
--spec handle_leader_cast(any(), state(), any()) -> handle_cast_ret_state(state()).
+-spec handle_leader_cast(any(), state(), any()) -> kz_types:handle_cast_ret_state(state()).
 handle_leader_cast(_Request, State, _Election) ->
     {'noreply', State}.
 
@@ -294,7 +284,7 @@ from_leader({'tasks', Tasks}, State, _Election) ->
 handle_DOWN(_Node, State, _Election) ->
     {'ok', State}.
 
--spec handle_call(any(), pid_ref(), state(), any()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state(), any()) -> kz_types:handle_call_ret_state(state()).
 handle_call('status', _From, State, Election) ->
     Reply = [{'leader', amqp_leader_proc:leader_node(Election)}
             ,{'alive', amqp_leader_proc:alive(Election)}
@@ -307,11 +297,11 @@ handle_call('status', _From, State, Election) ->
 handle_call(_Request, _From, State, _Election) ->
     {'reply', 'ok', State}.
 
--spec handle_cast(any(), state(), any()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state(), any()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast(_Msg, State, _Election) ->
     {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     {'noreply', State}.
 
@@ -323,10 +313,14 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Election, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 save_tasks(State, Tasks) ->
     State#state{tasks = Tasks}.
 
@@ -337,9 +331,10 @@ send_tasks(Tasks, Election) ->
     case amqp_leader_proc:alive(Election) -- [node()] of
         [] -> 'ok';
         Alive ->
-            Election = amqp_leader_proc:broadcast({'from_leader', {'tasks', Tasks}},
-                                                  Alive,
-                                                  Election),
+            Election = amqp_leader_proc:broadcast({'from_leader', {'tasks', Tasks}}
+                                                 ,Alive
+                                                 ,Election
+                                                 ),
             'ok'
     end.
 
@@ -384,6 +379,8 @@ remove_task_if_done(Task, Acc) ->
             [Task|Acc]
     end.
 
+-spec pid_for_name(binary() | atom(), tasks()) -> pid() |
+                                                  {error, no_such_name}.
 pid_for_name(Name, Tasks) ->
     case lists:keyfind(Name, 1, Tasks) of
         'false' ->

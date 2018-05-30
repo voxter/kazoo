@@ -9,7 +9,7 @@ ITU_URL = https://raw.githubusercontent.com/mledoze/countries/c212082894e48e8be1
 # official list https://www.itu.int/pub/T-SP-E.164D
 # but there are newer ones… https://www.itu.int/pub/T-SP-OB
 #
-# maintained & god enough https://raw.githubusercontent.com/mledoze/countries/master/countries.json
+# maintained & good enough https://raw.githubusercontent.com/mledoze/countries/master/countries.json
 #
 # http://country.io/phone.json
 #
@@ -22,12 +22,14 @@ ITU_URL = https://raw.githubusercontent.com/mledoze/countries/c212082894e48e8be1
 # https://countrycode.org/
 # https://en.wikipedia.org/wiki/List_of_country_calling_codes
 
-SOURCES = src/*.erl src/*/*.erl $(ITU)
-
 COMPILE_MOAR = $(ITU)
+SOURCES = $(ITU) $(wildcard src/*.erl) $(wildcard src/*/*.erl)
+
 CLEAN_MOAR = clean-generated
 
 all: compile
+
+compile:
 
 compile-test: compile-also
 
@@ -37,12 +39,14 @@ compile-also:
 include $(ROOT)/make/kz.mk
 
 clean-generated:
-	$(if $(wildcard $(ITU)), rm $(ITU))
+	$(if $(wildcard $(ITU)), @rm $(ITU))
 
 $(ITU_FILE):
 	wget -qO $@ $(ITU_URL)
 
-$(ITU): $(ITU_FILE) $(ITU_SRC)
+$(ITU_SRC): $(ITU_FILE)
+
+$(ITU): $(ITU_SRC)
 	@cat $(ITU_SRC) >$(ITU)
 	@python -c 'from __future__ import print_function; import json; [print("to_itu(<<\"", l["cca2"], "\">>) -> <<\"+", l["callingCode"][0], "\">>;", sep="") for l in sorted(json.load(open("dialcodes.json")), key=lambda l: l["cca2"]) if len(l["callingCode"]) > 0]' >>$(ITU)
 	@echo 'to_itu(_) -> <<>>.' >>$(ITU)

@@ -31,6 +31,9 @@
         "Pause-Time": {
             "type": "integer"
         },
+        "Queue-ID": {
+            "type": "string"
+        },
         "Timestamp": {
             "type": "string"
         },

@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amqp_leader_proc).
 -behaviour(gen_server).
 
@@ -31,25 +36,27 @@
          terminate/2,
          code_change/3]).
 
--record(state, {name                    :: atom()
-               ,leader                 :: sign()
-               ,role                   :: role()
+-record(state, {name                   :: atom()
+               ,leader                 :: sign() | undefined
+               ,role                   :: role() | undefined
                ,elected = 0            :: integer()
                ,restarted = 0          :: integer()
                ,callback_module        :: atom()
                ,callback_state         :: any()
-               ,down = []              :: atoms()
-               ,candidates = [node()]  :: atoms()
+               ,down = []              :: kz_term:atoms()
+               ,candidates = [node()]  :: kz_term:atoms()
                }).
 
--record(sign, {elected                  :: integer()
+-record(sign, {elected                 :: integer()
               ,restarted               :: integer()
               ,node = node()           :: atom()
               ,name                    :: atom()
               ,sync                    :: any()
               }).
 
--record(?MODULE, {from, msg}).
+-record(?MODULE, {from :: sign()
+                 ,msg :: join | {leader, sign()} | {sync} | {from_leader, any()}
+                 }).
 
 -type role() :: 'candidate' | 'leader'.
 -type state() :: #state{}.
@@ -63,7 +70,7 @@
                     | {state(), atom()}
                     | {atom(), sign()}
                     | sign()
-                    | ne_binary().
+                    | kz_term:ne_binary().
 -type from() :: any().
 
 -include("amqp_leader.hrl").
@@ -76,18 +83,23 @@
            andalso From#sign.restarted =:= State#state.leader#sign.restarted
           )
        ).
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
--spec start(atom(), atoms(), list(), atom(), list(), list()) -> startlink_ret().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(atom(), kz_term:atoms(), list(), atom(), list(), list()) -> kz_types:startlink_ret().
 start(Name, CandidateNodes, OptArgs, Mod, Arg, Options) ->
     start_it('start', Name, CandidateNodes, OptArgs, Mod, Arg, Options).
 
--spec start_link(atom(), atoms(), list(), atom(), list(), list()) -> startlink_ret().
+-spec start_link(atom(), kz_term:atoms(), list(), atom(), list(), list()) -> kz_types:startlink_ret().
 start_link(Name, CandidateNodes, OptArgs, Mod, Arg, Options) ->
     start_it('start_link', Name, CandidateNodes, OptArgs, Mod, Arg, Options).
 
--spec start_it(atom(), atom(), atoms(), list(), atom(), list(), list()) -> startlink_ret().
+-spec start_it(atom(), atom(), kz_term:atoms(), list(), atom(), list(), list()) -> kz_types:startlink_ret().
 start_it(StartFun, Name, CandidateNodes, OptArgs, Mod, Arg, Options) ->
     gen_server:StartFun({'local', Name}, ?MODULE, [Name, CandidateNodes, OptArgs, Mod, Arg, Options], []).
 
@@ -122,21 +134,23 @@ reply({Pid, _} = From, Reply) when is_pid(Pid)
 reply({From, Tag}, Reply) ->
     send(From, {Tag, Reply}).
 
--spec alive(sign()) -> atoms().
+-spec alive(sign()) -> kz_term:atoms().
 alive(_) -> [node()].
-%alive(#sign{candidates = Candidates}) ->
-%    Candidates.
+%%alive(#sign{candidates = Candidates}) ->
+%%    Candidates.
 
--spec down(sign()) -> atoms().
+-spec down(sign()) -> kz_term:atoms().
 down(_) -> [].
 
--spec workers(sign()) -> atoms().
+-spec workers(sign()) -> kz_term:atoms().
 workers(_) -> [].
 
--spec candidates(sign()) -> atoms().
+-spec candidates(sign()) -> kz_term:atoms().
 candidates(_) -> [node()].
 
--spec broadcast(atom(), atoms(), sign()) -> sign().
+-type msg() :: {'from_leader', any()}.
+
+-spec broadcast(msg(), kz_term:atoms(), sign()) -> sign().
 broadcast(Msg, _Nodes, #sign{name = Name} = Sign) ->
     send({Name, 'broadcast'}, Msg),
     Sign.
@@ -148,21 +162,14 @@ leader_node(#sign{node = Node}) -> Node.
 s(Name) ->
     gen_server:call(Name, s).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([Name, _CandidateNodes, _OptArgs, Mod, Arg, _Options]) ->
     kz_util:put_callid(kapi_leader:queue()),
@@ -172,21 +179,11 @@ init([Name, _CandidateNodes, _OptArgs, Mod, Arg, _Options]) ->
                   },
     {'ok', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), {pid(), any()}, state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), {pid(), any()}, state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(s, _, State) ->
     {reply, {self(), State}, State};
 handle_call({'leader_call', Msg}, From, State) when ?is_leader ->
@@ -201,17 +198,11 @@ handle_call(Call, From, State) ->
                ],
     noreply(State, Routines).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'init', Arg}, State) ->
     init(State, Arg);
 handle_cast({'leader_cast', Msg}, State) when ?is_leader ->
@@ -226,17 +217,11 @@ handle_cast(Msg, State) ->
                ],
     noreply(State, Routines).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(#?MODULE{from = From, msg = 'join'} = Msg, State) when ?is_leader ->
     lager:debug("message ~p", [Msg]),
     Routines = [{fun announce_leader/2, {From, 'me'}}
@@ -332,37 +317,35 @@ handle_info(Info, State) ->
                ],
     noreply(State, Routines).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, State) ->
     send({name(State), 'broadcast'}, {'DOWN', node()}),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init(state(), any()) -> routine_ret().
 init(#state{callback_module = Mod, name = Name} = State, Arg) ->
     'true' = amqp_leader_listener:is_ready(),
@@ -550,7 +533,7 @@ noreply(#state{} = State, [{Fun, Data} | Rest]) when is_function(Fun, 2) ->
 increase_elected(#state{elected = Elected} = State, []) ->
     State#state{elected = Elected + 1}.
 
--spec add_candidates(state(), sign() | atoms()) -> state().
+-spec add_candidates(state(), sign() | kz_term:atoms()) -> state().
 add_candidates(#state{} = State, #sign{node = Node}) ->
     add_candidates(State, [Node]);
 add_candidates(#state{candidates = MyCandidates} = State, Candidates) ->
@@ -621,11 +604,11 @@ node(#sign{node = Node}) when is_atom(Node) -> Node.
 
 -spec sign(state()) -> sign().
 sign(#state{elected = Elected, restarted = Restarted, name = Name
-            %, candidates = Candidates
+           %% ,candidates = Candidates
            } = State) ->
     #sign{elected = Elected
           ,restarted = -Restarted
           ,name = Name
           ,sync = sync(State)
-%          ,candidates = Candidates
+          %% ,candidates = Candidates
          }.

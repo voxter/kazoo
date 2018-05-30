@@ -4,11 +4,13 @@
 -define(KEY_RATING_REQ, <<"call.rating">>).
 
 %% Call Events
--define(CALL_EVENT_ROUTING_KEY(Event, CallId), <<"call."
-                                                 ,(kz_term:to_binary(Event))/binary
-                                                 ,"."
-                                                 ,(amqp_util:encode(CallId))/binary
-                                               >>).
+-define(CALL_EVENT_ROUTING_KEY(Event, CallId)
+       ,list_to_binary(["call."
+                       ,kz_term:to_binary(Event)
+                       ,"."
+                       ,amqp_util:encode(CallId)
+                       ])
+       ).
 -define(CALL_EVENT_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_CALL_EVENT_HEADERS
        ,[<<"Application-Data">>
@@ -35,6 +37,7 @@
         ,<<"Conference-Config">>
         ,<<"Conference-Name">>
         ,<<"Control-Queue">>
+        ,<<"Custom-Application-Vars">>
         ,<<"Custom-Channel-Vars">>
         ,<<"Custom-SIP-Headers">>
         ,<<"Detected-Tone">>
@@ -86,7 +89,8 @@
         ,<<"User-Agent">>
         ]).
 -define(CALL_EVENT_VALUES, [{<<"Event-Category">>, <<"call_event">>}]).
--define(CALL_EVENT_TYPES, [{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+-define(CALL_EVENT_TYPES, [{<<"Custom-Application-Vars">>, fun kz_json:is_json_object/1}
+                          ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
                           ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
                           ,{<<"Fax-Info">>, fun kz_json:is_json_object/1}
                           ]).
@@ -102,7 +106,8 @@
 %% Channel Status Response
 -define(CHANNEL_STATUS_RESP_HEADERS, [<<"Call-ID">>, <<"Status">>]).
 -define(OPTIONAL_CHANNEL_STATUS_RESP_HEADERS
-       ,[<<"Custom-Channel-Vars">>
+       ,[<<"Custom-Application-Vars">>
+        ,<<"Custom-Channel-Vars">>
         ,<<"Error-Msg">>
         ,<<"From-Tag">>
         ,<<"Other-Leg-Call-ID">>
@@ -117,7 +122,9 @@
                                     ,{<<"Event-Name">>, <<"channel_status_resp">>}
                                     ,{<<"Status">>, [<<"active">>, <<"tmpdown">>, <<"terminated">>]}
                                     ]).
--define(CHANNEL_STATUS_RESP_TYPES, [{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}]).
+-define(CHANNEL_STATUS_RESP_TYPES, [{<<"Custom-Application-Vars">>, fun kz_json:is_json_object/1}
+                                   ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+                                   ]).
 
 %% Query Auth ID Req
 -define(QUERY_AUTH_ID_REQ_HEADERS, [<<"Auth-ID">>]).

@@ -1,18 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_topup).
 
 -export([init/2]).
 -export([should_topup/1, should_topup/2]).
 
--include("include/kazoo_transactions.hrl").
-
--define(KZ_SERVICES_DB, <<"services">>).
+-include("transactions.hrl").
 
 -type error() :: 'topup_disabled' |
                  'topup_undefined' |
@@ -24,13 +20,11 @@
                  atom().
 
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec init(api_binary(), integer()) ->
+%%------------------------------------------------------------------------------
+-spec init(kz_term:api_binary(), integer()) ->
                   'ok' |
                   {'error', error()}.
 init(Account, CurrentBalance) ->
@@ -44,20 +38,19 @@ init(Account, CurrentBalance) ->
             maybe_top_up(AccountId, Balance, Amount, Threshold)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec should_topup(ne_binary()) -> boolean().
--spec should_topup(ne_binary(), integer()) -> boolean().
+%%------------------------------------------------------------------------------
+
+-spec should_topup(kz_term:ne_binary()) -> boolean().
 should_topup(AccountId) ->
     case wht_util:current_balance(AccountId) of
         {'ok', CurrentBalance} -> should_topup(AccountId, CurrentBalance);
         {'error', _} -> 'false'
     end.
 
+-spec should_topup(kz_term:ne_binary(), integer()) -> boolean().
 should_topup(AccountId, CurrentBalance) ->
     Balance = wht_util:units_to_dollars(CurrentBalance),
     case get_top_up(AccountId) of
@@ -68,31 +61,29 @@ should_topup(AccountId, CurrentBalance) ->
             should_topup(AccountId, Balance, Threshold) =:= 'true'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec should_topup(ne_binary(), number(), integer()) ->
+%%------------------------------------------------------------------------------
+-spec should_topup(kz_term:ne_binary(), number(), integer()) ->
                           'true' |
                           {'error', error()}.
 should_topup(AccountId, Balance, Threshold) when Balance =< Threshold ->
-    To = kz_time:current_tstamp(),
+    To = kz_time:now_s(),
     From = To - ?SECONDS_IN_DAY,
     case kz_transactions:fetch_local(AccountId, From, To) of
         {'error', _Reason} = Error ->
             lager:warning("failed to fetch recent transactions for ~s: ~p", [AccountId, _Reason]),
             Error;
         {'ok', Transactions} ->
-            TopupTransactions = kz_transactions:filter_by_reason(<<"topup">>, Transactions),
+            TopupTransactions = kz_transactions:filter_by_reason(wht_util:topup(), Transactions),
             is_topup_today(AccountId, TopupTransactions)
     end;
 should_topup(_AccountId, _Balance, _Threshold) ->
     lager:warning("balance (~p) is still > to threshold (~p) for account ~s", [_Balance, _Threshold, _AccountId]),
     {'error', 'balance_above_threshold'}.
 
--spec is_topup_today(ne_binary(), kz_json:objects()) -> 'true' | {'error', error()}.
+-spec is_topup_today(kz_term:ne_binary(), kz_json:objects()) -> 'true' | {'error', error()}.
 is_topup_today(_AccountId, []) ->
     lager:info("no top up transactions found for ~s, processing...", [_AccountId]),
     'true';
@@ -100,20 +91,18 @@ is_topup_today(_AccountId, _TopupTransactions) ->
     lager:info("today auto top up for ~s already done, skipping...", [_AccountId]),
     {'error', 'topup_daily_limit'}.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec get_top_up(api_binary() | kz_account:doc()) ->
+%%------------------------------------------------------------------------------
+-spec get_top_up(kz_term:api_binary() | kzd_accounts:doc()) ->
                         {'error', error()} |
                         {'ok', integer(), integer()}.
 get_top_up(<<_/binary>> = Account) ->
     case kapps_config:get_is_true(?TOPUP_CONFIG, <<"enable">>, 'false') of
         'false' -> {'error', 'topup_disabled'};
         'true' ->
-            case kz_account:fetch(Account) of
+            case kzd_accounts:fetch(Account) of
                 {'error', _E}=Error ->
                     lager:error("could not open account ~s: ~p", [Account, _E]),
                     Error;
@@ -135,13 +124,11 @@ get_top_up(JObj) ->
         {_, _} -> {'error', 'amount_and_threshold_undefined'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec maybe_top_up(ne_binary(), number(), integer(), integer()) ->
+%%------------------------------------------------------------------------------
+-spec maybe_top_up(kz_term:ne_binary(), number(), integer(), integer()) ->
                           'ok' |
                           {'error', error()}.
 maybe_top_up(AccountId, Balance, Amount, Threshold) ->
@@ -150,17 +137,15 @@ maybe_top_up(AccountId, Balance, Amount, Threshold) ->
         {'error', _} = Error -> Error
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @do
-%%
+%%------------------------------------------------------------------------------
+%% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec top_up(ne_binary(), integer()) -> 'ok' | {'error', any()}.
+%%------------------------------------------------------------------------------
+-spec top_up(kz_term:ne_binary(), integer()) -> 'ok' | {'error', any()}.
 top_up(AccountId, Amount) ->
     Services = kz_services:fetch(AccountId),
     Transaction = kz_transaction:debit(AccountId, wht_util:dollars_to_units(Amount)),
-    Transaction1 = kz_transaction:set_reason(<<"topup">>, Transaction),
+    Transaction1 = kz_transaction:set_reason(wht_util:topup(), Transaction),
 
     lager:info("attemptting to top up account ~s for ~p", [AccountId, Amount]),
     case kz_services:charge_transactions(Services, [Transaction1]) of

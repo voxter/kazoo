@@ -1,17 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Metaflows execute on top of a call
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Metaflows execute on top of a call
 %%% /accounts/{account_id}/metaflows - manip account metaflows
 %%% /accounts/{account_id}/users/{user_id}/metaflows - manip user's metaflows
 %%% /accounts/{account_id}/devices/{device_id}/metaflows - manip user's metaflows
 %%%
+%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_metaflows).
 
 -export([init/0
@@ -26,16 +24,14 @@
 
 -define(CB_LIST, <<"metaflows/crossbar_listing">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.metaflows">>, ?MODULE, 'allowed_methods'),
@@ -44,39 +40,37 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.post.metaflows">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.metaflows">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /metaflows => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /metaflows => []
 %%    /metaflows/foo => [<<"foo">>]
 %%    /metaflows/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /metaflows mights load a list of metaflow objects
 %% /metaflows/123 might load the metaflow object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_metaflows(Context, cb_context:req_verb(Context)).
@@ -89,8 +83,7 @@ validate_metaflows(Context, ?HTTP_POST) ->
 validate_metaflows(Context, ?HTTP_DELETE) ->
     validate_delete_metaflows(Context, thing_doc(Context)).
 
--spec thing_doc(cb_context:context()) -> api_object().
--spec thing_doc(cb_context:context(), ne_binary()) -> api_object().
+-spec thing_doc(cb_context:context()) -> kz_term:api_object().
 thing_doc(Context) ->
     case cb_context:req_nouns(Context) of
         [{<<"metaflows">>, []}, {_Thing, [ThingId]} | _] ->
@@ -99,6 +92,7 @@ thing_doc(Context) ->
         _Nouns -> 'undefined'
     end.
 
+-spec thing_doc(cb_context:context(), kz_term:ne_binary()) -> kz_term:api_object().
 thing_doc(Context, ThingId) ->
     Context1 = crossbar_doc:load(ThingId, Context, ?TYPE_CHECK_OPTION_ANY),
     case cb_context:resp_status(Context1) of
@@ -108,17 +102,17 @@ thing_doc(Context, ThingId) ->
             'undefined'
     end.
 
--spec validate_get_metaflows(cb_context:context(), api_object()) -> cb_context:context().
+-spec validate_get_metaflows(cb_context:context(), kz_term:api_object()) -> cb_context:context().
 validate_get_metaflows(Context, 'undefined') ->
-    {'ok', AccountDoc} = kz_account:fetch(cb_context:account_id(Context)),
+    {'ok', AccountDoc} = kzd_accounts:fetch(cb_context:account_id(Context)),
     validate_get_metaflows(Context, AccountDoc);
 validate_get_metaflows(Context, Doc) ->
     Metaflows = kz_json:get_value(<<"metaflows">>, Doc, kz_json:new()),
     crossbar_util:response(Metaflows, Context).
 
--spec validate_delete_metaflows(cb_context:context(), api_object()) -> cb_context:context().
+-spec validate_delete_metaflows(cb_context:context(), kz_term:api_object()) -> cb_context:context().
 validate_delete_metaflows(Context, 'undefined') ->
-    {'ok', AccountDoc} = kz_account:fetch(cb_context:account_id(Context)),
+    {'ok', AccountDoc} = kzd_accounts:fetch(cb_context:account_id(Context)),
     validate_delete_metaflows(Context, AccountDoc);
 validate_delete_metaflows(Context, Doc) ->
     crossbar_util:response(kz_json:new()
@@ -128,37 +122,35 @@ validate_delete_metaflows(Context, Doc) ->
 
 -spec validate_set_metaflows(cb_context:context()) ->
                                     cb_context:context().
--spec validate_set_metaflows(cb_context:context(), kz_json:object(), api_object()) ->
-                                    cb_context:context().
 validate_set_metaflows(Context) ->
     lager:debug("metaflow data is valid, setting on thing"),
     validate_set_metaflows(Context, cb_context:doc(Context), thing_doc(Context)).
 
+-spec validate_set_metaflows(cb_context:context(), kz_json:object(), kz_term:api_object()) ->
+                                    cb_context:context().
 validate_set_metaflows(Context, Metaflows, 'undefined') ->
     lager:debug("no doc found, using account doc"),
-    {'ok', AccountDoc} = kz_account:fetch(cb_context:account_id(Context)),
+    {'ok', AccountDoc} = kzd_accounts:fetch(cb_context:account_id(Context)),
     validate_set_metaflows(Context, Metaflows, AccountDoc);
 validate_set_metaflows(Context, Metaflows, Doc) ->
     Doc1 = kz_json:set_value(<<"metaflows">>, Metaflows, Doc),
     crossbar_util:response(Metaflows, cb_context:set_doc(Context, Doc1)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is POST, execute the actual action, usually a db save.
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is POST, execute the actual action, usually a db save.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec post(cb_context:context()) -> cb_context:context().
 post(Context) ->
     Doc = cb_context:doc(Context),
     lager:debug("saving ~p", [Doc]),
     after_post(crossbar_doc:save(Context), kz_doc:type(Doc)).
 
--spec after_post(cb_context:context(), ne_binary()) -> cb_context:context().
--spec after_post(cb_context:context(), ne_binary(), crossbar_status()) -> cb_context:context().
+-spec after_post(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 after_post(Context, DocType) ->
     after_post(Context, DocType, cb_context:resp_status(Context)).
 
+-spec after_post(cb_context:context(), kz_term:ne_binary(), crossbar_status()) -> cb_context:context().
 after_post(Context, <<"account">>, 'success') ->
     _ = cb_accounts:replicate_account_definition(cb_context:doc(Context)),
     lager:debug("saved, returning the metaflows"),
@@ -173,21 +165,19 @@ after_post(Context, _, 'success') ->
 after_post(Context, _DocType, _RespStatus) ->
     Context.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is DELETE, execute the actual action, usually a db delete
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(cb_context:context()) -> cb_context:context().
 delete(Context) ->
     after_delete(crossbar_doc:save(Context)).
 
 -spec after_delete(cb_context:context()) -> cb_context:context().
--spec after_delete(cb_context:context(), crossbar_status()) -> cb_context:context().
 after_delete(Context) ->
     after_delete(Context, cb_context:resp_status(Context)).
 
+-spec after_delete(cb_context:context(), crossbar_status()) -> cb_context:context().
 after_delete(Context, 'success') ->
     crossbar_util:response(kz_json:new(), Context);
 after_delete(Context, _RespStatus) ->

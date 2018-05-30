@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_queue_workers_sup).
 
 -behaviour(supervisor).
@@ -26,28 +24,29 @@
 
 -define(CHILDREN, [?SUPER_TYPE('acdc_queue_worker_sup', 'transient')]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link(?SERVER, []).
 
--spec new_worker(pid(), ne_binary(), ne_binary()) -> 'ok'.
+-spec new_worker(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 new_worker(WorkersSup, AcctId, QueueId) ->
     new_workers(WorkersSup, AcctId, QueueId, 1).
 
--spec new_workers(pid(), ne_binary(), ne_binary(), integer()) -> 'ok'.
+-spec new_workers(pid(), kz_term:ne_binary(), kz_term:ne_binary(), integer()) -> 'ok'.
 new_workers(_, _,_,N) when N =< 0 -> 'ok';
 new_workers(WorkersSup, AcctId, QueueId, N) when is_integer(N) ->
     _ = supervisor:start_child(WorkersSup, [self(), AcctId, QueueId]),
     new_workers(WorkersSup, AcctId, QueueId, N-1).
 
--spec workers(pid()) -> pids().
+-spec workers(pid()) -> kz_term:pids().
 workers(Super) ->
     [Pid || {_, Pid, 'supervisor', [_]} <- supervisor:which_children(Super), is_pid(Pid)].
 
@@ -59,20 +58,18 @@ status(Super) ->
     ?PRINT("  Workers Supervisor: ~p", [Super]),
     lists:foreach(fun acdc_queue_worker_sup:status/1, workers(Super)).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Supervisor callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 1,
@@ -82,6 +79,6 @@ init([]) ->
 
     {'ok', {SupFlags, ?CHILDREN}}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

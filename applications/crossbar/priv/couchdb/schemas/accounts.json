@@ -8,12 +8,10 @@
             "description": "call recording configuration",
             "properties": {
                 "account": {
-                    "$ref": "call_recording",
-                    "type": "object"
+                    "$ref": "call_recording"
                 },
                 "endpoint": {
-                    "$ref": "call_recording",
-                    "type": "object"
+                    "$ref": "call_recording"
                 }
             },
             "type": "object"
@@ -41,15 +39,27 @@
         },
         "caller_id": {
             "$ref": "caller_id",
-            "default": {},
-            "description": "The account default caller ID parameters",
+            "description": "The account default caller ID parameters"
+        },
+        "caller_id_options": {
+            "description": "custom properties for configuring caller_id",
+            "properties": {
+                "outbound_privacy": {
+                    "description": "Determines what appears as caller id for offnet outbound calls. Values: full - hides name and number; name - hides only name; number - hides only number; none - hides nothing",
+                    "enum": [
+                        "full",
+                        "name",
+                        "number",
+                        "none"
+                    ],
+                    "type": "string"
+                }
+            },
             "type": "object"
         },
         "dial_plan": {
             "$ref": "dialplans",
-            "default": {},
-            "description": "A list of default rules used to modify dialed numbers",
-            "type": "object"
+            "description": "A list of default rules used to modify dialed numbers"
         },
         "do_not_disturb": {
             "properties": {
@@ -66,8 +76,7 @@
             "type": "boolean"
         },
         "formatters": {
-            "$ref": "formatters",
-            "type": "object"
+            "$ref": "formatters"
         },
         "language": {
             "description": "The language for this account",
@@ -82,7 +91,7 @@
             "properties": {
                 "media_id": {
                     "description": "The ID of a media object that should be used as the default music on hold",
-                    "maxLength": 128,
+                    "maxLength": 2048,
                     "type": "string"
                 }
             },
@@ -93,6 +102,50 @@
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
+        },
+        "notifications": {
+            "description": "account notification settings",
+            "properties": {
+                "first_occurrence": {
+                    "description": "send emails on these account-firsts",
+                    "properties": {
+                        "sent_initial_call": {
+                            "default": false,
+                            "description": "has the account made their first call",
+                            "type": "boolean"
+                        },
+                        "sent_initial_registration": {
+                            "default": false,
+                            "description": "has the account registered their first device",
+                            "type": "boolean"
+                        }
+                    },
+                    "type": "object"
+                },
+                "low_balance": {
+                    "description": "Low balance settings",
+                    "properties": {
+                        "enabled": {
+                            "description": "should the account be checked for this alert",
+                            "type": "boolean"
+                        },
+                        "last_notification": {
+                            "description": "Timestamp, in gregorian seconds, of when the last low_balance alert was sent",
+                            "type": "integer"
+                        },
+                        "sent_low_balance": {
+                            "description": "has the alert been sent (avoids duplication/spamming)",
+                            "type": "boolean"
+                        },
+                        "threshold": {
+                            "description": "account balance to send alert on",
+                            "type": "number"
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "type": "object"
         },
         "org": {
             "description": "Full legal name of the organization",
@@ -140,6 +193,16 @@
             "minLength": 5,
             "type": "string"
         },
+        "topup": {
+            "description": "Topup settings for the account",
+            "properties": {
+                "threshold": {
+                    "description": "The account balance when topup occurs",
+                    "type": "number"
+                }
+            },
+            "type": "object"
+        },
         "voicemail": {
             "properties": {
                 "notify": {
@@ -149,6 +212,16 @@
                         }
                     },
                     "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "zones": {
+            "description": "The zone(s) of an account",
+            "properties": {
+                "home": {
+                    "description": "Which zone is considered the account's home zone",
+                    "type": "string"
                 }
             },
             "type": "object"

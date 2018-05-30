@@ -1,187 +1,221 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(conf_config_req).
 
 -export([handle_req/2]).
 
 -include("conference.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_req(JObj, _Options) ->
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_req(JObj, _Props) ->
     'true' = kapi_conference:config_req_v(JObj),
-    Request = kz_json:get_ne_value(<<"Request">>, JObj),
-    handle_request(Request, JObj).
+    Request = kz_json:get_ne_binary_value(<<"Request">>, JObj),
+    lager:debug("'~s' profile request received", [Request]),
+    handle_request(Request, JObj, create_conference(JObj)).
 
--spec handle_request(ne_binary(), kz_json:object()) -> 'ok'.
-handle_request(<<"Conference">>, JObj) ->
-    ConfigName = kz_json:get_ne_value(<<"Profile">>, JObj, ?DEFAULT_PROFILE_NAME),
-    fetch_profile_config(JObj, ConfigName);
-handle_request(<<"Controls">>, JObj) ->
-    ConferenceName = kz_json:get_ne_value(<<"Profile">>, JObj, ?DEFAULT_PROFILE_NAME),
-    ControlsName = kz_json:get_ne_value(<<"Controls">>, JObj),
-    fetch_controls_config(JObj, ConferenceName, ControlsName).
+-spec create_conference(kz_json:object()) -> kapps_conference:conference().
+create_conference(JObj) ->
+    Conference = kapps_conference:from_json(JObj),
+    ProfileName = kz_json:get_ne_binary_value(<<"Profile">>, JObj),
+    case binary:split(ProfileName, <<"_">>) of
+        [ConferenceId, AccountId] ->
+            lager:debug("creating conference config for ~s in account ~s", [ConferenceId, AccountId]),
+            Routines = [{fun kapps_conference:set_account_id/2, AccountId}
+                       ,{fun kapps_conference:set_id/2, ConferenceId}
+                       ],
+            kapps_conference:update(Routines, Conference);
+        _Else ->
+            lager:debug("profile name ~s not split: ~p", [ProfileName, _Else]),
+            Routines = [{fun kapps_conference:set_profile_name/2, ProfileName}],
+            kapps_conference:update(Routines, Conference)
+    end.
 
--spec fetch_profile_config(kz_json:object(), ne_binary()) -> 'ok'.
-fetch_profile_config(JObj, ?PAGE_PROFILE_NAME = ConfigName) ->
-    fetch_profile_config(JObj, 'undefined', ConfigName);
-fetch_profile_config(JObj, ConfigName) ->
-    [AccountId, ConferenceId] = binary:split(ConfigName, <<"_">>),
-    fetch_profile_config(JObj, AccountId, ConferenceId).
+-spec handle_request(kz_term:ne_binary(), kz_json:object(), kapps_conference:conference()) -> 'ok'.
+handle_request(<<"Conference">>, JObj, Conference) ->
+    handle_profile_request(JObj, Conference);
+handle_request(<<"Controls">>, JObj, Conference) ->
+    handle_controls_request(JObj, Conference).
 
--spec fetch_profile_config(kz_json:object(), api_ne_binary(), ne_binary()) -> 'ok'.
-fetch_profile_config(JObj, AccountId, ?DEFAULT_PROFILE_NAME = ConfigName) ->
-    fetch_profile_config(JObj, AccountId, ConfigName, default_profile());
-fetch_profile_config(JObj, AccountId, ?PAGE_PROFILE_NAME = ConfigName) ->
-    fetch_profile_config(JObj, AccountId, ConfigName, page_profile());
-fetch_profile_config(JObj, AccountId, ConferenceId) ->
-    Conference = get_conference(AccountId, ConferenceId),
-    Profile = kapps_conference:profile(Conference),
-    Config = kapps_account_config:get_global(AccountId, ?CONFIG_CAT, [<<"profiles">>, Profile], default_profile()),
-    fetch_profile_config(JObj, Conference, ConferenceId, Config).
+-spec handle_profile_request(kz_json:object(), kapps_conference:conference()) -> 'ok'.
+handle_profile_request(JObj, Conference) ->
+    {Name, Profile} = kapps_conference:profile(Conference),
+    ProfileName = kz_json:get_ne_binary_value(<<"Profile">>, JObj, Name),
 
--spec fetch_profile_config(kz_json:object(), kapps_conference:conference(), api_ne_binary(), api_object()) -> 'ok'.
-fetch_profile_config(JObj, Conference, ConfigName, 'undefined') ->
-    lager:debug("no profile defined for '~s', using default", [ConfigName]),
-    fetch_profile_config(JObj, Conference, ConfigName, default_profile());
-fetch_profile_config(JObj, _Conference, ?PAGE_PROFILE_NAME = ConfigName, Profile) ->
     ServerId = kz_api:server_id(JObj),
-    lager:debug("profile '~s' found", [ConfigName]),
-    Resp = [{<<"Profiles">>, kz_json:from_list([{ConfigName, Profile}])}
+    Resp = [{<<"Profiles">>, kz_json:from_list([{ProfileName, fix_profile(Conference, Profile)}])}
+           ,{<<"Advertise">>, advertise(ProfileName)}
+           ,{<<"Chat-Permissions">>, chat_permissions(ProfileName)}
            ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    kapi_conference:publish_config_resp(ServerId, props:filter_undefined(Resp));
-fetch_profile_config(JObj, Conference, ConfigName, Profile) ->
-    ServerId = kz_api:server_id(JObj),
-    lager:debug("profile '~s' found", [ConfigName]),
-    FullProfile = list_to_binary([kapps_conference:account_id(Conference)
-                                 ,"_"
-                                 ,kapps_conference:id(Conference)
-                                 ]),
-    Resp = [{<<"Profiles">>, profiles(Conference, FullProfile, Profile)}
-           ,{<<"Advertise">>, advertise(ConfigName)}
-           ,{<<"Chat-Permissions">>, chat_permissions(ConfigName)}
-           ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
+    lager:debug("returning conference profile ~s", [ProfileName]),
     kapi_conference:publish_config_resp(ServerId, props:filter_undefined(Resp)).
 
--spec fetch_controls_config(kz_json:object(), ne_binary(), ne_binary()) -> 'ok'.
-fetch_controls_config(JObj, <<"page_", _/binary>>, ConfigName) ->
-    ServerId = kz_api:server_id(JObj),
-    [_, ControlsName] = binary:split(ConfigName, <<"_">>),
-    Config = caller_controls(ControlsName),
-    CallerControls = kz_json:from_list([{ConfigName, Config}]),
-    Resp = [{<<"Caller-Controls">>, CallerControls}
-           ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    kapi_conference:publish_config_resp(ServerId, Resp);
-fetch_controls_config(JObj, ConferenceId, ConfigName) ->
-    [AccountId, ControlsName] = binary:split(ConfigName, <<"_">>),
-    ServerId = kz_api:server_id(JObj),
-    Conference = get_conference(AccountId, ConferenceId),
-    ControlCfg = get_conference_controls(ControlsName, Conference),
-    Config = caller_controls(AccountId, ControlCfg),
-    CallerControls = kz_json:from_list([{ConfigName, Config}]),
-    Resp = [{<<"Caller-Controls">>, CallerControls}
-           ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    kapi_conference:publish_config_resp(ServerId, Resp).
+-spec requested_profile_name(kz_json:object()) -> kz_term:ne_binary().
+requested_profile_name(JObj) ->
+    kz_json:get_ne_binary_value(<<"Profile">>, JObj, ?DEFAULT_PROFILE_NAME).
 
--spec get_conference_controls(ne_binary(), kapps_conference:conference()) -> ne_binary().
-get_conference_controls(<<"caller-controls">>, Conference) ->
-    kapps_conference:caller_controls(Conference);
-get_conference_controls(<<"moderator-controls">>, Conference) ->
-    kapps_conference:moderator_controls(Conference);
-get_conference_controls(Name, Conference) ->
-    lager:error("request for ~s controls, returning caller-controls", [Name]),
-    kapps_conference:caller_controls(Conference).
+-spec advertise(kz_term:ne_binary()) -> kz_term:api_object().
+advertise(?DEFAULT_PROFILE_NAME = ProfileName) ->
+    advertise(ProfileName, ?ADVERTISE(ProfileName, ?DEFAULT_ADVERTISE_CONFIG));
+advertise(?PAGE_PROFILE_NAME = ProfileName) ->
+    advertise(ProfileName, ?ADVERTISE(ProfileName, ?PAGE_ADVERTISE_CONFIG));
+advertise(ProfileName) ->
+    advertise(ProfileName, ?ADVERTISE(ProfileName)).
 
--spec default_profile() -> kz_json:object().
-default_profile() ->
-    kapps_config:get_json(?CONFIG_CAT
-                         ,[<<"profiles">>, ?DEFAULT_PROFILE_NAME]
-                         ,kz_json:from_list(?DEFAULT_PROFILE_CONFIG)
-                         ).
+-spec advertise(kz_term:ne_binary(), kz_term:api_object()) -> kz_term:api_object().
+advertise(_ProfileName, 'undefined') -> 'undefined';
+advertise(ProfileName, Advertise) -> kz_json:from_list([{ProfileName, Advertise}]).
 
--spec page_profile() -> kz_json:object().
-page_profile() ->
-    kapps_config:get_json(?CONFIG_CAT
-                         ,[<<"profiles">>, ?PAGE_PROFILE_NAME]
-                         ,kz_json:from_list(?PAGE_PROFILE_CONFIG)
-                         ).
+-spec chat_permissions(kz_term:ne_binary()) -> kz_term:api_object().
+chat_permissions(?DEFAULT_PROFILE_NAME = ProfileName) ->
+    chat_permissions(ProfileName, ?CHAT_PERMISSIONS(ProfileName, ?DEFAULT_CHAT_CONFIG));
+chat_permissions(?PAGE_PROFILE_NAME= ProfileName) ->
+    chat_permissions(ProfileName, ?CHAT_PERMISSIONS(ProfileName, ?PAGE_CHAT_CONFIG));
+chat_permissions(ProfileName) ->
+    chat_permissions(ProfileName, ?CHAT_PERMISSIONS(ProfileName)).
 
--spec profiles(kapps_conference:conference(), ne_binary(), kz_json:object()) -> kz_json:object().
-profiles(Conference, ConfigName, Profile) ->
-    NewContent = add_conference_params(Conference, ConfigName, Profile),
-    kz_json:from_list([{ConfigName, NewContent}]).
+-spec chat_permissions(kz_term:ne_binary(), kz_term:api_object()) -> kz_term:api_object().
+chat_permissions(_ProfileName, 'undefined') -> 'undefined';
+chat_permissions(ProfileName, Chat) -> kz_json:from_list([{ProfileName, Chat}]).
 
--spec add_conference_params(kapps_conference:conference(), ne_binary(), kz_json:object()) -> kz_json:object().
-add_conference_params(Conference, _ConfigName, Profile) ->
+-spec fix_profile(kapps_conference:conference(), kz_json:object()) -> kz_json:object().
+fix_profile(Conference, Profile) ->
+    Routines = [fun add_conference_params/2
+               ,fun fix_entry_tones/2
+               ,fun fix_exit_tones/2
+               ,fun update_prompts/2
+               ],
+    lists:foldl(fun(F, P) -> F(Conference, P) end, Profile, Routines).
+
+-spec update_prompts(kapps_conference:conference(), kz_json:object()) -> kz_json:object().
+update_prompts(Conference, Profile) ->
+    {_, UpdatedProfile} = kz_json:foldl(fun update_prompt/3, {Conference, Profile}, Profile),
+    UpdatedProfile.
+
+-type update_acc() :: {kapps_conference:conference(), kz_json:object()}.
+-spec update_prompt(kz_json:key(), kz_json:json_string(), update_acc()) -> update_acc().
+update_prompt(Key, Value, Acc) ->
+    update_prompt(kz_binary:reverse(Key), Key, Value, Acc).
+
+-spec update_prompt(kz_json:key(), kz_json:key(), kz_json:json_string(), update_acc()) -> update_acc().
+update_prompt(<<"dnuos-", _/binary>>, _Key, <<>>, Acc) -> Acc;
+update_prompt(<<"dnuos-", _/binary>>, _Key, <<"tone_stream://", _/binary>>, Acc) -> Acc;
+update_prompt(<<"dnuos-", _/binary>>, _Key, <<"silence_stream://", _/binary>>, Acc) -> Acc;
+update_prompt(<<"dnuos-", _/binary>>, _Key, <<"$${", _/binary>>, Acc) -> Acc;
+update_prompt(<<"dnuos-", _/binary>>, Key, PromptId, {Conference, Profile}) ->
+    AccountId = prompt_account_id(Conference),
+    Language = kapps_conference:language(Conference),
+    PromptUrl = kz_media_util:get_prompt(PromptId, Language, AccountId),
+
+    lager:debug("updating conference sound ~s to use ~s(~s)", [Key, PromptId, PromptUrl]),
+    {Conference, kz_json:set_value(Key, PromptUrl, Profile)};
+update_prompt(_Yek, _Key, _value, Acc) -> Acc.
+
+-spec prompt_account_id(kapps_conference:conference()) -> kz_term:ne_binary().
+prompt_account_id(Conference) ->
+    case kapps_conference:account_id(Conference) of
+        'undefined' -> ?KZ_MEDIA_DB;
+        AccountId -> AccountId
+    end.
+
+-spec add_conference_params(kapps_conference:conference(), kz_json:object()) -> kz_json:object().
+add_conference_params(Conference, Profile) ->
     Props = props:filter_undefined(
               [{<<"max-members">>, max_participants(Conference)}
               ,{<<"max-members-sound">>, max_members_sound(Conference)}
               ]),
     kz_json:set_values(Props, Profile).
 
--spec max_participants(kapps_conference:conference()) -> api_binary().
+-spec fix_entry_tones(kapps_conference:conference(), kz_json:object()) -> kz_json:object().
+fix_entry_tones(Conference, Profile) ->
+    Key = <<"enter-sound">>,
+    case kapps_conference:play_entry_tone(Conference) of
+        'true' -> ensure_tone(Key, Profile, kapps_conference:entry_tone(Conference));
+        'false' -> remove_tone(Key, Profile)
+    end.
+
+-spec fix_exit_tones(kapps_conference:conference(), kz_json:object()) -> kz_json:object().
+fix_exit_tones(Conference, Profile) ->
+    Key = <<"exit-sound">>,
+    case kapps_conference:play_exit_tone(Conference) of
+        'true' -> ensure_tone(Key, Profile, kapps_conference:exit_tone(Conference));
+        'false' -> remove_tone(Key, Profile)
+    end.
+
+-spec ensure_tone(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
+ensure_tone(Key, Profile, Tone) ->
+    case kz_json:get_ne_value(Key, Profile) of
+        'undefined' ->
+            lager:debug("ensure tone adding ~s ~s", [Key, Tone]),
+            kz_json:set_value(Key, Tone, Profile);
+        _Else ->
+            lager:debug("ensure tone already has ~s", [Key]),
+            Profile
+    end.
+
+-spec remove_tone(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
+remove_tone(Key, Profile) ->
+    lager:debug("remove tone ~s", [Key]),
+    kz_json:delete_key(Key, Profile).
+
+-spec max_participants(kapps_conference:conference()) -> kz_term:api_binary().
 max_participants(Conference) ->
     case kapps_conference:max_participants(Conference) of
         N when is_integer(N), N > 1 -> N;
         _Else -> 'undefined'
     end.
 
--spec max_members_sound(kapps_conference:conference()) -> api_binary().
+-spec max_members_sound(kapps_conference:conference()) -> kz_term:api_binary().
 max_members_sound(Conference) ->
+    AccountId = kapps_conference:account_id(Conference),
     case kapps_conference:max_members_media(Conference) of
+        'undefined' when 'undefined' =:= AccountId ->
+            lager:debug("getting system max-members prompt"),
+            kz_media_util:get_prompt(?DEFAULT_MAX_MEMBERS_MEDIA);
         'undefined' ->
+            lager:debug("getting max members prompt from account ~s", [AccountId]),
             kz_media_util:get_account_prompt(?DEFAULT_MAX_MEMBERS_MEDIA
                                             ,'undefined'
-                                            ,kapps_conference:account_id(Conference)
+                                            ,AccountId
                                             );
-        Media -> Media
+        Media ->
+            lager:debug("conference has max-members-sound: ~s", [Media]),
+            Media
     end.
 
--spec get_conference(ne_binary(), ne_binary()) -> kapps_conference:conference().
-get_conference(AccountId, ConferenceId) ->
-    {'ok', JObj} = kz_datamgr:open_cache_doc(kz_util:format_account_db(AccountId), ConferenceId),
-    kapps_conference:from_conference_doc(JObj).
+-spec handle_controls_request(kz_json:object(), kapps_conference:conference()) -> 'ok'.
+handle_controls_request(JObj, Conference) ->
+    ProfileName = requested_profile_name(JObj),
+    ControlsType = requested_controls_name(JObj),
+    ControlsName = get_conference_controls_name(ControlsType, Conference),
+    Controls = kapps_conference:controls(Conference, ControlsName),
+    ServerId = kz_api:server_id(JObj),
+    Resp = [{<<"Caller-Controls">>, controls(ControlsType, Controls)}
+           ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    lager:debug("returning ~s (~s) controls profile for ~s"
+               ,[ControlsName, ControlsType, ProfileName]
+               ),
+    kapi_conference:publish_config_resp(ServerId, Resp).
 
--spec caller_controls(ne_binary()) -> kz_json:objects().
-caller_controls(ConfigName) ->
-    kapps_config:get(?CONFIG_CAT, [<<"caller-controls">>, ConfigName], ?DEFAULT_CONTROLS).
+-spec requested_controls_name(kz_json:object()) -> kz_term:ne_binary().
+requested_controls_name(JObj) ->
+    kz_json:get_ne_value(<<"Controls">>, JObj).
 
--spec caller_controls(ne_binary(), ne_binary()) -> kz_json:objects().
-caller_controls(AccountId, ConfigName) ->
-    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, [<<"caller-controls">>, ConfigName], ?DEFAULT_CONTROLS).
+-spec controls(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
+controls(ControlsName, Controls) ->
+    kz_json:from_list([{ControlsName, Controls}]).
 
--spec advertise(ne_binary()) -> api_object().
--spec advertise(ne_binary(), api_object()) -> api_object().
-advertise(?DEFAULT_PROFILE_NAME = ConfigName) ->
-    advertise(ConfigName, ?ADVERTISE(ConfigName, ?DEFAULT_ADVERTISE_CONFIG));
-advertise(?PAGE_PROFILE_NAME = ConfigName) ->
-    advertise(ConfigName, ?ADVERTISE(ConfigName, ?PAGE_ADVERTISE_CONFIG));
-advertise(ConfigName) ->
-    advertise(ConfigName, ?ADVERTISE(ConfigName)).
-
-advertise(_ConfigName, 'undefined') -> 'undefined';
-advertise(ConfigName, Advertise) -> kz_json:from_list([{ConfigName, Advertise}]).
-
--spec chat_permissions(ne_binary()) -> api_object().
--spec chat_permissions(ne_binary(), api_object()) -> api_object().
-chat_permissions(?DEFAULT_PROFILE_NAME = ConfigName) ->
-    chat_permissions(ConfigName, ?CHAT_PERMISSIONS(ConfigName, ?DEFAULT_CHAT_CONFIG));
-chat_permissions(?PAGE_PROFILE_NAME= ConfigName) ->
-    chat_permissions(ConfigName, ?CHAT_PERMISSIONS(ConfigName, ?PAGE_CHAT_CONFIG));
-chat_permissions(ConfigName) ->
-    chat_permissions(ConfigName, ?CHAT_PERMISSIONS(ConfigName)).
-
-chat_permissions(_ConfigName, 'undefined') -> 'undefined';
-chat_permissions(ConfigName, Chat) -> kz_json:from_list([{ConfigName, Chat}]).
+-spec get_conference_controls_name(kz_term:ne_binary(), kapps_conference:conference()) -> kz_term:ne_binary().
+get_conference_controls_name(<<"caller-controls">>, Conference) ->
+    kapps_conference:caller_controls(Conference);
+get_conference_controls_name(<<"moderator-controls">>, Conference) ->
+    kapps_conference:moderator_controls(Conference);
+get_conference_controls_name(_Name, Conference) ->
+    kapps_conference:caller_controls(Conference).

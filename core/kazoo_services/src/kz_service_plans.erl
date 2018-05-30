@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_plans).
 
 -export([empty/0]).
@@ -23,9 +21,9 @@
 -export([append_vendor_plan/3]).
 -endif.
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
--record(kz_service_plans, {vendor_id :: api_binary()
+-record(kz_service_plans, {vendor_id :: kz_term:api_binary()
                           ,plans = [] :: kzd_service_plan:docs()
                           }).
 
@@ -40,27 +38,23 @@
           ])
        ).
 -define(MERGE_STRATEGY_PRIORITIES
-       ,kapps_config:get_json(?WHS_CONFIG_CAT
+       ,kapps_config:get_json(?CONFIG_CAT
                              ,<<"merge_strategy_priority">>
                              ,?DEFAULT_PRIORITIES
                              )
        ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Create an empty service plans data structure.
+%%------------------------------------------------------------------------------
+%% @doc Create an empty service plans data structure.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec empty() -> plans().
 empty() -> [].
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec from_service_json(kzd_services:doc()) -> plans().
 from_service_json(ServicesJObj) ->
     Routines = [fun get_services_plan/2
@@ -82,15 +76,15 @@ get_services_plan(ServicesJObj, ServicePlans) ->
                ,kzd_services:plan_ids(ServicesJObj)
                ).
 
--spec get_service_plans_fold(api_binary(), kz_json:object()) ->
-                                    fun((ne_binary(), plans()) ->
+-spec get_service_plans_fold(kz_term:api_binary(), kz_json:object()) ->
+                                    fun((kz_term:ne_binary(), plans()) ->
                                                plans()).
 get_service_plans_fold(ResellerId, ServicesJObj) ->
     fun(PlanId, ServicePlans) ->
             get_services_plan(PlanId, ResellerId, ServicesJObj, ServicePlans)
     end.
 
--spec get_services_plan(ne_binary(), api_binary(), kz_json:object(), plans()) -> plans().
+-spec get_services_plan(kz_term:ne_binary(), kz_term:api_binary(), kz_json:object(), plans()) -> plans().
 get_services_plan(PlanId, ResellerId, ServicesJObj, ServicePlans) ->
     AccountId = kzd_services:plan_account_id(ServicesJObj, PlanId, ResellerId),
     Overrides = kzd_services:plan_overrides(ServicesJObj, PlanId),
@@ -112,25 +106,28 @@ get_object_plans(ServicesJObj, ServicePlans) ->
     ResellerId = find_reseller_id(ServicesJObj),
     Account = kz_doc:id(ServicesJObj),
     AccountDb = kz_util:format_account_db(Account),
-    {'ok', JObjs} = kz_datamgr:get_results(AccountDb, <<"services/object_plans">>),
-    Props = [{PlanId, kz_json:get_value([<<"value">>, PlanId], JObj)}
-             || JObj <- JObjs
-                    ,PlanId <- kz_json:get_keys(<<"value">>, JObj)
-            ],
-    lists:foldl(get_object_plans_fold(ResellerId)
-               ,ServicePlans
-               ,Props
-               ).
+    case kz_datamgr:get_results(AccountDb, <<"services/object_plans">>) of
+        {'ok', JObjs} ->
+            Props = [{PlanId, kz_json:get_value([<<"value">>, PlanId], JObj)}
+                     || JObj <- JObjs,
+                        PlanId <- kz_json:get_keys(<<"value">>, JObj)
+                    ],
+            lists:foldl(get_object_plans_fold(ResellerId)
+                       ,ServicePlans
+                       ,Props
+                       );
+        {'error', _} -> ServicePlans
+    end.
 
--spec get_object_plans_fold(api_binary()) ->
-                                   fun(({ne_binary(), kz_json:object()}, plans()) ->
+-spec get_object_plans_fold(kz_term:api_binary()) ->
+                                   fun(({kz_term:ne_binary(), kz_json:object()}, plans()) ->
                                               plans()).
 get_object_plans_fold(ResellerId) ->
     fun({PlanId, JObj}, ServicePlans) ->
             get_object_plan(PlanId, ResellerId, JObj, ServicePlans)
     end.
 
--spec get_object_plan(ne_binary(), api_binary(), kz_json:object(), plans()) -> plans().
+-spec get_object_plan(kz_term:ne_binary(), kz_term:api_binary(), kz_json:object(), plans()) -> plans().
 get_object_plan(PlanId, ResellerId, JObj, ServicePlans) ->
     AccountId = kz_json:get_ne_value(<<"account_id">>, JObj, ResellerId),
     Overrides = kz_json:get_ne_value(<<"overrides">>, JObj, kz_json:new()),
@@ -144,7 +141,7 @@ get_object_plan(PlanId, ResellerId, JObj, ServicePlans) ->
     end.
 -endif.
 
--spec fetch_plan(ne_binary(), ne_binary(), ne_binary(), kz_json:object()) -> api_object().
+-spec fetch_plan(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> kz_term:api_object().
 fetch_plan(PlanId, ResellerId, ResellerId,  Overrides) ->
     AreOverridesEmpty = kz_json:is_empty(Overrides),
     case kz_service_plan:fetch(PlanId, ResellerId) of
@@ -157,7 +154,7 @@ fetch_plan(PlanId, _, ResellerId, _) ->
     lager:debug("service plan ~s doesnt belong to reseller ~s", [PlanId, ResellerId]),
     'undefined'.
 
--spec append_vendor_plan(kz_json:object(), ne_binary(), plans()) -> plans().
+-spec append_vendor_plan(kz_json:object(), kz_term:ne_binary(), plans()) -> plans().
 append_vendor_plan(Plan, VendorId, ServicePlans) ->
     case lists:keyfind(VendorId, #kz_service_plans.vendor_id, ServicePlans) of
         'false' ->
@@ -173,20 +170,18 @@ append_vendor_plan(Plan, VendorId, ServicePlans) ->
                             )
     end.
 
--spec find_reseller_id(kzd_services:doc()) -> api_binary().
+-spec find_reseller_id(kzd_services:doc()) -> kz_term:api_ne_binary().
 find_reseller_id(ServicesJObj) ->
     case kzd_services:reseller_id(ServicesJObj) of
-        'undefined' -> kz_json:get_value(<<"reseller_id">>, ServicesJObj);
+        'undefined' -> kz_json:get_ne_binary_value(<<"reseller_id">>, ServicesJObj);
         ResellerId -> ResellerId
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec public_json(plans()) -> kzd_service_plan:doc().
+%%------------------------------------------------------------------------------
+-spec public_json(plans()) -> kz_json:object().
 public_json(ServicePlans) ->
     public_json(ServicePlans, kz_json:new()).
 
@@ -196,45 +191,48 @@ public_json([ServicesPlan|ServicesPlans], JObj) ->
     #kz_service_plans{plans=NewJObj}=merge_plan(ServicesPlan, JObj),
     public_json(ServicesPlans, NewJObj).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec add_service_plan(ne_binary(), ne_binary(), kzd_services:doc()) -> kzd_services:doc().
+%%------------------------------------------------------------------------------
+-spec add_service_plan(kz_term:ne_binary(), kz_term:ne_binary(), kzd_services:doc()) -> kzd_services:doc().
 add_service_plan(PlanId, ResellerId, ServicesJObj) ->
-    ResellerDb = kz_util:format_account_id(ResellerId, 'encoded'),
-    case kz_datamgr:open_cache_doc(ResellerDb, PlanId) of
+    ResellerDb = kz_util:format_account_db(ResellerId),
+    case open_cache_doc(ResellerDb, PlanId) of
         {'error', _R} ->
             lager:info("failed to load service plan ~s from ~s: ~p", [PlanId, ResellerDb, _R]),
-            Plan = kz_json:from_list([{<<"account_id">>, ResellerId}]),
+            Plan = kz_json:from_list(
+                     [{<<"account_id">>, ResellerId}
+                     ]),
             kzd_services:set_plan(ServicesJObj, PlanId, Plan);
         {'ok', ServicePlan} ->
-            Plan =
-                kz_json:from_list(
-                  [{<<"account_id">>, ResellerId}
-                  ,{<<"category">>, kzd_service_plan:grouping_category(ServicePlan)}
-                  ]),
+            Plan = kz_json:from_list(
+                     [{<<"account_id">>, ResellerId}
+                     ,{<<"category">>, kzd_service_plan:grouping_category(ServicePlan)}
+                     ]),
             kzd_services:set_plan(ServicesJObj, PlanId, Plan)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+-ifdef(TEST).
+open_cache_doc(?A_MASTER_ACCOUNT_DB, ?A_MASTER_PLAN_ID) ->
+    kz_json:fixture(?APP, "a_master_plans.json").
+-else.
+open_cache_doc(Db, Id) ->
+    kz_datamgr:open_cache_doc(Db, Id).
+-endif.
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec delete_service_plan(ne_binary(), kzd_services:doc()) -> kzd_services:doc().
+%%------------------------------------------------------------------------------
+-spec delete_service_plan(kz_term:ne_binary(), kzd_services:doc()) -> kzd_services:doc().
 delete_service_plan(PlanId, ServicesJObj) ->
     kzd_services:set_plan(ServicesJObj, PlanId, 'undefined').
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec plan_summary(kzd_services:doc()) -> kz_json:object().
 plan_summary(ServicesJObj) ->
     ResellerId = kzd_services:reseller_id(ServicesJObj),
@@ -249,13 +247,11 @@ plan_summary(ServicesJObj) ->
                ,kz_json:get_keys(kzd_services:plans(ServicesJObj))
                ).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec activation_charges(ne_binary(), ne_binary(), plans()) -> float().
+%%------------------------------------------------------------------------------
+-spec activation_charges(kz_term:ne_binary(), kz_term:ne_binary(), plans()) -> float().
 activation_charges(Category, Item, ServicePlans) ->
     lists:sum(
       [kz_service_plan:activation_charges(Category, Item, Plan)
@@ -263,14 +259,12 @@ activation_charges(Category, Item, ServicePlans) ->
           Plan <- ServicePlan#kz_service_plans.plans
       ]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given a the services on an account (and descedants) as well as the
+%%------------------------------------------------------------------------------
+%% @doc Given a the services on an account (and descedants) as well as the
 %% service plans the account is subscribed to create a list of items
 %% suitable for use with the bookkeepers.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create_items(kzd_services:doc()) ->
                           {'ok', kz_service_items:items()} |
                           {'error', 'no_plans'}.
@@ -295,30 +289,24 @@ create_items(ServiceJObj, ServicePlans) ->
                ,Plans
                ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Return a json object with all the items for an account
+%%------------------------------------------------------------------------------
+%% @doc Return a json object with all the items for an account
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec public_json_items(kzd_services:doc()) -> kz_json:object().
 public_json_items(ServiceJObj) ->
     case create_items(ServiceJObj) of
-        {'ok', Items} ->
-            kz_service_items:public_json(Items);
-        {'error', _} ->
-            kz_json:new()
+        {'ok', Items} -> kz_service_items:public_json(Items);
+        {'error', _} -> kz_json:new()
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type merge_strategy_plan() :: {non_neg_integer(), kz_json:object()}.
 -type merge_strategy_plans() :: [merge_strategy_plan()].
--type merge_strategy_group() :: {ne_binary(), merge_strategy_plans()}.
+-type merge_strategy_group() :: {kz_term:ne_binary(), merge_strategy_plans()}.
 -type merge_strategy_groups() :: [merge_strategy_groups()].
 
 -spec merge_vendors(plans()) -> plans().
@@ -385,7 +373,9 @@ merge_plan_plans([{_S, Group}|Tail], Merged) ->
     MergedGroup = [PlanJObj || {_, PlanJObj} <- Group],
     merge_plan_plans(Tail, MergedGroup ++ Merged).
 
--spec cumulative_merge_keys(ne_binary() | ne_binaries(), ne_binary() | ne_binaries()) -> ne_binaries().
+-spec cumulative_merge_keys(kz_term:ne_binary() | kz_term:ne_binaries()
+                           ,kz_term:ne_binary() | kz_term:ne_binaries()
+                           ) -> kz_term:ne_binaries().
 cumulative_merge_keys(Root, Key) ->
     lists:flatten([Root, Key]).
 
@@ -397,6 +387,6 @@ merge_plan_plans_sort({A, _}, {B, _}) ->
 simple_merge_plans({_, PlanJObj}, Merged) ->
     kz_json:merge(Merged, PlanJObj).
 
--spec merge_strategy_priority(ne_binary()) -> non_neg_integer().
+-spec merge_strategy_priority(kz_term:ne_binary()) -> non_neg_integer().
 merge_strategy_priority(Strategy) ->
     kz_json:get_integer_value(Strategy, ?MERGE_STRATEGY_PRIORITIES, 0).

@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Notification for 'first' registration and call
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Notification for 'first' registration and call
+%%% @author Karl Anderson <karl@2600hz.org>
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%   Karl Anderson <karl@2600hz.org>
-%%%   Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(notify_first_occurrence).
 
 -include("notify.hrl").
@@ -24,22 +22,20 @@
 
 -define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".first_occurrence">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
-    kz_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
     %% ensure the vm template can compile, otherwise crash the processes
     {ok, _} = notify_util:compile_default_text_template(?DEFAULT_TEXT_TMPL, ?MOD_CONFIG_CAT),
     {ok, _} = notify_util:compile_default_html_template(?DEFAULT_HTML_TMPL, ?MOD_CONFIG_CAT),
     {ok, _} = notify_util:compile_default_subject_template(?DEFAULT_SUBJ_TMPL, ?MOD_CONFIG_CAT),
     lager:debug("init done for ~s", [?MODULE]).
 
--spec handle_req(kz_json:object(), kz_proplist()) -> any().
+-spec handle_req(kz_json:object(), kz_term:proplist()) -> any().
 handle_req(JObj, _Props) ->
     'true' = kapi_notifications:first_occurrence_v(JObj),
     kz_util:put_callid(JObj),
@@ -50,7 +46,7 @@ handle_req(JObj, _Props) ->
     MsgId = kz_api:msg_id(JObj),
     notify_util:send_update(RespQ, MsgId, <<"pending">>),
 
-    {'ok', Account} = kz_account:fetch(kz_json:get_value(<<"Account-ID">>, JObj)),
+    {'ok', Account} = kzd_accounts:fetch(kz_json:get_value(<<"Account-ID">>, JObj)),
     Occurrence = kz_json:get_binary_value(<<"Occurrence">>, JObj),
 
     Props = create_template_props(Account, Occurrence),
@@ -72,13 +68,11 @@ handle_req(JObj, _Props) ->
     SendResult1 = build_and_send_email(TxtBody, HTMLBody, Subject, RepEmail, Props),
     notify_util:maybe_send_update(lists:flatten([SendResult0, SendResult1]), RespQ, MsgId).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% create the props used by the template render function
+%%------------------------------------------------------------------------------
+%% @doc create the props used by the template render function
 %% @end
-%%--------------------------------------------------------------------
--spec create_template_props(kz_json:object(), ne_binary()) -> kz_proplist().
+%%------------------------------------------------------------------------------
+-spec create_template_props(kz_json:object(), kz_term:ne_binary()) -> kz_term:proplist().
 create_template_props(Account, Occurrence) ->
     Admin = notify_util:find_admin(Account),
     [{<<"event">>, Occurrence}
@@ -87,13 +81,11 @@ create_template_props(Account, Occurrence) ->
     ,{<<"service">>, notify_util:get_service_props(kz_json:new(), Account, ?MOD_CONFIG_CAT)}
     ].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% process the AMQP requests
+%%------------------------------------------------------------------------------
+%% @doc process the AMQP requests
 %% @end
-%%--------------------------------------------------------------------
--spec build_and_send_email(iolist(), iolist(), iolist(), api_binary() | ne_binaries(), kz_proplist()) -> send_email_return().
+%%------------------------------------------------------------------------------
+-spec build_and_send_email(iolist(), iolist(), iolist(), kz_term:api_binary() | kz_term:ne_binaries(), kz_term:proplist()) -> send_email_return().
 build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) when is_list(To) ->
     [build_and_send_email(TxtBody, HTMLBody, Subject, T, Props) || T <- To];
 build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) ->

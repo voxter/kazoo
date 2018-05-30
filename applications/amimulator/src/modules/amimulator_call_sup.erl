@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_call_sup).
 
 -behaviour(supervisor).
@@ -13,7 +18,7 @@
         ]).
 -export([init/1]).
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
@@ -25,7 +30,7 @@ relay_new_call(Call) ->
            end,
     relay_new_call(FSM2, Call).
 
--spec relay_answer(ne_binary()) -> 'ok'.
+-spec relay_answer(kz_term:ne_binary()) -> 'ok'.
 relay_answer(CallId) ->
     lists:foreach(fun(Pid) ->
                           amimulator_call_fsm:answer(Pid, CallId)
@@ -38,7 +43,7 @@ relay_bridge(EventJObj) ->
                           amimulator_call_fsm:bridge(Pid, EventJObj)
                   end, find_call_handlers(CallId)).
 
--spec relay_destroy(api_binary(), ne_binary()) -> 'ok'.
+-spec relay_destroy(kz_term:api_binary(), kz_term:ne_binary()) -> 'ok'.
 relay_destroy(Reason, CallId) ->
     lists:foreach(fun(Pid) ->
                           amimulator_call_fsm:destroy(Pid, Reason, CallId)
@@ -55,7 +60,7 @@ initial_call(Call) ->
 %% supervisor callbacks
 %%
 
--spec init([]) -> sup_init_ret().
+-spec init([]) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 3,
@@ -80,11 +85,11 @@ find_call_handlers(CallId) ->
                         end
                 end, [], fsms()).
 
--spec find_call_handler(atom(), amimulator_call:call()) -> api_pid().
+-spec find_call_handler(atom(), amimulator_call:call()) -> kz_term:api_pid().
 find_call_handler('fsm', Call) ->
     find_typed_call_handler(Call, fsms()).
 
--spec find_typed_call_handler(amimulator_call:call(), [{pid(), atom()},...] | []) -> api_pid().
+-spec find_typed_call_handler(amimulator_call:call(), [{pid(), atom()},...] | []) -> kz_term:api_pid().
 find_typed_call_handler(_, []) ->
     'undefined';
 find_typed_call_handler(Call, [{Pid, Mod}|Handlers]) ->
@@ -94,24 +99,24 @@ find_typed_call_handler(Call, [{Pid, Mod}|Handlers]) ->
         _E -> find_typed_call_handler(Call, Handlers)
     end.
 
-                                                % -spec workers() -> pids().
+                                                % -spec workers() -> kz_term:pids().
                                                 % workers() -> [Pid || {_, Pid, 'worker', [_]} <- supervisor:which_children(?MODULE)].
 
 -spec fsms() -> [{pid(), atom()},...] | [].
 fsms() -> [{Pid, 'amimulator_call_fsm'} || {_, Pid, 'worker', ['amimulator_call_fsm']} <- supervisor:which_children(?MODULE)].
 
--spec try_create_call_handlers(amimulator_call:call()) -> api_pid().
+-spec try_create_call_handlers(amimulator_call:call()) -> kz_term:api_pid().
 try_create_call_handlers(Call) ->
     case create_call_fsm(Call) of
         'undefined' -> 'undefined';
         FSM -> FSM
     end.
 
--spec create_call_fsm(amimulator_call:call()) -> api_pid().
--spec create_call_fsm(amimulator_call:call(), 'undefined' | 'initial') -> api_pid().
+-spec create_call_fsm(amimulator_call:call()) -> kz_term:api_pid().
 create_call_fsm(Call) ->
     create_call_fsm(Call, 'undefined').
 
+-spec create_call_fsm(amimulator_call:call(), 'undefined' | 'initial') -> kz_term:api_pid().
 create_call_fsm(Call, 'undefined') ->
     case supervisor:start_child(?MODULE, [Call]) of
         {'ok', Pid} -> Pid;
@@ -129,7 +134,7 @@ create_call_fsm(Call, 'initial') ->
             'undefined'
     end.
 
--spec relay_new_call(api_pid(), amimulator_call:call()) -> 'ok'.
+-spec relay_new_call(kz_term:api_pid(), amimulator_call:call()) -> 'ok'.
 relay_new_call('undefined', _) ->
     'ok';
 relay_new_call(FSM, Call) ->

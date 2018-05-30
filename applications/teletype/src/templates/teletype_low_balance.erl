@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_low_balance).
 -behaviour(teletype_gen_email_template).
 
@@ -15,13 +13,13 @@
         ,subject/0
         ,category/0
         ,friendly_name/0
-        ,to/1, from/1, cc/1, bcc/1, reply_to/1
+        ,to/0, from/0, cc/0, bcc/0, reply_to/0
         ]).
 -export([handle_req/1]).
 
 -include("teletype.hrl").
 
--spec id() -> ne_binary().
+-spec id() -> kz_term:ne_binary().
 id() -> <<"low_balance">>.
 
 -spec macros() -> kz_json:object().
@@ -32,29 +30,29 @@ macros() ->
        | ?COMMON_TEMPLATE_MACROS
       ]).
 
--spec subject() -> ne_binary().
+-spec subject() -> kz_term:ne_binary().
 subject() -> <<"Account '{{account.name}}' is running out of credit">>.
 
--spec category() -> ne_binary().
+-spec category() -> kz_term:ne_binary().
 category() -> <<"account">>.
 
--spec friendly_name() -> ne_binary().
+-spec friendly_name() -> kz_term:ne_binary().
 friendly_name() -> <<"Low Balance">>.
 
--spec to(ne_binary()) -> kz_json:object().
-to(_) -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
+-spec to() -> kz_json:object().
+to() -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
 
--spec from(ne_binary()) -> api_ne_binary().
-from(ModConfigCat) -> teletype_util:default_from_address(ModConfigCat).
+-spec from() -> kz_term:api_ne_binary().
+from() -> teletype_util:default_from_address().
 
--spec cc(ne_binary()) -> kz_json:object().
-cc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec cc() -> kz_json:object().
+cc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec bcc(ne_binary()) -> kz_json:object().
-bcc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec bcc() -> kz_json:object().
+bcc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec reply_to(ne_binary()) -> api_ne_binary().
-reply_to(ModConfigCat) -> teletype_util:default_reply_to(ModConfigCat).
+-spec reply_to() -> kz_term:api_ne_binary().
+reply_to() -> teletype_util:default_reply_to().
 
 -spec init() -> 'ok'.
 init() ->
@@ -62,14 +60,14 @@ init() ->
     teletype_templates:init(?MODULE),
     teletype_bindings:bind(id(), ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:low_balance_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [id()]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(id(), <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [id()]),
 
@@ -82,7 +80,7 @@ handle_req(JObj, 'true') ->
         'true' -> process_req(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
     Macros = macros(DataJObj),
 
@@ -93,14 +91,14 @@ process_req(DataJObj) ->
     {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(id(), AccountId),
     Subject0 = kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj]),
     Subject = teletype_util:render_subject(Subject0, Macros),
-    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, teletype_util:mod_config_cat(id())),
+    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, id()),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(id());
+        {'error', Reason} -> teletype_util:notification_failed(id(), Reason)
     end.
 
--spec macros(kz_json:object()) -> kz_proplist().
+-spec macros(kz_json:object()) -> kz_term:proplist().
 macros(DataJObj) ->
     [{<<"system">>, teletype_util:system_params()}
     ,{<<"account">>, teletype_util:account_params(DataJObj)}
@@ -109,7 +107,7 @@ macros(DataJObj) ->
      | build_macro_data(DataJObj)
     ].
 
--spec get_current_balance(kz_json:object()) -> ne_binary().
+-spec get_current_balance(kz_json:object()) -> kz_term:ne_binary().
 get_current_balance(DataJObj) ->
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
     case current_account_dollars(AccountId) of
@@ -117,12 +115,12 @@ get_current_balance(DataJObj) ->
         {'error', _R} -> <<"not known at the moment">>
     end.
 
--spec get_balance_threshold(kz_json:object()) -> ne_binary().
+-spec get_balance_threshold(kz_json:object()) -> kz_term:ne_binary().
 get_balance_threshold(DataJObj) ->
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
-    wht_util:pretty_print_dollars(low_balance_threshold(AccountId)).
+    wht_util:pretty_print_dollars(kzd_accounts:low_balance_threshold(AccountId)).
 
--spec build_macro_data(kz_json:object()) -> kz_proplist().
+-spec build_macro_data(kz_json:object()) -> kz_term:proplist().
 build_macro_data(DataJObj) ->
     kz_json:foldl(fun(MacroKey, _V, Acc) ->
                           maybe_add_macro_key(MacroKey, Acc, DataJObj)
@@ -131,19 +129,17 @@ build_macro_data(DataJObj) ->
                  ,macros()
                  ).
 
--spec maybe_add_macro_key(kz_json:path(), kz_proplist(), kz_json:object()) -> kz_proplist().
+-spec maybe_add_macro_key(kz_json:path(), kz_term:proplist(), kz_json:object()) -> kz_term:proplist().
 maybe_add_macro_key(<<"user.", UserKey/binary>>, Acc, DataJObj) ->
     maybe_add_user_data(UserKey, Acc, DataJObj);
 maybe_add_macro_key(_Key, Acc, _DataJObj) ->
-    ?LOG_DEBUG("unprocessed macro key ~s: ~p", [_Key, _DataJObj]),
     Acc.
 
--spec maybe_add_user_data(kz_json:path(), kz_proplist(), kz_json:object()) -> kz_proplist().
+-spec maybe_add_user_data(kz_json:path(), kz_term:proplist(), kz_json:object()) -> kz_term:proplist().
 maybe_add_user_data(Key, Acc, DataJObj) ->
     User = get_user(DataJObj),
     case kz_json:get_value(Key, User) of
         'undefined' ->
-            ?LOG_DEBUG("unprocessed user macro key ~s: ~p", [Key, User]),
             Acc;
         V ->
             UserMacros = props:get_value(<<"user">>, Acc, []),
@@ -154,7 +150,7 @@ maybe_add_user_data(Key, Acc, DataJObj) ->
 get_user(DataJObj) ->
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
     UserId = kz_json:get_value(<<"user_id">>, DataJObj),
-    case fetch_user(AccountId, UserId) of
+    case kzd_user:fetch(AccountId, UserId) of
         {'ok', UserJObj} -> UserJObj;
         {'error', _E} ->
             ?LOG_DEBUG("failed to find user ~s in ~s: ~p", [UserId, AccountId, _E]),
@@ -162,20 +158,8 @@ get_user(DataJObj) ->
     end.
 
 -ifdef(TEST).
-current_account_dollars(?AN_ACCOUNT_ID) -> {ok, 38.6592}.
-
-low_balance_threshold(?AN_ACCOUNT_ID) ->
-    kz_account:low_balance_threshold(teletype_util:fixture("an_account.json")).
-
-fetch_user(?AN_ACCOUNT_ID, ?AN_ACCOUNT_USER_ID) ->
-    {ok, teletype_util:fixture("an_account_user.json")}.
+current_account_dollars(_) -> {ok, 3.6592}.
 -else.
 current_account_dollars(AccountId) ->
     wht_util:current_account_dollars(AccountId).
-
-low_balance_threshold(AccountId) ->
-    kz_account:low_balance_threshold(AccountId).
-
-fetch_user(AccountId, UserId) ->
-    kzd_user:fetch(AccountId, UserId).
 -endif.

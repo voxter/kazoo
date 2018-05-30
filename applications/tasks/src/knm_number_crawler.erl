@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_number_crawler).
 -behaviour(gen_server).
 
@@ -27,33 +25,34 @@
 
 -define(SERVER, ?MODULE).
 
--define(NUMBERS_TO_CRAWL,
-        kapps_config:get_pos_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, 1000)).
+-define(NUMBERS_TO_CRAWL
+       ,kapps_config:get_pos_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, 1000)
+       ).
 
--define(DISCOVERY_EXPIRY,
-        kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"discovery_expiry_d">>, 1)).
+-define(DISCOVERY_EXPIRY
+       ,kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"discovery_expiry_d">>, 1)
+       ).
 
--define(AGING_EXPIRY,
-        kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"aging_expiry_d">>, 90)).
+-define(AGING_EXPIRY
+       ,kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"aging_expiry_d">>, 90)
+       ).
 
--define(TIME_BETWEEN_CRAWLS,
-        kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"crawler_timer_ms">>, ?MILLISECONDS_IN_DAY)).
+-define(TIME_BETWEEN_CRAWLS
+       ,kapps_config:get_non_neg_integer(?CONFIG_CAT, <<"crawler_timer_ms">>, ?MILLISECONDS_IN_DAY)
+       ).
 
--record(state, {cleanup_ref :: reference()
-               }).
+-record(state, {cleanup_ref :: reference()}).
 -type state() :: #state{}.
 
-
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
+%%------------------------------------------------------------------------------
+%% @doc Starts the server
 %% @end
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_server:start_link(?SERVER, [], []).
 
@@ -69,38 +68,33 @@ crawl_numbers() ->
     lager:debug("finished the number crawl"),
     lager:info("number crawler completed a full crawl").
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     kz_util:put_callid(?SERVER),
     lager:debug("started ~s", [?SERVER]),
     {'ok', #state{cleanup_ref = cleanup_timer()}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('stop', State) ->
     lager:debug("crawler has been stopped"),
     {'stop', 'normal', State};
@@ -108,13 +102,11 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'timeout', Ref, _Msg}, #state{cleanup_ref=Ref}=State) ->
     _ = kz_util:spawn(fun crawl_numbers/0),
     {'noreply', State#state{cleanup_ref=cleanup_timer()}};
@@ -122,38 +114,38 @@ handle_info(_Msg, State) ->
     lager:debug("unhandled msg: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("~s terminating: ~p", [?SERVER, _Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec cleanup_timer() -> reference().
 cleanup_timer() ->
     erlang:start_timer(?TIME_BETWEEN_CRAWLS, self(), 'ok').
 
--spec crawl_number_db(ne_binary()) -> ok.
+-spec crawl_number_db(kz_term:ne_binary()) -> ok.
 crawl_number_db(Db) ->
     case kz_datamgr:all_docs(Db, [include_docs]) of
         {error, _E} ->
@@ -206,4 +198,4 @@ maybe_transition_aging(PN, T, Expiry) ->
 -spec is_old_enough(knm_phone_number:knm_phone_number(), pos_integer()) -> boolean().
 is_old_enough(PN, Expiry) ->
     knm_phone_number:modified(PN)
-        < (kz_time:current_tstamp() + Expiry * ?SECONDS_IN_DAY).
+        < (kz_time:now_s() + Expiry * ?SECONDS_IN_DAY).

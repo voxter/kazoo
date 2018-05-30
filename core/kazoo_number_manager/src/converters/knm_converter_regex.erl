@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_converter_regex).
 
 -include("knm.hrl").
@@ -24,86 +22,83 @@
           [{<<"^\\+?1?([2-9][0-9]{2}[2-9][0-9]{6})\$">>, [{<<"prefix">>, <<"+1">>}]}
           ,{<<"^011(\\d*)$|^00(\\d*)\$">>, [{<<"prefix">>, <<"+">>}]}
           ,{<<"^[2-9]\\d{7,}\$">>, [{<<"prefix">>, <<"+">>}]}
-          ])).
+          ]
+         )
+       ).
+
+-define(SYSTEM_E164_CONVERTERS
+       ,kapps_config:get_json(?KNM_CONFIG_CAT, ?KEY_E164_CONVERTERS, ?DEFAULT_E164_CONVERTERS)
+       ).
 
 -define(KEY_E164_CONVERTERS, <<"e164_converters">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec normalize(ne_binary()) ->
-                       ne_binary().
+%%------------------------------------------------------------------------------
+-spec normalize(kz_term:ne_binary()) ->
+                       kz_term:ne_binary().
 normalize(?NE_BINARY = Num) ->
     to_e164(Num).
 
--spec normalize(ne_binary(), ne_binary()) ->
-                       ne_binary().
+-spec normalize(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                       kz_term:ne_binary().
 normalize(?NE_BINARY = Num, AccountId) ->
     to_e164(Num, AccountId).
 
--spec normalize(ne_binary(), ne_binary(), kz_json:object()) ->
-                       ne_binary().
+-spec normalize(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+                       kz_term:ne_binary().
 normalize(?NE_BINARY = Num, AccountId, DialPlan) ->
     to_e164_from_account_dialplan(Num, AccountId, DialPlan).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec to_npan(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec to_npan(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_npan(Num) ->
     case re:run(Num, <<"^\\+?1?([2-9][0-9]{2}[2-9][0-9]{6})\$">>, [{'capture', [1], 'binary'}]) of
         'nomatch' -> Num;
         {'match', [NPAN]} -> NPAN
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec to_1npan(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec to_1npan(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_1npan(Num) ->
     case re:run(Num, <<"^\\+?1?([2-9][0-9]{2}[2-9][0-9]{6})\$">>, [{'capture', [1], 'binary'}]) of
         'nomatch' -> Num;
         {'match', [NPAN]} -> <<$1, NPAN/binary>>
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec to_e164(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec to_e164(kz_term:ne_binary()) -> kz_term:ne_binary().
 to_e164(<<"+",_/binary>> = N) -> N;
 to_e164(Number) ->
     Converters = get_e164_converters(),
     Regexes = kz_json:get_keys(Converters),
     maybe_convert_to_e164(Regexes, Converters, Number).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
 to_e164(<<"+",_/binary>> = N, _AccountId) -> N;
 to_e164(Number, Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
-    case kz_account:fetch(AccountId) of
+    case kzd_accounts:fetch(AccountId) of
         {'ok', JObj} ->
-            to_e164_from_account_dialplan(Number, AccountId, kz_account:dial_plan(JObj));
+            to_e164_from_account_dialplan(Number, AccountId, kzd_accounts:dial_plan(JObj));
         {'error', _E} ->
             to_e164_from_account(Number, AccountId)
     end.
 
--spec to_e164_from_account(ne_binary(), ne_binary()) -> ne_binary().
+-spec to_e164_from_account(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 to_e164_from_account(Number, ?NE_BINARY = AccountId) ->
     Converters = get_e164_converters(AccountId),
     Regexes = kz_json:get_keys(Converters),
@@ -137,19 +132,18 @@ apply_dialplan(Number, DialPlan, [Regex|Rs]) ->
             <<Prefix/binary, Root/binary, Suffix/binary>>
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec get_e164_converters() -> kz_json:object().
 get_e164_converters() ->
-    try kapps_config:get_json(?KNM_CONFIG_CAT, ?KEY_E164_CONVERTERS, ?DEFAULT_E164_CONVERTERS)
+    try ?SYSTEM_E164_CONVERTERS
     catch
         _:_ -> ?DEFAULT_E164_CONVERTERS
     end.
 
--spec get_e164_converters(ne_binary()) -> kz_json:object().
+-spec get_e164_converters(kz_term:ne_binary()) -> kz_json:object().
 get_e164_converters(AccountId) ->
     try kapps_account_config:get_global(AccountId
                                        ,?KNM_CONFIG_CAT
@@ -160,12 +154,11 @@ get_e164_converters(AccountId) ->
         _:_ -> ?DEFAULT_E164_CONVERTERS
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec maybe_convert_to_e164(ne_binaries(), kz_json:object(), ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec maybe_convert_to_e164(kz_term:ne_binaries(), kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binary().
 maybe_convert_to_e164([], _, Number) -> Number;
 maybe_convert_to_e164([Regex|Regexs], Converters, Number) ->
     case re:run(Number, Regex, [{'capture', 'all', 'binary'}]) of

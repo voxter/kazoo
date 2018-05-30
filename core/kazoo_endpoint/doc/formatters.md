@@ -27,15 +27,17 @@ On the resource document, define a key `Formatters` which is a JSON object of ro
 
 In the above partial example, the resource has defined formatters for the `request` and `caller-id-number` fields, and a list of two formatters for the `from` field.
 
-For outbound (to the carrier) formatters, you can see the fields available by looking at the [kapi_offnet_resource request schema](applications/crossbar/priv/couchdb/schemas/kapi.offnet_resource.req.json).
+For outbound (to the carrier) formatters, you can see the fields available by looking at the [kapi_offnet_resource request schema](https://github.com/2600hz/kazoo/blob/master/applications/crossbar/priv/couchdb/schemas/kapi.offnet_resource.req.json).
 
 Inbound (from the carrier) fields are found in the [kapi_route request schema](https://github.com/2600hz/kazoo/blob/master/applications/crossbar/priv/couchdb/schemas/kapi_route.req.json).
+
+In both of the above cases the request, to and from fields are tracked outside of the mentioned schemas. 
 
 #### Devices, users, accounts
 
 It can be desirable to control the format of fields going to registered devices. You can place the `formatters` object on a device, user, or account, to have it be used when processing calls to endpoints. The `formatter` object(s) will be merged before being applied to the endpoint.
 
-Inbound fields are found in the [kapi_route request schema](https://github.com/2600hz/kazoo/blob/master/applications/crossbar/priv/couchdb/schemas/kapi_route.req.json); outbound fields are typically found when [bridging via kapi_dialplan](applications/crossbar/priv/couchdb/schemas/kapi.dialplan.bridge.json).
+Inbound fields are found in the [kapi_route request schema](https://github.com/2600hz/kazoo/blob/master/applications/crossbar/priv/couchdb/schemas/kapi_route.req.json); outbound fields are typically found when [bridging via kapi_dialplan](https://github.com/2600hz/kazoo/blob/master/applications/crossbar/priv/couchdb/schemas/kapi.dialplan.bridge.json).
 
 ## Formatter format
 
@@ -97,7 +99,8 @@ A more full example:
       ,...
     }
 
-This will
+This will:
+
 1. Format the 'From' DID as E164 before republishing the inbound request
 2. Format the From as NPAN on an offnet(outbound) request
 3. Format the Diversion username to match the invite format of the request on an outbound request

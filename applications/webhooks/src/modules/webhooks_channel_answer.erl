@@ -1,9 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%%
-%%% @contributors
-%%%-------------------------------------------------------------------
-
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(webhooks_channel_answer).
 
 -export([init/0
@@ -13,8 +12,8 @@
 -include("webhooks.hrl").
 
 -define(ID, kz_term:to_binary(?MODULE)).
--define(NAME, <<"channel_answer">>).
--define(DESC, <<"Events for when the channel is answered by the endpoint">>).
+-define(NAME, <<"Channel Answer">>).
+-define(DESC, <<"This webhook is triggered when a channel establishes two-way audio, such as a voicemail box or the called party answering">>).
 -define(METADATA
        ,kz_json:from_list([{<<"_id">>, ?ID}
                           ,{<<"name">>, ?NAME}
@@ -26,10 +25,7 @@
 init() ->
     webhooks_util:init_metadata(?ID, ?METADATA).
 
--spec bindings_and_responders() ->
-                                     {gen_listener:bindings()
-                                     ,gen_listener:responders()
-                                     }.
+-spec bindings_and_responders() -> {gen_listener:bindings(), gen_listener:responders()}.
 bindings_and_responders() ->
     {[{'call', [{'restrict_to', ['CHANNEL_ANSWER']}
                ]
@@ -40,3 +36,4 @@ bindings_and_responders() ->
       }
      ]
     }.
+

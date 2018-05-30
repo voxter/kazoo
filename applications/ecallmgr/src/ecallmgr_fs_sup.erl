@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_sup).
 
 -behaviour(supervisor).
@@ -22,28 +20,29 @@
 -define(CHILDREN, [?SUPER('ecallmgr_fs_pinger_sup')
                   ,?WORKER('ecallmgr_fs_nodes')
                   ,?WORKER('ecallmgr_fs_channels')
+                  ,?WORKER('ecallmgr_fs_conferences_shared')
                   ,?WORKER('ecallmgr_fs_conferences')
                   ]).
 
-%% ===================================================================
+%%==============================================================================
 %% API functions
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the supervisor
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the supervisor.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec add_node(atom(), kz_proplist()) -> sup_startchild_ret().
+-spec add_node(atom(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
 add_node(Node, Options) ->
     Args = [Node, Options],
     ChildSpec = ?SUPER_NAME_ARGS_TYPE(Node, 'ecallmgr_fs_node_sup', Args, 'transient'),
     supervisor:start_child(?SERVER, ChildSpec).
 
--spec find_node(atom()) -> api_pid().
+-spec find_node(atom()) -> kz_term:api_pid().
 find_node(Node) ->
     find_node(supervisor:which_children(?SERVER), Node).
 
@@ -56,20 +55,18 @@ remove_node(Node) ->
     _ = supervisor:terminate_child(?SERVER, Node),
     supervisor:delete_child(?SERVER, Node).
 
-%% ===================================================================
+%%==============================================================================
 %% Supervisor callbacks
-%% ===================================================================
+%%==============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
+%%------------------------------------------------------------------------------
+%% @doc Whenever a supervisor is started using `supervisor:start_link/[2,3]',
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
 %% @end
-%%--------------------------------------------------------------------
--spec init(any()) -> sup_init_ret().
+%%------------------------------------------------------------------------------
+-spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,

@@ -1,7 +1,8 @@
-%% @author root
-%% @doc @todo Add description to kazoo_oauth_util.
-
-
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(kazoo_oauth_service).
 
 -include("kazoo_oauth.hrl").
@@ -9,7 +10,7 @@
 -export([service_token/2]).
 
 
--spec service_token(api_binary() | oauth_service_app(), api_binary()) -> api_object().
+-spec service_token(kz_term:api_binary() | oauth_service_app(), kz_term:api_binary()) -> kz_term:api_object().
 service_token('undefined', _) ->
     'undefined';
 service_token(_, 'undefined') ->

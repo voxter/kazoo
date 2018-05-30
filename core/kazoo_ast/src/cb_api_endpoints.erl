@@ -1,3 +1,9 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Modules to create a reference documents from Crossbar API modules.
+%%% @author James Aimonetti
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(cb_api_endpoints).
 
 -compile({'no_auto_import', [get/0]}).
@@ -14,6 +20,7 @@
 
 -include_lib("kazoo_ast/include/kz_ast.hrl").
 -include_lib("crossbar/src/crossbar.hrl").
+-include_lib("kazoo_ast/src/kz_ast.hrl").
 
 -define(REF_PATH
        ,code:lib_dir('crossbar'), "doc", "ref"
@@ -26,20 +33,18 @@
        ,filename:join([code:priv_dir('crossbar'), "api", "swagger.json"])
        ).
 
--define(SCHEMA_SECTION, <<"#### Schema\n\n">>).
--define(SUB_SCHEMA_SECTION_HEADER, <<"#####">>).
-
 -define(ACCOUNTS_PREFIX, "accounts/{ACCOUNT_ID}").
+-define(ENDPOINTS_PREFIX, "{ENDPOINT_TYPE}/{ENDPOINT_ID}").
 
 -define(X_AUTH_TOKEN, "auth_token_header").
 -define(X_AUTH_TOKEN_NOT_REQUIRED, "auth_token_header_or_none").
 
 -spec to_ref_doc() -> 'ok'.
--spec to_ref_doc(atom()) -> 'ok'.
 to_ref_doc() ->
     lists:foreach(fun api_to_ref_doc/1, ?MODULE:get()).
 
-to_ref_doc('crossbar_doc'=Module) ->
+-spec to_ref_doc(atom()) -> 'ok'.
+to_ref_doc('crossbar_filter'=Module) ->
     Filters = filters_from_module(Module),
     filters_to_ref_doc(Filters);
 to_ref_doc(CBModule) ->
@@ -95,11 +100,17 @@ api_path_to_section(Module, {'allowed_methods', Paths}, Acc) ->
     lists:foldl(F, Acc, Paths);
 api_path_to_section(_MOdule, _Paths, Acc) -> Acc.
 
+%%------------------------------------------------------------------------------
+%% @doc Creates a Markdown section for each API methods.
+%% ```
 %% #### Fetch/Create/Change
 %% > Verb Path
 %% ```shell
 %% curl -v http://{SERVER}:8000/Path
 %% ```
+%% '''
+%% @end
+%%------------------------------------------------------------------------------
 methods_to_section('undefined', _Path, Acc) ->
     io:format("skipping path ~p\n", [_Path]),
     Acc;
@@ -113,7 +124,7 @@ methods_to_section(ModuleName, {Path, Methods}, Acc) ->
                ,sort_methods(Methods)
                ).
 
--spec sort_methods(ne_binaries()) -> ne_binaries().
+-spec sort_methods(kz_term:ne_binaries()) -> kz_term:ne_binaries().
 sort_methods(Methods) ->
     Ordering = [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE],
     sort_methods(Methods, Ordering, []).
@@ -141,14 +152,14 @@ method_to_section(Method, Acc, APIPath) ->
      | Acc
     ].
 
--spec method_as_action(ne_binary()) -> ne_binary().
+-spec method_as_action(kz_term:ne_binary()) -> kz_term:ne_binary().
 method_as_action(?HTTP_GET) -> <<"Fetch">>;
 method_as_action(?HTTP_PUT) -> <<"Create">>;
 method_as_action(?HTTP_POST) -> <<"Change">>;
 method_as_action(?HTTP_DELETE) -> <<"Remove">>;
 method_as_action(?HTTP_PATCH) -> <<"Patch">>.
 
--spec ref_doc_header(ne_binary()) -> iolist().
+-spec ref_doc_header(kz_term:ne_binary()) -> iolist().
 ref_doc_header(BaseName) ->
     CleanedUpName = kz_ast_util:smash_snake(BaseName),
     [[maybe_add_schema(BaseName)]
@@ -156,17 +167,23 @@ ref_doc_header(BaseName) ->
     ,["### ", CleanedUpName, "\n\n"]
     ].
 
--spec maybe_add_schema(ne_binary()) -> iolist().
+-spec maybe_add_schema(kz_term:ne_binary()) -> iolist().
 maybe_add_schema(BaseName) ->
     case kz_ast_util:load_ref_schema(BaseName) of
         'undefined' -> [?SCHEMA_SECTION, "\n\n"];
         SchemaJObj -> kz_ast_util:schema_to_table(SchemaJObj)
     end.
 
-%% This looks for "#### Schema" in the doc file and adds the JSON schema formatted as the markdown table
+%%------------------------------------------------------------------------------
+%% @doc This looks for `#### Schema' in the doc file and adds the JSON schema
+%% formatted as the markdown table.
+%% ```
 %% Schema = "vmboxes" or "devices"
 %% Doc = "voicemail.md" or "devices.md"
--spec schema_to_doc(ne_binary(), ne_binary()) -> 'ok'.
+%% '''
+%% @end
+%%------------------------------------------------------------------------------
+-spec schema_to_doc(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 schema_to_doc(Schema, Doc) ->
     {'ok', SchemaJObj} = kz_json_schema:load(Schema),
     DocFile = filename:join([code:lib_dir('crossbar'), "doc", Doc]),
@@ -179,7 +196,7 @@ schema_to_doc(Schema, Doc) ->
             io:format("file ~s appears to have a schema section already~n", [DocFile])
     end.
 
--type ref_table() :: {ne_binary(), ref_tables()} | ne_binary().
+-type ref_table() :: {kz_term:ne_binary(), ref_tables()} | kz_term:ne_binary().
 -type ref_tables() :: [ref_table()] | [].
 
 -spec ref_tables_to_doc(ref_tables()) -> iolist().
@@ -241,7 +258,7 @@ to_swagger_definitions() ->
                       ,kz_json:new()
                       ).
 
--spec process_schema(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec process_schema(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 process_schema(Filename, Definitions) ->
     {'ok', Bin} = file:read_file(Filename),
     KeysToDelete = [<<"_id">>
@@ -252,18 +269,23 @@ process_schema(Filename, Definitions) ->
     JObj = kz_json:expand(
              kz_json:from_list(
                [case lists:last(Path) =:= <<"$ref">> of
-                    false -> KV;
-                    true -> {Path, maybe_fix_ref(V)}
+                    'false' -> KV;
+                    'true' -> {Path, maybe_fix_ref(V)}
                 end
-                || {Path,V}=KV <- kz_json:to_proplist(kz_json:flatten(JObj0)),
-                   not lists:member(<<"patternProperties">>, Path),
-                   not lists:member(<<"kazoo-validation">>, Path),
-                   not lists:member(<<"oneOf">>, Path)
+                || {Path, V}=KV <- kz_json:to_proplist(kz_json:flatten(JObj0)),
+                   not lists:member(<<"patternProperties">>, Path)
+                       andalso not is_kazoo_prefixed(Path)
                ])),
     Name = kz_term:to_binary(filename:basename(Filename, ".json")),
     kz_json:set_value(Name, JObj, Definitions).
 
--spec maybe_fix_ref(ne_binary()) -> ne_binary().
+-spec is_kazoo_prefixed(kz_term:ne_binaries()) -> boolean().
+is_kazoo_prefixed([]) -> 'false';
+is_kazoo_prefixed([<<"kazoo-", _/binary>>|_]) -> 'true';
+is_kazoo_prefixed([<<"support_level">>|_]) -> 'true';
+is_kazoo_prefixed([_Field|Path]) -> is_kazoo_prefixed(Path).
+
+-spec maybe_fix_ref(kz_term:ne_binary()) -> kz_term:ne_binary().
 maybe_fix_ref(<<"#",_/binary>>=Ref) -> Ref;
 maybe_fix_ref(RelativePath=?NE_BINARY) ->
     <<"#/definitions/", RelativePath/binary>>.
@@ -297,20 +319,20 @@ to_swagger_path(Path, PathMeta, Acc) ->
     F = fun(Method, Acc1) -> add_swagger_path(Method, Acc1, Path, SchemaParameter) end,
     lists:foldl(F, Acc, Methods).
 
--spec add_swagger_path(ne_binary(), kz_json:object(), kz_json:key(), api_object()) ->
+-spec add_swagger_path(kz_term:ne_binary(), kz_json:object(), kz_json:key(), kz_term:api_object()) ->
                               kz_json:object().
 add_swagger_path(Method, Acc, Path, SchemaParameter) ->
     MethodJObj = kz_json:get_value([Path, Method], Acc, kz_json:new()),
     Parameters = make_parameters(Path, Method, SchemaParameter),
     BaseResponse = kz_json:from_list_recursive([{<<"200">>, [{<<"description">>, <<"request succeeded">>}]}]),
-    Vs = props:filter_empty(
-           [{[Path, Method], MethodJObj}
-           ,{[Path, Method, <<"parameters">>], Parameters}
-           ,{[Path, Method, <<"responses">>], BaseResponse}
-           ]),
+
+    Vs = props:filter_empty([{[Path, Method], MethodJObj}
+                            ,{[Path, Method, <<"parameters">>], Parameters}
+                            ,{[Path, Method, <<"responses">>], BaseResponse}
+                            ]),
     kz_json:insert_values(Vs, Acc).
 
--spec make_parameters(ne_binary(), ne_binary(), api_object()) -> ne_binaries().
+-spec make_parameters(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_object()) -> kz_term:ne_binaries().
 make_parameters(Path, Method, SchemaParameter) ->
     lists:usort(fun compare_parameters/2
                ,lists:flatten(
@@ -328,7 +350,7 @@ compare_parameters(Param1, Param2) ->
     Keys = [<<"name">>, <<"$ref">>],
     kz_json:get_first_defined(Keys, Param1) >= kz_json:get_first_defined(Keys, Param2).
 
--spec maybe_add_schema(any(), ne_binary(), kz_json:object()) -> api_object().
+-spec maybe_add_schema(any(), kz_term:ne_binary(), kz_json:object()) -> kz_term:api_object().
 maybe_add_schema(_Path, Method, Schema)
   when Method =:= <<"put">>;
        Method =:= <<"post">> ->
@@ -336,7 +358,7 @@ maybe_add_schema(_Path, Method, Schema)
 maybe_add_schema(_Path, _Method, _Parameters) ->
     'undefined'.
 
--spec swagger_params(kz_json:object()) -> api_object().
+-spec swagger_params(kz_json:object()) -> kz_term:api_object().
 swagger_params(PathMeta) ->
     case kz_json:get_ne_binary_value(<<"schema">>, PathMeta) of
         'undefined' -> 'undefined';
@@ -351,40 +373,40 @@ swagger_params(PathMeta) ->
                               ])
     end.
 
--spec auth_token_param(ne_binary(), ne_binary()) -> api_object().
+-spec auth_token_param(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_object().
 auth_token_param(Path, _Method) ->
     case is_authtoken_required(Path) of
         'undefined' -> 'undefined';
-        true -> kz_json:from_list([{<<"$ref">>, <<"#/parameters/"?X_AUTH_TOKEN>>}]);
-        false -> kz_json:from_list([{<<"$ref">>, <<"#/parameters/"?X_AUTH_TOKEN_NOT_REQUIRED>>}])
+        'true' -> kz_json:from_list([{<<"$ref">>, <<"#/parameters/"?X_AUTH_TOKEN>>}]);
+        'false' -> kz_json:from_list([{<<"$ref">>, <<"#/parameters/"?X_AUTH_TOKEN_NOT_REQUIRED>>}])
     end.
 
--spec is_authtoken_required(ne_binary()) -> api_boolean().
+-spec is_authtoken_required(kz_term:ne_binary()) -> kz_term:api_boolean().
 is_authtoken_required(<<"/"?ACCOUNTS_PREFIX"/", _/binary>>=Path) ->
     not is_api_c2c_connect(Path);
 is_authtoken_required(_Path) -> 'undefined'.
 
--spec is_api_c2c_connect(ne_binary()) -> boolean().
+-spec is_api_c2c_connect(kz_term:ne_binary()) -> boolean().
 is_api_c2c_connect(<<"/"?ACCOUNTS_PREFIX"/clicktocall/", _/binary>>=Path) ->
     kz_binary:suffix(<<"/connect">>, Path);
 is_api_c2c_connect(_) -> 'false'.
 
--spec path_params(ne_binary(), any()) -> kz_json:objects().
+-spec path_params(kz_term:ne_binary(), any()) -> kz_json:objects().
 path_params(Path, _Method) ->
     [path_param(Param) || Param <- split_url(Path),
                           is_path_variable(Param)
     ].
 
--spec path_param(ne_binary()) -> kz_json:object().
+-spec path_param(kz_term:ne_binary()) -> kz_json:object().
 path_param(PathToken) ->
     Param = unbrace_param(PathToken),
     kz_json:from_list([{<<"$ref">>, <<"#/parameters/", Param/binary>>}]).
 
--spec split_url(ne_binary()) -> ne_binaries().
+-spec split_url(kz_term:ne_binary()) -> kz_term:ne_binaries().
 split_url(Path) ->
     binary:split(Path, <<$/>>, ['global']).
 
--spec is_path_variable(ne_binary()) -> boolean().
+-spec is_path_variable(kz_term:ne_binary()) -> boolean().
 is_path_variable(Param) ->
     -1 =/= kz_binary:pos(${, Param).
 
@@ -400,7 +422,7 @@ format_pc_module({Module, CallbackConfig}, Acc) ->
 format_pc_module(_MC, Acc) ->
     Acc.
 
--spec format_pc_config(path_with_methods(), kz_json:object(), module(), api_ne_binary()) ->
+-spec format_pc_config(path_with_methods(), kz_json:object(), module(), kz_term:api_ne_binary()) ->
                               kz_json:object().
 format_pc_config(_ConfigData, Acc, _Module, 'undefined') -> Acc;
 format_pc_config({Callback, Paths}, Acc, Module, ModuleName) ->
@@ -438,16 +460,16 @@ format_path_token(<<"_", Rest/binary>>) -> format_path_token(Rest);
 format_path_token(Token = <<Prefix:1/binary, _/binary>>)
   when byte_size(Token) >= 3 ->
     case is_all_upper(Token) of
-        true -> brace_token(Token);
-        false ->
+        'true' -> brace_token(Token);
+        'false' ->
             case is_all_upper(Prefix) of
-                true -> brace_token(camel_to_snake(Token));
-                false -> Token
+                'true' -> brace_token(camel_to_snake(Token));
+                'false' -> Token
             end
     end;
 format_path_token(BadToken) ->
     Fmt = "Please pick a good allowed_methods/N variable name: '~s' is too short.\n",
-    io:format(standard_error, Fmt, [BadToken]),
+    io:format('standard_error', Fmt, [BadToken]),
     halt(1).
 
 camel_to_snake(Bin) ->
@@ -483,7 +505,7 @@ swagger_api_path(Path, ModuleName) ->
     API = kz_util:iolist_join($/, [ModuleName | format_path_tokens(Path)]),
     iolist_to_binary([$/, API]).
 
--spec path_name(atom()) -> api_ne_binary().
+-spec path_name(atom()) -> kz_term:api_ne_binary().
 path_name(Module) ->
     case grep_cb_module(Module) of
         {'match', [<<"about">>=Name]} -> Name;
@@ -501,6 +523,7 @@ path_name(Module) ->
         {'match', [<<"token_auth">>=Name]} -> Name;
         {'match', [<<"ubiquiti_auth">>=Name]} -> Name;
         {'match', [<<"user_auth">>=Name]} -> Name;
+        {'match', [<<"quickcall">>=Name]} -> <<?ACCOUNTS_PREFIX"/"?ENDPOINTS_PREFIX"/", Name/binary>>;
         {'match', [Name]} -> <<?ACCOUNTS_PREFIX"/", Name/binary>>;
         {'match', [Name, ?CURRENT_VERSION]} -> <<?ACCOUNTS_PREFIX"/", Name/binary>>;
         {'match', _M} -> 'undefined'
@@ -513,7 +536,7 @@ path_name(Module) ->
 -type callback() :: module().
 -spec get() -> callback_configs().
 get() ->
-    Apps = ['crossbar', 'acdc'],
+    Apps = ['crossbar', 'acdc', 'frontier', 'cccp'],
     lists:foldl(fun get_app/2, [], Apps).
 
 -spec get_app(module(), callback_configs()) -> callback_configs().
@@ -626,7 +649,7 @@ arg_to_path(?MATCH(?BINARY_MATCH(_), ?VAR(Name)), Acc) ->
     [kz_term:to_binary(Name) | Acc].
 
 -spec binary_match_to_path([?BINARY_STRING(atom()) | ?BINARY_VAR(atom())]) ->
-                                  ne_binary().
+                                  kz_term:ne_binary().
 binary_match_to_path(Matches) ->
     iolist_to_binary([binary_to_path(Match) || Match <- Matches]).
 
@@ -644,7 +667,7 @@ find_methods(ClauseBody, Acc) ->
 
 -define(CB_CONTEXT_CALL(Fun), ?MOD_FUN('cb_context', Fun)).
 
--spec find_methods_in_clause(erl_parse:abstract_expr(), ne_binaries()) -> ne_binaries().
+-spec find_methods_in_clause(erl_parse:abstract_expr(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 find_methods_in_clause(?VAR('Context'), Acc) ->
     Acc;
 find_methods_in_clause(?VAR('Context1'), Acc) ->
@@ -756,8 +779,8 @@ find_methods_in_clause(?CASE(_CaseConditional, CaseClauses), Acc0) ->
 -define(CONTENT_TYPE_BINS(Type, SubType), [?BINARY(Type), ?BINARY(SubType)]).
 -define(CONTENT_TYPE_VARS(Type, SubType), [?VAR(Type), ?VAR(SubType)]).
 
--spec find_content_types_in_clause(erl_parse:abstract_expr(), ne_binaries()) ->
-                                          ne_binaries().
+-spec find_content_types_in_clause(erl_parse:abstract_expr(), kz_term:ne_binaries()) ->
+                                          kz_term:ne_binaries().
 find_content_types_in_clause(?EMPTY_LIST, Acc) -> Acc;
 find_content_types_in_clause(?LIST(?TUPLE(?CONTENT_TYPE_VARS(_Type, _SubType))
                                   ,Rest
@@ -771,8 +794,8 @@ find_content_types_in_clause(?LIST(?TUPLE(?CONTENT_TYPE_BINS(Type, SubType))
     CT = kz_binary:join([Type, SubType], <<"/">>),
     find_content_types_in_clause(Rest, [CT | Acc]).
 
--spec grep_cb_module(atom() | ne_binary()) ->
-                            {'match', ne_binaries()} |
+-spec grep_cb_module(atom() | kz_term:ne_binary()) ->
+                            {'match', kz_term:ne_binaries()} |
                             'nomatch'.
 grep_cb_module(Module) when is_atom(Module) ->
     grep_cb_module(kz_term:to_binary(Module));
@@ -782,7 +805,7 @@ grep_cb_module(?NE_BINARY=Module) ->
           ,[{'capture', 'all_but_first', 'binary'}]
           ).
 
--spec to_swagger_parameters(ne_binaries()) -> kz_json:object().
+-spec to_swagger_parameters(kz_term:ne_binaries()) -> kz_json:object().
 to_swagger_parameters(Paths) ->
     Params = [Param || Path <- Paths,
                        Param <- split_url(Path),
@@ -807,7 +830,7 @@ parameter_auth_token(IsRequired) ->
                       ,{<<"description">>, <<"request authentication token">>}
                       ]).
 
--spec generic_id_path_param(ne_binary()) -> kz_json:json_proplist().
+-spec generic_id_path_param(kz_term:ne_binary()) -> kz_json:json_proplist().
 generic_id_path_param(Name) ->
     [{<<"minLength">>, 32}
     ,{<<"maxLength">>, 32}
@@ -815,7 +838,7 @@ generic_id_path_param(Name) ->
      | base_path_param(Name)
     ].
 
--spec base_path_param(ne_binary()) -> kz_json:json_proplist().
+-spec base_path_param(kz_term:ne_binary()) -> kz_json:json_proplist().
 base_path_param(Param) ->
     [{<<"name">>, unbrace_param(Param)}
     ,{<<"in">>, <<"path">>}
@@ -823,7 +846,7 @@ base_path_param(Param) ->
     ,{<<"type">>, <<"string">>}
     ].
 
--spec modb_id_path_param(ne_binary()) -> kz_json:json_proplist().
+-spec modb_id_path_param(kz_term:ne_binary()) -> kz_json:json_proplist().
 modb_id_path_param(Param) ->
     %% Matches an MoDB id:
     [{<<"pattern">>, <<"^[0-9a-f-]+\$">>}
@@ -833,7 +856,7 @@ modb_id_path_param(Param) ->
     ].
 
 %% When param represents an account id (i.e. 32 bytes of hexa):
--spec def_path_param(ne_binary()) -> kz_json:json_proplist().
+-spec def_path_param(kz_term:ne_binary()) -> kz_json:json_proplist().
 def_path_param(<<"{ACCOUNT_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{ADDRESS_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{ALERT_ID}">>=P) -> generic_id_path_param(P);
@@ -965,10 +988,26 @@ def_path_param(<<"{TASK_ID}">>=P) ->
      | base_path_param(P)
     ];
 
+def_path_param(<<"{ENDPOINT_ID}">>=P) ->
+    [{<<"minLength">>, 32}
+    ,{<<"maxLength">>, 32}
+    ,{<<"pattern">>, <<"^[0-9a-f]+\$">>}
+     | base_path_param(P)
+    ];
+def_path_param(<<"{ENDPOINT_TYPE}">>=P) ->
+    [{<<"enum">>, [<<"users">>, <<"devices">>]}
+     | base_path_param(P)
+    ];
+
 def_path_param(<<"{UUID}">>=P) ->
     [{<<"pattern">>, <<"^[a-f0-9-]+\$">>}
      | base_path_param(P)
     ];
+def_path_param(<<"{NUMBER}">> = P) ->
+    [{<<"pattern">>, <<"^\\+?[0-9]+">>}
+     | base_path_param(P)
+    ];
+
 def_path_param(_Param) ->
     io:format(standard_error, "No Swagger definition of path parameter '~s'.\n", [_Param]),
     halt(1).

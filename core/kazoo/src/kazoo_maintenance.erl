@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_maintenance).
 
 -export([crash/0]).
@@ -36,7 +34,7 @@ crash() ->
 
 -spec debug_dump() -> 'ok'.
 debug_dump() ->
-    FolderName = "/tmp/" ++ kz_term:to_list(node()) ++ "_" ++ kz_term:to_list(kz_time:current_tstamp()),
+    FolderName = "/tmp/" ++ kz_term:to_list(node()) ++ "_" ++ kz_term:to_list(kz_time:now_s()),
     'ok' = file:make_dir(FolderName),
     _ = debug_dump_process_info(FolderName),
     _ = debug_dump_memory(FolderName),
@@ -99,14 +97,14 @@ debug_dump_ets(FolderName) ->
 -spec debug_dump_ets_details(string(), [ets:tab()]) -> 'ok'.
 debug_dump_ets_details(_, []) -> 'ok';
 debug_dump_ets_details(EtsFolder, [Tab|Tabs]) ->
-    TabInfoLog = EtsFolder ++ "/" ++ kz_term:to_list(ets:info(Tab, 'name')) ++ "_info",
+    TabInfoLog = EtsFolder ++ "/" ++ table_name(Tab) ++ "_info",
     'ok' = start_debug_file(TabInfoLog),
     'ok' = file:write_file(TabInfoLog, io_lib:format("~p~n", [ets:info(Tab)])),
-    TabDumpLog = EtsFolder ++ "/" ++ kz_term:to_list(ets:info(Tab, 'name')) ++ "_dump",
+    TabDumpLog = EtsFolder ++ "/" ++ table_name(Tab) ++ "_dump",
     TabList = (catch ets:tab2list(Tab)),
     'ok' = start_debug_file(TabDumpLog),
     'ok' = file:write_file(TabDumpLog, io_lib:format("~p~n", [TabList])),
-    TabBinaryLog = EtsFolder ++ "/" ++ kz_term:to_list(ets:info(Tab, 'name')) ++ "_binary",
+    TabBinaryLog = EtsFolder ++ "/" ++ table_name(Tab) ++ "_binary",
     catch ets:tab2file(Tab, TabBinaryLog),
     debug_dump_ets_details(EtsFolder, Tabs).
 
@@ -122,19 +120,19 @@ start_debug_file(File) ->
     Timestamp = kz_time:current_unix_tstamp(),
     file:write_file(File, io_lib:format("Created: ~p~n~n", [Timestamp])).
 
--spec syslog_level(text()) -> 'ok'.
+-spec syslog_level(kz_term:text()) -> 'ok'.
 syslog_level(Level) ->
     kz_util:change_syslog_log_level(kz_term:to_atom(Level)).
 
--spec error_level(text()) -> 'ok'.
+-spec error_level(kz_term:text()) -> 'ok'.
 error_level(Level) ->
     kz_util:change_error_log_level(kz_term:to_atom(Level)).
 
--spec console_level(text()) -> 'ok'.
+-spec console_level(kz_term:text()) -> 'ok'.
 console_level(Level) ->
     kz_util:change_console_log_level(kz_term:to_atom(Level)).
 
--spec hotload(text() | atom()) -> 'ok' | 'no_return'.
+-spec hotload(kz_term:text() | atom()) -> 'ok' | 'no_return'.
 hotload(Module) when is_atom(Module) ->
     _ = code:soft_purge(Module),
     case code:load_file(Module) of
@@ -146,7 +144,7 @@ hotload(Module) when is_atom(Module) ->
 hotload(Module) ->
     hotload(kz_term:to_atom(Module, 'true')).
 
--spec hotload_app(text() | atom()) -> 'ok'.
+-spec hotload_app(kz_term:text() | atom()) -> 'ok'.
 hotload_app(App) when is_atom(App) ->
     case application:get_key(App, 'modules') of
         {'ok', Modules} ->
@@ -160,25 +158,29 @@ hotload_app(App) ->
     hotload_app(kz_term:to_atom(App, 'true')).
 
 -spec gc_all() -> 'ok'.
--spec gc_pids([pid(),...]) -> 'ok'.
 gc_all() ->
     gc_pids(processes()).
+
+-spec gc_pids([pid(),...]) -> 'ok'.
 gc_pids(Ps) ->
     lists:foreach(fun (P) -> erlang:garbage_collect(P), timer:sleep(500) end, Ps).
 
 -spec gc_top_mem_consumers() -> 'ok'.
--spec gc_top_mem_consumers(pos_integer()) -> 'ok'.
 gc_top_mem_consumers() ->
     gc_top_mem_consumers(10).
+
+-spec gc_top_mem_consumers(pos_integer()) -> 'ok'.
 gc_top_mem_consumers(N) ->
     {Top, _} = top_mem_consumers(N),
     gc_pids([P || {P,_} <- Top]).
 
--type consumers() :: {kz_proplist_kv(pid(), integer()), kz_proplist_kv(pid(), integer())}.
+-type consumers() :: {kz_term:proplist_kv(pid(), integer()), kz_term:proplist_kv(pid(), integer())}.
+
 -spec top_mem_consumers() -> consumers().
--spec top_mem_consumers(pos_integer()) -> consumers().
 top_mem_consumers() ->
     top_mem_consumers(10).
+
+-spec top_mem_consumers(pos_integer()) -> consumers().
 top_mem_consumers(Len) when is_integer(Len), Len > 0 ->
     SortHeapDesc =
         lists:reverse(
@@ -199,28 +201,28 @@ ets_info() ->
     _ = [print_table(T) || T <- sort_tables(ets:all())],
     'ok'.
 
--spec sort_tables([ets:tid()]) -> [{ets:tid(), integer()}].
+-spec sort_tables([ets:tab()]) -> [{string(), integer()}].
 sort_tables(Ts) ->
     lists:reverse(
       lists:keysort(2
-                   ,[{T, table_size(T)} || T <- Ts]
+                   ,[{table_name(T), table_size(T)} || T <- Ts]
                    )
      ).
 
 -spec table_size(ets:tid()) -> integer().
 table_size(T) ->
-    words_to_bytes(ets:info(T, 'memory')).
+    kz_term:words_to_bytes(ets:info(T, 'memory')).
 
-words_to_bytes(Words) ->
-    Words * erlang:system_info('wordsize').
+-spec print_table({string(), integer()}) -> 'ok'.
+print_table({Name, Mem}) ->
+    io:format("  ~-25s: ~6s~n", [Name
+                                ,kz_util:pretty_print_bytes(Mem, 'truncated')
+                                ]).
 
--spec print_table({ets:tab(), integer()}) -> 'ok'.
-print_table({T, Mem}) ->
-    io:format("  ~-25s: ~6s~n", [kz_term:to_list(T), kz_util:pretty_print_bytes(Mem, 'truncated')]).
-
--spec log_table({ets:tab(), integer()}, file:name_all()) -> 'ok'.
-log_table({T, Mem}, Filename) ->
-    Bytes = io_lib:format("  ~-25s: ~6s~n", [kz_term:to_list(T), kz_util:pretty_print_bytes(Mem, 'truncated')]),
+-spec log_table({string(), integer()}, file:name_all()) -> 'ok'.
+log_table({Name, Mem}, Filename) ->
+    Bytes = io_lib:format("  ~-25s: ~6s~n", [Name
+                                            ,kz_util:pretty_print_bytes(Mem, 'truncated')]),
     'ok' = file:write_file(Filename, Bytes, ['append']).
 
 -spec mem_info() -> 'ok'.
@@ -237,3 +239,7 @@ print_memory_type({Type, Size}) ->
 log_memory_type({Type, Size}, Filename) ->
     Bytes = io_lib:format("  ~-15s : ~6s~n", [Type, kz_util:pretty_print_bytes(Size, 'truncated')]),
     'ok' = file:write_file(Filename, Bytes, ['append']).
+
+-spec table_name(ets:tab()) -> string().
+table_name(Tab) ->
+    kz_term:to_list(ets:info(Tab, 'name')).

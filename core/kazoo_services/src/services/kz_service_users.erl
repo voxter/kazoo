@@ -1,27 +1,24 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_users).
+-behaviour(kz_gen_service).
 
 -export([reconcile/1]).
 -export([reconcile/2]).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
 -define(SERVICE_CATEGORY, <<"users">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec reconcile(kz_services:services()) -> kz_services:services().
--spec reconcile(kz_services:services(), ne_binary()) -> kz_services:services().
 reconcile(Services) ->
     AccountId = kz_services:account_id(Services),
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -41,6 +38,7 @@ reconcile(Services) ->
                         end, kz_services:reset_category(?SERVICE_CATEGORY, Services), JObjs)
     end.
 
+-spec reconcile(kz_services:services(), kz_term:ne_binary()) -> kz_services:services().
 reconcile(Services0, UserType) ->
     Services1 = reconcile(Services0),
     Quantity = kz_services:updated_quantity(?SERVICE_CATEGORY, UserType, Services1),

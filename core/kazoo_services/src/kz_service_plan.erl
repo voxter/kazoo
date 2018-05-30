@@ -1,44 +1,46 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_plan).
 
 -export([fetch/2]).
 -export([activation_charges/3]).
 -export([create_items/3]).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given a vendor database and service plan id, fetch the document.
+%%------------------------------------------------------------------------------
+%% @doc Given a vendor database and service plan id, fetch the document.
 %% Merge any plan overrides into the plan property.
 %% @end
-%%--------------------------------------------------------------------
--spec fetch(ne_binary(), ne_binary()) -> kzd_service_plan:api_doc().
+%%------------------------------------------------------------------------------
+-spec fetch(kz_term:ne_binary(), kz_term:ne_binary()) -> kzd_service_plan:api_doc().
 fetch(PlanId, VendorId) ->
-    VendorDb = kz_util:format_account_id(VendorId, 'encoded'),
-    case kz_datamgr:open_cache_doc(VendorDb, PlanId) of
+    VendorDb = kz_util:format_account_db(VendorId),
+    case fetch_plan(VendorDb, PlanId) of
         {'ok', ServicePlan} ->
-            lager:debug("found service plan ~s/~s", [VendorDb, PlanId]),
+            ?LOG_DEBUG("found service plan ~s/~s", [VendorDb, PlanId]),
             ServicePlan;
         {'error', _R} ->
             lager:debug("unable to open service plan ~s/~s: ~p", [VendorDb, PlanId, _R]),
             'undefined'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+-ifdef(TEST).
+fetch_plan(?A_MASTER_ACCOUNT_DB, ?A_MASTER_PLAN_ID) ->
+    kz_json:fixture(?APP, "a_master_plans.json").
+-else.
+fetch_plan(VendorDb, PlanId) ->
+    kz_datamgr:open_cache_doc(VendorDb, PlanId).
+-endif.
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec activation_charges(ne_binary(), ne_binary(), kzd_service_plan:doc()) -> float().
+%%------------------------------------------------------------------------------
+-spec activation_charges(kz_term:ne_binary(), kz_term:ne_binary(), kzd_service_plan:doc()) -> float().
 activation_charges(CategoryId, ItemId, ServicePlan) ->
     case kzd_service_plan:item_activation_charge(ServicePlan, CategoryId, ItemId, 'undefined') of
         'undefined' ->
@@ -46,17 +48,12 @@ activation_charges(CategoryId, ItemId, ServicePlan) ->
         Charge -> Charge
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec create_items(kzd_service_plan:doc(), kz_service_items:items(), kz_services:services()) ->
-                          kz_service_items:items().
--spec create_items(kzd_service_plan:doc(), kz_service_items:items(), kz_services:services()
-                  ,ne_binary(), ne_binary()
-                  ) ->
                           kz_service_items:items().
 create_items(ServicePlan, ServiceItems, Services) ->
     lists:foldl(fun({CategoryId, ItemId}, SIs) ->
@@ -66,6 +63,10 @@ create_items(ServicePlan, ServiceItems, Services) ->
                ,get_plan_items(ServicePlan, Services)
                ).
 
+-spec create_items(kzd_service_plan:doc(), kz_service_items:items(), kz_services:services()
+                  ,kz_term:ne_binary(), kz_term:ne_binary()
+                  ) ->
+                          kz_service_items:items().
 create_items(ServicePlan, ServiceItems, Services, CategoryId, ItemId) ->
     ItemPlan = kzd_service_plan:item(ServicePlan, CategoryId, ItemId),
     create_items(ServicePlan, ServiceItems, Services, CategoryId, ItemId, ItemPlan).
@@ -79,7 +80,8 @@ create_items(ServicePlan, ServiceItems, Services, CategoryId, _ItemId, 'undefine
             AccountId = kzd_service_plan:account_id(ServicePlan),
             ServicePlanId = kz_doc:id(ServicePlan),
             lager:warning("unable to create service plan item ~s/~s from ~s/~s for bookkeeper ~s"
-                         ,[CategoryId, _ItemId, AccountId, ServicePlanId, _Bookkeeper]),
+                         ,[CategoryId, _ItemId, AccountId, ServicePlanId, _Bookkeeper]
+                         ),
             ServiceItems
     end;
 create_items(ServicePlan, ServiceItems, Services, CategoryId, ItemId, ItemPlan) ->
@@ -112,13 +114,13 @@ create_items(ServicePlan, ServiceItems, Services, CategoryId, ItemId, ItemPlan) 
                              ),
     kz_service_items:update(ServiceItem, ServiceItems).
 
--spec get_generic_item_plan(kzd_service_plan:doc(), ne_binary()) -> kz_json:object().
+-spec get_generic_item_plan(kzd_service_plan:doc(), kz_term:ne_binary()) -> kz_json:object().
 get_generic_item_plan(ServicePlan, CategoryId) ->
     case kzd_service_plan:item(ServicePlan, CategoryId, <<"_all">>) of
         'undefined' -> kz_json:new();
         ItemPlan -> ItemPlan
     end.
--spec get_plan_items(kzd_service_plan:doc(), kz_services:services()) -> kz_proplist().
+-spec get_plan_items(kzd_service_plan:doc(), kz_services:services()) -> kz_term:proplist().
 get_plan_items(ServicePlan, Services) ->
     case kz_services:select_bookkeeper(Services) of
         'kz_bookkeeper_http' ->
@@ -195,13 +197,11 @@ cumulative_quantity(Item, CumulativeDiscount, Quantity) ->
         _ -> Quantity
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec bookkeeper_jobj(ne_binary(), ne_binary(), kzd_service_plan:doc()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec bookkeeper_jobj(kz_term:ne_binary(), kz_term:ne_binary(), kzd_service_plan:doc()) -> kz_json:object().
 bookkeeper_jobj(CategoryId, ItemId, ServicePlan) ->
     lists:foldl(fun(Bookkeeper, J) ->
                         Mapping = kz_json:get_value([CategoryId, ItemId]
@@ -214,13 +214,11 @@ bookkeeper_jobj(CategoryId, ItemId, ServicePlan) ->
                ,kzd_service_plan:bookkeeper_ids(ServicePlan)
                ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec get_rate_at_quantity(ne_binary(), ne_binary(), kzd_service_plan:doc(), kz_services:services()) ->
+%%------------------------------------------------------------------------------
+-spec get_rate_at_quantity(kz_term:ne_binary(), kz_term:ne_binary(), kzd_service_plan:doc(), kz_services:services()) ->
                                   {float(), integer()}.
 get_rate_at_quantity(CategoryId, ItemId, ItemPlan, Services) ->
     Quantity = get_quantity(CategoryId, ItemId, ItemPlan, Services),
@@ -229,14 +227,12 @@ get_rate_at_quantity(CategoryId, ItemId, ItemPlan, Services) ->
         FlatRate -> {FlatRate, 1}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% If tiered flate rates are provided, find the value to use given the
+%%------------------------------------------------------------------------------
+%% @doc If tiered flate rates are provided, find the value to use given the
 %% current quantity.
 %% @end
-%%--------------------------------------------------------------------
--spec get_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kz_services:services()) -> integer().
+%%------------------------------------------------------------------------------
+-spec get_quantity(kz_term:ne_binary(), kz_term:ne_binary(), kzd_item_plan:doc(), kz_services:services()) -> integer().
 get_quantity(CategoryId, ItemId, ItemPlan, Services) ->
     ItemQuantity = get_item_quantity(CategoryId, ItemId, ItemPlan, Services),
     case kzd_item_plan:minimum(ItemPlan) of
@@ -248,14 +244,12 @@ get_quantity(CategoryId, ItemId, ItemPlan, Services) ->
         _ -> ItemQuantity
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% If tiered flate rates are provided, find the value to use given the
+%%------------------------------------------------------------------------------
+%% @doc If tiered flate rates are provided, find the value to use given the
 %% current quantity.
 %% @end
-%%--------------------------------------------------------------------
--spec get_flat_rate(non_neg_integer(), kzd_item_plan:doc()) -> api_float().
+%%------------------------------------------------------------------------------
+-spec get_flat_rate(non_neg_integer(), kzd_item_plan:doc()) -> kz_term:api_float().
 get_flat_rate(Quantity, ItemPlan) ->
     Rates = kzd_item_plan:flat_rates(ItemPlan),
     L1 = [kz_term:to_integer(K) || K <- kz_json:get_keys(Rates)],
@@ -265,14 +259,12 @@ get_flat_rate(Quantity, ItemPlan) ->
             kz_json:get_float_value(kz_term:to_binary(hd(Range)), Rates)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% If tiered rates are provided, find the value to use given the current
+%%------------------------------------------------------------------------------
+%% @doc If tiered rates are provided, find the value to use given the current
 %% quantity.  If no rates are viable attempt to use the "rate" property.
 %% @end
-%%--------------------------------------------------------------------
--spec get_quantity_rate(non_neg_integer(), kzd_item_plan:doc()) -> api_float().
+%%------------------------------------------------------------------------------
+-spec get_quantity_rate(non_neg_integer(), kzd_item_plan:doc()) -> kz_term:api_float().
 get_quantity_rate(Quantity, ItemPlan) ->
     Rates = kzd_item_plan:rates(ItemPlan),
     L1 = [kz_term:to_integer(K) || K <- kz_json:get_keys(Rates)],
@@ -283,24 +275,22 @@ get_quantity_rate(Quantity, ItemPlan) ->
             kz_json:get_float_value(kz_term:to_binary(hd(Range)), Rates)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get the item quantity, drawing solely from the provided account or
+%%------------------------------------------------------------------------------
+%% @doc Get the item quantity, drawing solely from the provided account or
 %% (when the service plan dictates) the summed (cascaded) decendants.
 %% Also handle the special case were we should sum all items in a
 %% given category, except a list of item names to ignore during
 %% summation.
 %% @end
-%%--------------------------------------------------------------------
--spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kz_services:services()) ->
-                               integer().
--spec get_item_quantity(ne_binary(), ne_binary(), kzd_item_plan:doc(), kz_services:services(), ne_binary()) ->
-                               integer().
+%%------------------------------------------------------------------------------
 
+-spec get_item_quantity(kz_term:ne_binary(), kz_term:ne_binary(), kzd_item_plan:doc(), kz_services:services()) ->
+                               integer().
 get_item_quantity(CategoryId, ItemId, ItemPlan, Services) ->
     get_item_quantity(CategoryId, ItemId, ItemPlan, Services, kzd_service_plan:all_items_key()).
 
+-spec get_item_quantity(kz_term:ne_binary(), kz_term:ne_binary(), kzd_item_plan:doc(), kz_services:services(), kz_term:ne_binary()) ->
+                               integer().
 get_item_quantity(CategoryId, AllItems, ItemPlan, Services, AllItems) ->
     Exceptions = kzd_item_plan:exceptions(ItemPlan),
 

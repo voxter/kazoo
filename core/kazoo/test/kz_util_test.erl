@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz INC
-%%% @doc
-%%% Various utilities - a veritable cornicopia
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Various utilities - a veritable cornicopia
+%%% @author James Aimonetti
+%%% @author Karl Anderson
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_util_test).
 
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
@@ -149,10 +147,6 @@ is_account_expired_test_() ->
     [?_assertEqual(false, kz_util:is_account_expired(undefined))
     ].
 
-get_account_realm_test_() ->
-    [?_assertEqual(undefined, kz_util:get_account_realm(undefined, ?AN_ACCOUNT_ID))
-    ].
-
 try_load_module_test_() ->
     [?_assertEqual(false, kz_util:try_load_module(undefined))
     ,?_assertEqual(false, kz_util:try_load_module("undefined"))
@@ -200,7 +194,7 @@ account_formats_test_() ->
     AccountDbEn = list_to_binary(["account%2F", A, "%2F", B, "%2F", Rest]),
 
     {Y, M, _} = erlang:date(),
-    TS = kz_time:current_tstamp(),
+    TS = kz_time:now_s(),
     Now = os:timestamp(),
     Year = kz_term:to_binary(Y),
     Month = kz_date:pad_month(M),

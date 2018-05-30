@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%%
-%%% Handle CRUD operations for Directories
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle CRUD operations for Directories
+%%% @author James Aimonetti
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_freeswitch).
 
 -export([init/0
@@ -38,10 +34,14 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".freeswitch">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = supervisor:start_child('crossbar_sup', ?WORKER(?FS_OFFLINE_SERVER)),
@@ -53,11 +53,10 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.validate.freeswitch">>, ?MODULE, 'validate_freeswitch'),
     ok.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authenticate(cb_context:context()) -> boolean().
 authenticate(Context) ->
     authenticate(cb_context:req_nouns(Context), cb_context:req_verb(Context), Context).
@@ -79,11 +78,10 @@ authenticate([{<<"freeswitch">>,[]}], ?HTTP_GET, Context) ->
     end;
 authenticate(_Nouns, _Verb, _Context) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authorize(cb_context:context()) -> boolean().
 authorize(Context) ->
     authorize(cb_context:req_nouns(Context), cb_context:req_verb(Context)).
@@ -98,39 +96,32 @@ authorize(_Nouns, _Verb) -> 'false'.
 content_types_provided(Context) ->
     cb_context:set_content_types_provided(Context, [{'to_binary', ?MIME_TYPES}]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate_freeswitch(cb_context:context()) -> cb_context:context().
 validate_freeswitch(Context) ->
     validate_freeswitch(Context, cb_context:req_verb(Context)).
@@ -139,9 +130,14 @@ validate_freeswitch(Context) ->
 validate_freeswitch(Context, ?HTTP_GET) ->
     maybe_load_last_data(Context).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_load_last_data(cb_context:context()) -> cb_context:context().
 maybe_load_last_data(Context) ->
     case gen_server:call(crossbar_sup:find_proc(?FS_OFFLINE_SERVER), 'current') of
@@ -150,23 +146,22 @@ maybe_load_last_data(Context) ->
             cb_context:add_system_error(Error, Context)
     end.
 
--spec load_last_data(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec load_last_data(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 load_last_data(Context, File) ->
     {'ok', AttachBin} = file:read_file(File),
     BaseName = kz_term:to_binary(filename:basename(File)),
-    cb_context:setters(
-      Context,[{fun cb_context:set_resp_status/2, 'success'}
-              ,{fun cb_context:set_resp_data/2, AttachBin}
-              ,{fun cb_context:add_resp_headers/2,
-                [{<<"Content-Disposition">>, <<"attachment; filename=", BaseName/binary>>}
-                ,{<<"Content-Type">>, extension_to_content_type(
-                                        kz_term:to_lower_binary(
-                                          filename:extension(BaseName)))
-                 }
-                ]}
-              ]).
+    ContentType = extension_to_content_type(kz_term:to_lower_binary(filename:extension(BaseName))),
+    cb_context:setters(Context
+                      ,[{fun cb_context:set_resp_status/2, 'success'}
+                       ,{fun cb_context:set_resp_data/2, AttachBin}
+                       ,{fun cb_context:add_resp_headers/2,
+                         #{<<"content-disposition">> => <<"attachment; filename=", BaseName/binary>>
+                          ,<<"content-type">> => ContentType
+                          }
+                        }
+                       ]).
 
--spec extension_to_content_type(ne_binary()) -> ne_binary().
+-spec extension_to_content_type(kz_term:ne_binary()) -> kz_term:ne_binary().
 extension_to_content_type(<<".gzip">>) -> ?MIME_TYPE_GZIP;
 extension_to_content_type(<<".zip">>) -> ?MIME_TYPE_ZIP2;
 extension_to_content_type(<<".rar">>) -> ?MIME_TYPE_RAR;

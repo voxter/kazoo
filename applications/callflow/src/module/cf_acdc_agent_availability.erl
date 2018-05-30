@@ -1,15 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2016 Voxter Communications Inc.
-%%% @doc
-%%%
-%%% Data: {
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2016-2018, 2600Hz
+%%% @doc Data: {
 %%%   "id":"queue id"
 %%% }
 %%%
+%%%
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_acdc_agent_availability).
 
 -export([handle/2]).
@@ -19,11 +17,10 @@
 -define(AVAILABLE_BRANCH_KEY, <<"available">>).
 -define(UNAVAILABLE_BRANCH_KEY, <<"unavailable">>).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
@@ -47,7 +44,7 @@ handle(Data, Call) ->
 branch_on_availability(0, Call) -> cf_exe:attempt(?UNAVAILABLE_BRANCH_KEY, Call);
 branch_on_availability(_, Call) -> cf_exe:attempt(?AVAILABLE_BRANCH_KEY, Call).
 
--spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->

@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%%
-%%% Listing of all expected v1 callbacks
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Listing of all expected v1 callbacks
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors:
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_bulk).
 
 -export([init/0
@@ -21,16 +17,14 @@
 
 -include("crossbar.hrl").
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.bulk">>, ?MODULE, 'allowed_methods'),
@@ -40,37 +34,35 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.post.bulk">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.bulk">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() -> [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /bulk => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /bulk => []
 %%    /bulk/foo => [<<"foo">>]
 %%    /bulk/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /bulk might load a list of bulk_update objects
 %% /bulk/123 might load the bulk_update object 123
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     maybe_load_docs(Context).
@@ -159,7 +151,7 @@ revalidate_doc(JObj, Context) ->
         Id -> revalidate_doc(Id, JObj, Context)
     end.
 
--spec revalidate_doc(ne_binary(), kz_json:object(), cb_context:context()) ->
+-spec revalidate_doc(kz_term:ne_binary(), kz_json:object(), cb_context:context()) ->
                             cb_context:context().
 revalidate_doc(Id, JObj, Context) ->
     case get_validate_binding(JObj) of
@@ -190,12 +182,10 @@ revalidate_doc(Id, JObj, Context) ->
             run_binding(Binding, Payload, Id, Context)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec post(cb_context:context()) -> cb_context:context().
 post(Context) ->
     JObjs = cb_context:doc(Context),
@@ -217,7 +207,7 @@ maybe_save_doc(JObj, Context) ->
         Id -> maybe_save_doc(Id, Doc, DbDoc, Context)
     end.
 
--spec maybe_save_doc(ne_binary(), kz_json:object(), kz_json:object(), cb_context:context()) ->
+-spec maybe_save_doc(kz_term:ne_binary(), kz_json:object(), kz_json:object(), cb_context:context()) ->
                             cb_context:context().
 maybe_save_doc(Id, JObj, DbDoc, Context) ->
     case get_post_binding(JObj) of
@@ -269,7 +259,7 @@ maybe_delete_doc(JObj, Context) ->
         Id -> maybe_delete_doc(Id, Doc, DbDoc, Context)
     end.
 
--spec maybe_delete_doc(ne_binary(), kz_json:object(), kz_json:object(), cb_context:context()) ->
+-spec maybe_delete_doc(kz_term:ne_binary(), kz_json:object(), kz_json:object(), cb_context:context()) ->
                               cb_context:context().
 maybe_delete_doc(Id, JObj, DbDoc, Context) ->
     lager:debug("try to delete ~p", [Id]),
@@ -299,13 +289,13 @@ maybe_delete_doc(Id, JObj, DbDoc, Context) ->
             run_binding(Binding, Payload, Id, Context)
     end.
 
--spec run_binding(ne_binary(), list(), ne_binary(), cb_context:context()) -> cb_context:context().
+-spec run_binding(kz_term:ne_binary(), list(), kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 run_binding(Binding, Payload, Id, Context) ->
     lager:debug("bulk update running: ~p", [Binding]),
     InterimContext = crossbar_bindings:fold(Binding, Payload),
     import_results(Id, cb_context:import_errors(InterimContext), Context).
 
--spec import_results(ne_binary(), cb_context:context(), cb_context:context()) ->
+-spec import_results(kz_term:ne_binary(), cb_context:context(), cb_context:context()) ->
                             cb_context:context().
 import_results(Id, C, Context) ->
     case cb_context:resp_status(C) of
@@ -313,7 +303,7 @@ import_results(Id, C, Context) ->
         _Error ->    import_results_error(Id, C, Context)
     end.
 
--spec import_results_success(ne_binary(), cb_context:context(), cb_context:context()) ->
+-spec import_results_success(kz_term:ne_binary(), cb_context:context(), cb_context:context()) ->
                                     cb_context:context().
 import_results_success(Id, C, Context) ->
     Doc  = cb_context:doc(C),
@@ -332,7 +322,7 @@ import_results_success(Id, C, Context) ->
                         }
                        ]).
 
--spec import_results_error(ne_binary(), cb_context:context(), cb_context:context()) ->
+-spec import_results_error(kz_term:ne_binary(), cb_context:context(), cb_context:context()) ->
                                   cb_context:context().
 import_results_error(Id, C, Context) ->
     Status    = cb_context:resp_status(C),
@@ -348,7 +338,7 @@ import_results_error(Id, C, Context) ->
                              ]),
     cb_context:set_resp_data(Context, kz_json:set_value(Id, Resp, JObj)).
 
--spec select_doc(ne_binary(), kz_json:objects()) -> api_object().
+-spec select_doc(kz_term:ne_binary(), kz_json:objects()) -> kz_term:api_object().
 select_doc(_Id, []) -> 'undefined';
 select_doc(Id, [JObj|JObjs]) ->
     case kz_doc:id(JObj) of
@@ -356,7 +346,7 @@ select_doc(Id, [JObj|JObjs]) ->
         _ -> select_doc(Id, JObjs)
     end.
 
--spec get_doc_updates(cb_context:context()) -> api_object().
+-spec get_doc_updates(cb_context:context()) -> kz_term:api_object().
 get_doc_updates(Context) ->
     JObj = cb_context:req_data(Context),
     case kz_json:get_value(<<"updates">>, JObj) of
@@ -372,7 +362,7 @@ update_docs(Updates, Context) ->
             ],
     cb_context:set_doc(Context, JObjs).
 
--spec get_post_binding(kz_json:object() | ne_binary()) -> api_binary().
+-spec get_post_binding(kz_json:object() | kz_term:ne_binary()) -> kz_term:api_binary().
 get_post_binding(<<"device">>) ->     <<"v1_resource.execute.post.devices">>;
 get_post_binding(<<"user">>) ->       <<"v1_resource.execute.post.users">>;
 get_post_binding(<<"conference">>) -> <<"v1_resource.execute.post.conferences">>;
@@ -380,7 +370,7 @@ get_post_binding(<<"vmbox">>) ->      <<"v1_resource.execute.post.vmboxes">>;
 get_post_binding(<<_/binary>>) ->     'undefined';
 get_post_binding(JObj) ->             get_post_binding(kz_doc:type(JObj)).
 
--spec get_delete_binding(kz_json:object() | ne_binary()) -> api_binary().
+-spec get_delete_binding(kz_json:object() | kz_term:ne_binary()) -> kz_term:api_binary().
 get_delete_binding(<<"device">>) ->     <<"v1_resource.execute.delete.devices">>;
 get_delete_binding(<<"user">>) ->       <<"v1_resource.execute.delete.users">>;
 get_delete_binding(<<"conference">>) -> <<"v1_resource.execute.delete.conferences">>;
@@ -388,7 +378,7 @@ get_delete_binding(<<"vmbox">>) ->      <<"v1_resource.execute.delete.vmboxes">>
 get_delete_binding(<<_/binary>>) ->     'undefined';
 get_delete_binding(JObj) ->             get_delete_binding(kz_doc:type(JObj)).
 
--spec get_validate_binding(kz_json:object() | ne_binary()) -> api_binary().
+-spec get_validate_binding(kz_json:object() | kz_term:ne_binary()) -> kz_term:api_binary().
 get_validate_binding(<<"device">>) ->     <<"v1_resource.validate.devices">>;
 get_validate_binding(<<"user">>) ->       <<"v1_resource.validate.users">>;
 get_validate_binding(<<"conference">>) -> <<"v1_resource.validate.conferences">>;

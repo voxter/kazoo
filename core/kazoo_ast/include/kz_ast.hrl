@@ -144,6 +144,7 @@
 -define(NOT(Operand), ?UNARY_OP('not', Operand)).
 
 -define(APPEND(First, Second), ?BINARY_OP('++', First, Second)).
+-define(SUBTRACT(First, Second), ?BINARY_OP('--', First, Second)).
 -define(ORELSE(First, Second), ?BINARY_OP('orelse', First, Second)).
 -define(ANDALSO(First, Second), ?BINARY_OP('andalso', First, Second)).
 
@@ -159,6 +160,10 @@
 -define(SUB_BINARY(Value)
        ,{'bin_element',_,?BINARY_MATCH([?BINARY_STRING(Value)]),'default',['binary']}
        ).
+-define(BINARY_FROM_ATOM(Atom)
+       ,{'bin_element',_,?FUN_ARGS(atom_to_binary, [?ATOM(Atom), ?ATOM(utf8)]),'default',['binary']}
+       ).
+
 -define(BINARY(Value), {'bin',_, [?BINARY_STRING(Value)]}).
 -define(BINARY_MATCH(Matches)
        ,{'bin',_,Matches}
@@ -183,15 +188,13 @@
 -define(MAP_FIELD_ASSOC(K, V), {'map_field_assoc',_,K,V}).
 -define(MAP_FIELD_EXACT(K, V), {'map_field_exact',_,K,V}).
 
--define(LAGER, ?CASE(
-                  ?TUPLE(
-                     [?FUN_ARGS('whereis', [?ATOM('lager_event')])
-                     ,?FUN_ARGS('whereis', [?ATOM('lager_event')])
-                     ,?MOD_FUN_ARGS('lager_config', 'get', _) % args
-                     ]
-                    )
+-define(LAGER, ?CASE(?TUPLE([?FUN_ARGS('whereis', [?ATOM('lager_event')])
+                            ,?FUN_ARGS('whereis', [?ATOM('lager_event')])
+                            ,?MOD_FUN_ARGS('lager_config', 'get', _) % args
+                            ]
+                           )
                     ,_ % clauses
-                 )
+                    )
        ).
 
 -define(LAGER_CALL, {'remote', _, {'atom', _, 'lager'}, _}).

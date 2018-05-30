@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_auth_jwt).
 
 -include("kazoo_auth.hrl").
@@ -29,11 +27,11 @@
 
 -define(DEFAULT_ALGORITHM, ?ALG_RS256).
 
--spec decode(ne_binary()) -> {'ok', kz_proplist(), kz_proplist()} | {'error', any()}.
+-spec decode(kz_term:ne_binary()) -> {'ok', kz_term:proplist(), kz_term:proplist()} | {'error', any()}.
 decode(JWTToken) ->
     decode(JWTToken, 'true').
 
--spec decode(ne_binary() | map(), boolean()) -> {'ok', kz_proplist(), kz_proplist()} | {'error', any()}.
+-spec decode(kz_term:ne_binary() | map(), boolean()) -> {'ok', kz_term:proplist(), kz_term:proplist()} | {'error', any()}.
 decode(JWTToken, Verify) when is_binary(JWTToken) ->
     case parse(JWTToken) of
         {'ok', Token} -> decode(Token, Verify);
@@ -47,7 +45,7 @@ decode(#{header := Header, payload := Payload} = Token, 'true') ->
 decode(#{header := Header, payload := Payload}, 'false') ->
     {'ok', maps:to_list(Header), maps:to_list(Payload)}.
 
--spec verify(ne_binary() | map()) -> boolean().
+-spec verify(kz_term:ne_binary() | map()) -> boolean().
 verify(JWTToken) when is_binary(JWTToken) ->
     case parse(JWTToken) of
         {'ok', Token} -> verify(Token);
@@ -89,7 +87,7 @@ verify_header(#{header := #{<<"alg">> := Alg}}=Token) ->
             Token#{verify_result => 'false', verify_error => 'algorithm_not_supported'}
     end;
 verify_header(#{header := #{<<"typ">> := _Typ}}=Token) ->
-    lager:info("invalid jwt typ header", [_Typ]),
+    lager:info("invalid jwt typ header ~p", [_Typ]),
     Token#{verify_result => 'false', verify_error => 'invalid_jwt'}.
 
 -spec verify_signature(map()) -> map().
@@ -150,8 +148,8 @@ alg_2_digest_type(_)           -> 'undefined'.
 -spec epoch() -> integer().
 epoch() -> erlang:system_time('seconds').
 
--spec encode(kz_proplist() | map()) ->
-                    {'ok', ne_binary()} |
+-spec encode(kz_term:proplist() | map()) ->
+                    {'ok', kz_term:ne_binary()} |
                     {'error', any()}.
 encode(Claims) when is_list(Claims) ->
     case props:get_value(<<"iss">>, Claims) of
@@ -270,7 +268,7 @@ set_provider(#{payload := #{<<"iss">> := Issuer}}=Token) ->
     Token#{auth_provider => kz_auth_providers:provider_by_issuer(Issuer)}.
 
 
--spec parse(ne_binary()) -> {'ok', jwt()} | {'error', 'invalid_jwt'}.
+-spec parse(kz_term:ne_binary()) -> {'ok', jwt()} | {'error', 'invalid_jwt'}.
 parse(JWTToken) when is_binary(JWTToken) ->
     case binary:split(JWTToken, <<".">>, ['global']) of
         [Header, Payload, Signature] ->
@@ -288,11 +286,11 @@ parse(JWTToken) when is_binary(JWTToken) ->
             {'error', 'invalid_jwt'}
     end.
 
--spec token(ne_binary() | map()) -> map().
+-spec token(kz_term:ne_binary() | map()) -> map().
 token(JWTToken) ->
     token(JWTToken, []).
 
--spec token(ne_binary() | map(), kz_proplist()) -> map().
+-spec token(kz_term:ne_binary() | map(), kz_term:proplist()) -> map().
 token(JWTToken, Options) when is_binary(JWTToken) ->
     case parse(JWTToken) of
         {'ok', Token} -> token(Token, Options);

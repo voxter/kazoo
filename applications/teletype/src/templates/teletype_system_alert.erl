@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_system_alert).
 -behaviour(teletype_gen_email_template).
 
@@ -15,21 +13,14 @@
         ,subject/0
         ,category/0
         ,friendly_name/0
-        ,to/1, from/1, cc/1, bcc/1, reply_to/1
+        ,to/0, from/0, cc/0, bcc/0, reply_to/0
         ]).
 -export([handle_req/1]).
 
 -include("teletype.hrl").
 
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".system_alert">>).
 
--define(SHOULD_USE_EMAIL
-       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"enable_email_alerts">>, 'true')).
--define(SUBSCRIBER_URL
-       ,kapps_config:get_string(?MOD_CONFIG_CAT, <<"subscriber_url">>)).
-
-
--spec id() -> ne_binary().
+-spec id() -> kz_term:ne_binary().
 id() -> <<"system_alert">>.
 
 -spec macros() -> kz_json:object().
@@ -40,29 +31,29 @@ macros() ->
        ++ ?COMMON_TEMPLATE_MACROS
       ]).
 
--spec subject() -> ne_binary().
+-spec subject() -> kz_term:ne_binary().
 subject() -> <<"System Alert: '{{request.level}}' from '{{request.node}}'">>.
 
--spec category() -> ne_binary().
+-spec category() -> kz_term:ne_binary().
 category() -> <<"system">>.
 
--spec friendly_name() -> ne_binary().
+-spec friendly_name() -> kz_term:ne_binary().
 friendly_name() -> <<"System Notifications">>.
 
--spec to(ne_binary()) -> kz_json:object().
-to(_) -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
+-spec to() -> kz_json:object().
+to() -> ?CONFIGURED_EMAILS(?EMAIL_ADMINS).
 
--spec from(ne_binary()) -> api_ne_binary().
-from(ModConfigCat) -> teletype_util:default_from_address(ModConfigCat).
+-spec from() -> kz_term:api_ne_binary().
+from() -> teletype_util:default_from_address().
 
--spec cc(ne_binary()) -> kz_json:object().
-cc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec cc() -> kz_json:object().
+cc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec bcc(ne_binary()) -> kz_json:object().
-bcc(_) -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
+-spec bcc() -> kz_json:object().
+bcc() -> ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, []).
 
--spec reply_to(ne_binary()) -> api_ne_binary().
-reply_to(ModConfigCat) -> teletype_util:default_reply_to(ModConfigCat).
+-spec reply_to() -> kz_term:api_ne_binary().
+reply_to() -> teletype_util:default_reply_to().
 
 -spec init() -> 'ok'.
 init() ->
@@ -70,61 +61,59 @@ init() ->
     teletype_templates:init(?MODULE),
     teletype_bindings:bind(id(), ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_responses().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:system_alert_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_responses().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [id()]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(id(), <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [id()]),
 
     case kz_json:get_value([<<"Details">>, <<"Format">>], JObj) of
-        'undefined' -> handle_req_as_email(JObj, 'true');
+        'undefined' -> process_req_as_email(JObj, 'true');
         _Format ->
             lager:debug("using format string '~s'", [_Format]),
-            UseEmail = ?SHOULD_USE_EMAIL,
-            handle_req_as_email(JObj, UseEmail),
-            handle_req_as_http(JObj, ?SUBSCRIBER_URL, UseEmail)
+
+            UseEmail = kz_term:is_true(teletype_util:template_system_value(id(), <<"enable_email_alerts">>, 'true')),
+            SubscriberUrl = teletype_util:template_system_value(id(), <<"subscriber_url">>),
+            [process_req_as_email(JObj, UseEmail)
+            ,process_req_as_http(JObj, SubscriberUrl)
+            ]
     end.
 
--spec handle_req_as_http(kz_json:object(), api_binary(), boolean()) -> 'ok'.
-handle_req_as_http(_JObj, 'undefined', _UseEmail) -> 'ok';
-handle_req_as_http(JObj, Url, UseEmail) ->
+-spec process_req_as_http(kz_json:object(), kz_term:api_binary()) -> template_response().
+process_req_as_http(_JObj, 'undefined') ->
+    teletype_util:notification_ignored(<<(id())/binary, "_http">>);
+process_req_as_http(JObj, Url) ->
     Headers = [{"Content-Type", "application/json"}],
     Encoded = kz_json:encode(JObj),
     case kz_http:post(kz_term:to_list(Url), Headers, Encoded) of
         {'ok', _2xx, _ResponseHeaders, _ResponseBody}
           when (_2xx - 200) < 100 -> %% ie: match "2"++_
-            _ = not UseEmail
-                andalso teletype_util:send_update(JObj, <<"completed">>),
-            lager:debug("JSON data successfully POSTed to '~s'", [Url]);
-        _Error ->
-            lager:debug("failed to POST JSON data to ~p for reason: ~p", [Url,_Error]),
-            maybe_send_email(JObj, UseEmail)
+            lager:debug("JSON data successfully POSTed to '~s'", [Url]),
+            teletype_util:notification_completed(<<(id())/binary, "_http">>);
+        Error ->
+            lager:debug("failed to POST JSON data to ~p for reason: ~p", [Url, Error]),
+            Reason = kz_term:to_binary(io_lib:format("~p", [Error])),
+            teletype_util:notification_failed(Reason, <<(id())/binary, "_http">>)
     end.
 
--spec maybe_send_email(kz_json:object(), boolean()) -> 'ok'.
-maybe_send_email(JObj, 'false') ->
-    handle_req_as_email(JObj, 'true');
-maybe_send_email(_JObj, 'true') ->
-    'ok'.
-
--spec handle_req_as_email(kz_json:object(), boolean() | kz_json:object()) -> 'ok'.
-handle_req_as_email(_JObj, 'false') ->
+-spec process_req_as_email(kz_json:object(), boolean() | kz_json:object()) -> template_response().
+process_req_as_email(_JObj, 'false') ->
     lager:debug("email not enabled for system alerts");
-handle_req_as_email(JObj, 'true') ->
+process_req_as_email(JObj, 'true') ->
     %% Gather data for template
     DataJObj = kz_json:normalize(JObj),
     case teletype_util:is_notice_enabled_default(id()) of
-        'false' -> teletype_util:notification_disabled(DataJObj, id());
-        'true' -> process_req(DataJObj)
+        'false' -> teletype_util:notification_disabled(DataJObj, <<(id())/binary, "_email">>);
+        'true' -> process_req_as_email(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
-process_req(DataJObj) ->
+-spec process_req_as_email(kz_json:object()) -> template_response().
+process_req_as_email(DataJObj) ->
     Macros = macros(DataJObj),
 
     %% Populate templates
@@ -143,18 +132,18 @@ process_req(DataJObj) ->
     {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
     Emails = teletype_util:find_addresses(kz_json:set_value(<<"account_id">>, MasterAccountId, DataJObj)
                                          ,TemplateMetaJObj
-                                         ,teletype_util:mod_config_cat(id())
+                                         ,id()
                                          ),
 
     Attachments = teletype_util:maybe_get_attachments(DataJObj),
 
     put('skip_smtp_log', 'true'),
     case teletype_util:send_email(Emails, Subject, RenderedTemplates, Attachments) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(<<(id())/binary, "_email">>);
+        {'error', Reason} -> teletype_util:notification_failed(<<(id())/binary, "_email">>, Reason)
     end.
 
--spec macros(kz_json:object()) -> kz_proplist().
+-spec macros(kz_json:object()) -> kz_term:proplist().
 macros(DataJObj) ->
     [{<<"system">>, teletype_util:system_params()}
     ,{<<"account">>, teletype_util:account_params(DataJObj)}
@@ -164,7 +153,7 @@ macros(DataJObj) ->
      | details_macros(DataJObj)
     ].
 
--spec details_macros(kz_json:object()) -> kz_proplist().
+-spec details_macros(kz_json:object()) -> kz_term:proplist().
 details_macros(DataJObj) ->
     case kz_json:get_value(<<"details">>, DataJObj) of
         'undefined' -> [];
@@ -173,12 +162,12 @@ details_macros(DataJObj) ->
         Details -> details_groups(kz_json:recursive_to_proplist(Details))
     end.
 
--spec details_groups(kz_proplist()) -> kz_proplist().
+-spec details_groups(kz_term:proplist()) -> kz_term:proplist().
 details_groups(Details) ->
     details_groups(Details, {<<"details">>, []}).
 
--spec details_groups(kz_proplist(), {ne_binary(), kz_proplist()}) ->
-                            kz_proplist().
+-spec details_groups(kz_term:proplist(), {kz_term:ne_binary(), kz_term:proplist()}) ->
+                            kz_term:proplist().
 details_groups([], {_, Acc}) -> Acc;
 
 details_groups([{<<"key_value_store">>, V} | KS], {Group, Acc}) ->
@@ -198,15 +187,15 @@ details_groups([{<<"cf_", _/binary>>,_}=KV | KS], {Group, Acc}) ->
 details_groups([KV | KS], {Group, Acc}) ->
     details_groups(KS, {Group, add_to_group(Group, KV, Acc)}).
 
--spec add_to_group(ne_binary(), {kz_json:path(), kz_json:json_term()}, kz_proplist()) ->
-                          kz_proplist().
+-spec add_to_group(kz_term:ne_binary(), {kz_json:path(), kz_json:json_term()}, kz_term:proplist()) ->
+                          kz_term:proplist().
 add_to_group(Group, KV, Acc) ->
     case props:get_value(Group, Acc) of
         'undefined' -> props:set_value(Group,[KV], Acc);
         Props -> props:set_value(Group, props:insert_value(KV, Props), Acc)
     end.
 
--spec request_macros(kz_json:object()) -> kz_proplist().
+-spec request_macros(kz_json:object()) -> kz_term:proplist().
 request_macros(DataJObj) ->
     kz_json:recursive_to_proplist(
       kz_json:delete_keys([<<"details">>
@@ -233,7 +222,7 @@ request_macros(DataJObj) ->
                          )
      ).
 
--spec admin_user_data(kz_json:object()) -> kz_proplist().
+-spec admin_user_data(kz_json:object()) -> kz_term:proplist().
 admin_user_data(DataJObj) ->
     AccountId = kapi_notifications:account_id(DataJObj),
     case teletype_util:find_account_admin(AccountId) of

@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle e911 provisioning
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle e911 provisioning
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_dash_e911).
 -behaviour(knm_gen_provider).
 
@@ -34,21 +30,20 @@
         andalso file:write_file("/tmp/dash_e911.xml", io_lib:format(Fmt, Args))
        ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is saved, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is saved, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec save(knm_number:knm_number()) ->
-                  knm_number:knm_number().
--spec save(knm_number:knm_number(), api_binary()) ->
                   knm_number:knm_number().
 save(Number) ->
     State = knm_phone_number:state(knm_number:phone_number(Number)),
     save(Number, State).
 
+-spec save(knm_number:knm_number(), kz_term:api_binary()) ->
+                  knm_number:knm_number().
 save(Number, ?NUMBER_STATE_RESERVED) ->
     maybe_update_e911(Number);
 save(Number, ?NUMBER_STATE_IN_SERVICE) ->
@@ -58,13 +53,11 @@ save(Number, ?NUMBER_STATE_PORT_IN) ->
 save(Number, _State) ->
     delete(Number).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is deleted, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is deleted, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) ->
                     knm_number:knm_number().
 delete(Number) ->
@@ -77,21 +70,22 @@ delete(Number) ->
             knm_services:deactivate_feature(Number, ?FEATURE_E911)
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%% @private
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec feature(knm_number:knm_number()) -> kz_json:api_json_term().
 feature(Number) ->
     knm_phone_number:feature(knm_number:phone_number(Number), ?FEATURE_E911).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_update_e911(knm_number:knm_number()) -> knm_number:knm_number().
 maybe_update_e911(N) ->
     PN = knm_number:phone_number(N),
@@ -146,18 +140,17 @@ maybe_update_e911(Number, Address) ->
             update_e911(Number, Address)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec update_e911(knm_number:knm_number(), kz_json:object()) -> kz_json:object().
--spec update_e911(knm_number:knm_number(), kz_json:object(), boolean()) -> kz_json:object().
 update_e911(Number, Address) ->
     DryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     update_e911(Number, Address, DryRun).
 
+-spec update_e911(knm_number:knm_number(), kz_json:object(), boolean()) -> kz_json:object().
 update_e911(_Number, Address, 'true') -> Address;
 update_e911(Number, Address, 'false') ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
@@ -187,12 +180,10 @@ provision_geocoded(E911) ->
             kz_json:set_value(<<"status">>, Status, E911)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type location_response() :: {'geocoded', kz_json:object() | kz_json:objects()} |
                              {'provisioned', kz_json:object() | kz_json:objects()} |
                              {'invalid', binary()} |
@@ -204,13 +195,13 @@ is_valid_location(Location) ->
         {'error', Reason} -> {'error', kz_term:to_binary(Reason)}
     end.
 
-%% @private
--spec parse_response(xml_el()) -> location_response().
--spec parse_response(ne_binary(), xml_el()) -> location_response().
+
+-spec parse_response(kz_types:xml_el()) -> location_response().
 parse_response(Response) ->
     StatusCode = kz_xml:get_value("//Location/status/code/text()", Response),
     parse_response(StatusCode, Response).
 
+-spec parse_response(kz_term:ne_binary(), kz_types:xml_el()) -> location_response().
 parse_response(<<"GEOCODED">>, Response) ->
     {'geocoded',    location_xml_to_json_address(xmerl_xpath:string("//Location", Response))};
 parse_response(<<"PROVISIONED">>, Response) ->
@@ -222,13 +213,11 @@ parse_response(<<"ERROR">>, Response) ->
 parse_response(Else, _) ->
     {'error', kz_term:to_binary(Else)}.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec add_location(ne_binary(), [xml_location()], ne_binary()) ->
+%%------------------------------------------------------------------------------
+-spec add_location(kz_term:ne_binary(), [xml_location()], kz_term:ne_binary()) ->
                           {'geocoded', kz_json:object()} |
                           {'provisioned', kz_json:object()} |
                           {'error', binary()}.
@@ -244,13 +233,11 @@ add_location(Number, Location, CallerName) ->
         {'error', Reason} -> {'error', kz_term:to_binary(Reason)}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec provision_location(ne_binary()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec provision_location(kz_term:ne_binary()) -> kz_term:api_binary().
 provision_location(LocationId) ->
     Props = [{'locationid', [kz_term:to_list(LocationId)]}],
     case emergency_provisioning_request('provisionLocation', Props) of
@@ -259,13 +246,11 @@ provision_location(LocationId) ->
             kz_xml:get_value("//LocationStatus/code/text()", Response)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec remove_number(knm_number:knm_number()) -> api_binary().
+%%------------------------------------------------------------------------------
+-spec remove_number(knm_number:knm_number()) -> kz_term:api_binary().
 remove_number(Number) ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
     lager:debug("removing from upstream '~s'", [Num]),
@@ -288,13 +273,11 @@ remove_number(Number) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Make a REST request to dash e911 emergency provisiong API to preform
+%%------------------------------------------------------------------------------
+%% @doc Make a REST request to dash e911 emergency provisiong API to preform
 %% the given verb (validatelocation, addlocation, ect).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type emergency_provisioning_error() :: 'authentication' |
                                         'authorization' |
                                         'not_found' |
@@ -308,7 +291,7 @@ remove_number(Number) ->
 -type request_props() :: [request_prop()].
 
 -spec emergency_provisioning_request(atom(), request_props()) ->
-                                            {'ok', xml_el()} |
+                                            {'ok', kz_types:xml_el()} |
                                             {'error', emergency_provisioning_error()}.
 emergency_provisioning_request(Verb, Props) ->
     URL = list_to_binary([?EMERG_URL, "/", kz_term:to_lower_binary(Verb)]),
@@ -365,12 +348,10 @@ emergency_provisioning_request(Verb, Props) ->
             {'error', 'unreachable'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type xml_location_property() :: {'address1', list()} |
                                  {'address2', list()} |
                                  {'community', list()} |
@@ -390,13 +371,11 @@ json_address_to_xml_location(JObj) ->
             ],
     [{'location', [KV || {_, V}=KV <- Props, V =/= ['undefined']]}].
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec location_xml_to_json_address(xml_el() | xml_els()) -> kz_json:object() | kz_json:objects().
+%%------------------------------------------------------------------------------
+-spec location_xml_to_json_address(kz_types:xml_el() | kz_types:xml_els()) -> kz_json:object() | kz_json:objects().
 location_xml_to_json_address([]) ->
     kz_json:new();
 location_xml_to_json_address([Xml]) ->
@@ -422,12 +401,10 @@ location_xml_to_json_address(Xml) ->
       ,{<<"legacy_data">>, legacy_data_xml_to_json(xmerl_xpath:string("legacydata", Xml))}
       ]).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec legacy_data_xml_to_json(term()) -> kz_json:object().
 legacy_data_xml_to_json([]) ->
     kz_json:new();

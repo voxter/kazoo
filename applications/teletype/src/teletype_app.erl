@@ -1,34 +1,29 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_app).
 -behaviour(application).
 
--include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include("teletype.hrl").
 
 -export([start/2, stop/1]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Implement the application start behaviour
+%%------------------------------------------------------------------------------
+%% @doc Implement the application start behaviour.
 %% @end
-%%--------------------------------------------------------------------
--spec start(application:start_type(), any()) -> startapp_ret().
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_Type, _Args) ->
     _ = declare_exchanges(),
+    _ = kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, 'teletype', <<"views/notifications.json">>),
     teletype_sup:start_link().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Implement the application stop behaviour
+%%------------------------------------------------------------------------------
+%% @doc Implement the application stop behaviour.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec stop(any()) -> any().
 stop(_State) ->
     'ok'.

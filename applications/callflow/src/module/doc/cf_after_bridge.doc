@@ -1,7 +1,0 @@
-#-------------------------------------------------------------------
-# set [park|transfer|hangup]_after_bridge variable
-#
-# "data":{
-#   "action": "park" | "transfer" | "hangup",
-#   "data":"some_extension_number" // number to transfer to or bool
-# }

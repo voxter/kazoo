@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author SIPLABS LLC (Maksim Krzhemenevskiy)
 %%% @end
-%%% @contributors
-%%%   SIPLABS LLC (Maksim Krzhemenevskiy)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(webhooks_shared_listener).
 
 -behaviour(gen_listener).
@@ -50,16 +48,18 @@
 -define(QUEUE_OPTIONS, [{'exclusive', 'false'}]).
 -define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     {Bindings, Responders} = load_module_bindings_and_responders(),
+    lager:debug("bindings: ~p", [Bindings]),
     gen_listener:start_link({'local', ?SERVER}
                            ,?MODULE
                            ,[{'bindings', Bindings}
@@ -101,7 +101,7 @@ load_module_fold(Module, {Bindings, Responders}=Acc) ->
             Acc
     end.
 
--spec handle_doc_type_update(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_doc_type_update(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_doc_type_update(JObj, _Props) ->
     'true' = kapi_conf:doc_type_update_v(JObj),
     kz_util:put_callid(JObj),
@@ -126,7 +126,6 @@ handle_doc_type_update(JObj, _Props) ->
                        ).
 
 -spec hooks_configured() -> 'ok'.
--spec hooks_configured(ne_binary()) -> 'ok'.
 hooks_configured() ->
     MatchSpec = [{#webhook{_ = '_'}
                  ,[]
@@ -134,6 +133,7 @@ hooks_configured() ->
                  }],
     print_summary(ets:select(webhooks_util:table_id(), MatchSpec, 1)).
 
+-spec hooks_configured(kz_term:ne_binary()) -> 'ok'.
 hooks_configured(AccountId) ->
     MatchSpec = [{#webhook{account_id = '$1'
                           ,_ = '_'
@@ -146,7 +146,6 @@ hooks_configured(AccountId) ->
 -define(FORMAT_STRING_SUMMARY, "| ~-45s | ~-5s | ~-20s | ~-10s | ~-32s |~n").
 
 -spec print_summary('$end_of_table' | {webhooks(), any()}) -> 'ok'.
--spec print_summary('$end_of_table' | {webhooks(), any()}, non_neg_integer()) -> 'ok'.
 print_summary('$end_of_table') ->
     io:format("no webhooks configured~n", []);
 print_summary(Match) ->
@@ -155,6 +154,7 @@ print_summary(Match) ->
              ),
     print_summary(Match, 0).
 
+-spec print_summary('$end_of_table' | {webhooks(), any()}, non_neg_integer()) -> 'ok'.
 print_summary('$end_of_table', Count) ->
     io:format("found ~p webhooks~n", [Count]);
 print_summary({[#webhook{uri=URI
@@ -172,73 +172,52 @@ print_summary({[#webhook{uri=URI
     print_summary(ets:select(Continuation), Count+1).
 
 -define(ACCOUNT_BINDING
-       ,{'conf', [{'restrict_to', ['doc_updates']}
-                 ,{'type', <<"database">>}
-                 ]
-        }
+       ,'conf', [{'restrict_to', ['doc_updates']}
+                ,{'type', <<"database">>}
+                ]
        ).
 
 -spec add_account_bindings() -> 'ok'.
 add_account_bindings() ->
-    gen_listener:add_responder(?SERVER
-                              ,{'webhooks_init', 'maybe_init_account'}
-                              ,[{<<"configuration">>, ?DB_CREATED}]
-                              ),
+    add_responder(),
     gen_listener:add_binding(?SERVER, ?ACCOUNT_BINDING).
 
 -spec remove_account_bindings() -> 'ok'.
 remove_account_bindings() ->
     gen_listener:rm_binding(?SERVER, ?ACCOUNT_BINDING).
 
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
+add_responder() ->
+    gen_listener:add_responder(?SERVER
+                              ,fun webhooks_init:maybe_init_account/2
+                              ,[{<<"configuration">>, ?DB_CREATED}]
+                              ).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%%=============================================================================
+%%% gen_server callbacks
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     kz_util:put_callid(?MODULE),
     {'ok', #state{}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'gen_listener', {'created_queue', _Q}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
@@ -248,60 +227,43 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Allows listener to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {reply, Options}
+%%------------------------------------------------------------------------------
+%% @doc Allows listener to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_event(kz_json:object(), kz_proplist()) -> gen_listener:handle_event_return().
+%%------------------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_term:proplist()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("shared listener terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

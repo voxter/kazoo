@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications Inc
-%%% @doc
-%%% Asterisk queue_log translator for Kazoo
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Asterisk queue_log translator for Kazoo
+%%%
+%%% @author Lucas Bussey, Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Lucas Bussey, Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(quilt_log).
 
 -export([handle_event/1]).

@@ -1,12 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% Handle various migrations that can be performed on accounts
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle various migrations that can be performed on accounts
+%%% @author Mark Magnusson
 %%% @end
-%%% @contributors
-%%%     Mark Magnusson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_migrations).
 
 -export([init/0
@@ -21,8 +18,7 @@
 -define(MIGRATIONS_DOC, <<"migrations">>).
 
 %% Id, Description, Callback Module
--define(MIGRATIONS_LIST, [
-                          {<<"notify_to_teletype">>, <<"Migrate account and all sub accounts to Teletype">>, 'cb_migration_disable_notify'}
+-define(MIGRATIONS_LIST, [{<<"notify_to_teletype">>, <<"Migrate account and all sub accounts to Teletype">>, 'cb_migration_disable_notify'}
                          ]).
 
 -spec init() -> ok.
@@ -33,30 +29,32 @@ init() ->
     ok.
 
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_MigrationId) ->
     [?HTTP_GET, ?HTTP_POST].
 
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
 
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate(Context) ->
     maybe_create_migration_doc(cb_context:account_db(Context)),
     validate(Context, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?HTTP_GET) ->
     load_migration_list(Context);
 
 validate(Context, MigId) ->
     validate(Context, MigId, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate(Context, DocId, ?HTTP_GET) ->
     load_migration_summary(DocId, Context);
 
@@ -217,7 +215,6 @@ maybe_mark_as_complete(MigId, Account, Context) ->
     case cb_context:resp_status(Context) of
         'success' ->
             mark_migration_complete(MigId, Account, Context);
-
         _Failed ->
             lager:info("migration ~p failed to complete", [MigId])
     end.
@@ -226,59 +223,52 @@ maybe_mark_as_complete(MigId, Account, Context) ->
 mark_migration_complete(MigId, AccountId, Context) ->
     lager:info("migration ~p completed successfully on account ~p", [MigId, AccountId]),
 
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    AccountDb = kz_util:format_account_db(AccountId),
     maybe_create_migration_doc(AccountDb),
 
     {'ok', Doc} = kz_datamgr:open_cache_doc(AccountDb, ?MIGRATIONS_DOC),
     Migrations  = kz_json:get_value(<<"migrations_performed">>, Doc),
 
     User = cb_context:auth_user_id(Context),
-    Acct = cb_context:auth_account_id(Context),
+    AuthAccountId = cb_context:auth_account_id(Context),
 
-    Args = kz_json:from_list([{<<"auth_user_id">>, User}
-                             ,{<<"auth_account_id">>, Acct}
-                             ,{<<"auth_account_name">>, get_account_name(Acct)}
-                             ,{<<"auth_user_name">>, get_user_name(Acct, User)}
-                             ,{<<"performed_time">>, kz_time:current_tstamp()}
-                             ]),
+    AuthDoc = cb_context:auth_doc(Context),
+    Args = kz_json:from_list(
+             [{<<"auth_user_id">>, User}
+             ,{<<"auth_account_id">>, AuthAccountId}
+             ,{<<"auth_account_name">>, kzd_accounts:fetch_name(AuthAccountId)}
+             ,{<<"auth_user_name">>, get_user_name(AuthAccountId, User)}
+             ,{<<"performed_time">>, kz_time:now_s()}
+             ,{<<"original_auth_account_id">>, kz_json:get_value(<<"original_account_id">>, AuthDoc)}
+             ,{<<"original_auth_owner_id">>, kz_json:get_value(<<"original_owner_id">>, AuthDoc)}
+             ]),
 
     NewMigs = kz_json:set_value(MigId, Args, Migrations),
-    kz_datamgr:save_doc(AccountDb, kz_json:set_value(<<"migrations_performed">>, NewMigs, Doc)).
+    {'ok', _} = kz_datamgr:save_doc(AccountDb, kz_json:set_value(<<"migrations_performed">>, NewMigs, Doc)),
+    lager:debug("migrating ~s in ~s complete", [MigId, AccountId]).
 
--spec get_account_name(binary()) -> api_ne_binary().
-get_account_name(AcctId) ->
-    case kz_datamgr:open_cache_doc(kz_util:format_account_id(AcctId, 'encoded'), AcctId) of
-        {'ok', Doc} ->
-            kz_json:get_value(<<"name">>, Doc);
-        _Error ->
-            'undefined'
-    end.
-
--spec get_user_name(binary(), binary()) -> api_ne_binary().
-get_user_name(AcctId, UserId) ->
-    case kz_datamgr:open_cache_doc(kz_util:format_account_id(AcctId, 'encoded'), UserId) of
-        {'ok', Doc} ->
-            kz_json:get_value(<<"username">>, Doc);
-        _Error ->
-            'undefined'
+-spec get_user_name(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_ne_binary().
+get_user_name(AccountId, UserId) ->
+    case kzd_user:fetch(AccountId, UserId) of
+        {'ok', UserDoc} -> kzd_user:name(UserDoc);
+        _ -> 'undefined'
     end.
 
 -spec maybe_create_migration_doc(binary()) -> 'ok'.
 maybe_create_migration_doc(Account) ->
     case kz_datamgr:open_cache_doc(Account, ?MIGRATIONS_DOC) of
+        {'ok', _} -> 'ok';
         {'error', 'not_found'} ->
             lager:info("creating migrations document for account ~p", [Account]),
-            create_migration_doc(Account);
-
-        {'ok', _Res} ->
-            'ok'
+            create_migration_doc(Account)
     end.
 
--spec create_migration_doc(binary()) -> kz_json:object().
+-spec create_migration_doc(binary()) -> 'ok'.
 create_migration_doc(Account) ->
-    Doc = kz_json:from_list([{<<"_id">>, ?MIGRATIONS_DOC}
-                            ,{<<"pvt_created">>, kz_time:current_tstamp()}
-                            ,{<<"migrations_performed">>, []}
-                            ]),
-    kz_datamgr:ensure_saved(Account, Doc).
-
+    Doc = kz_json:from_list(
+            [{<<"_id">>, ?MIGRATIONS_DOC}
+            ,{<<"pvt_created">>, kz_time:now_s()}
+            ,{<<"migrations_performed">>, []}
+            ]),
+    {'ok', _} = kz_datamgr:ensure_saved(Account, Doc),
+    lager:debug("created migration doc for account ~s", [Account]).

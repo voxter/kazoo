@@ -1,12 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%% Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_ui_apps).
+-behaviour(kz_gen_service).
 
 -export([reconcile/1, reconcile/2]).
 -export([is_in_use/1]).
@@ -14,16 +13,14 @@
 -define(ACCOUNTS_DB, <<"accounts">>).
 -define(CATEGORY, <<"ui_apps">>).
 
--include("kazoo_services.hrl").
+-include("services.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec reconcile(kz_services:services()) -> kz_services:services().
--spec reconcile(kz_services:services(), ne_binary()) -> kz_services:services().
 reconcile(Services) ->
     AccountId = kz_services:account_id(Services),
     case kz_datamgr:open_doc(?ACCOUNTS_DB, AccountId) of
@@ -48,17 +45,16 @@ reconcile_account(Services, AccountDoc) ->
                  ,kz_json:get_value(<<"ui_apps">>, AccountDoc, kz_json:new())
                  ).
 
+-spec reconcile(kz_services:services(), kz_term:ne_binary()) -> kz_services:services().
 reconcile(Services, AppName) ->
     %% Because you can only be charged once for an app
     NewServices = kz_services:reset_category(?CATEGORY, Services),
     kz_services:update(?CATEGORY, AppName, 1, NewServices).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_in_use(kz_json:object()) -> boolean().
 is_in_use(AppJObj) ->
     Allowed = kzd_app:allowed_users(AppJObj, <<"specific">>),

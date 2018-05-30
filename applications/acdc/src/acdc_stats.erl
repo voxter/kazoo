@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
-%%% @doc
-%%% Collector of stats
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Collector of stats
+%%% @author James Aimonetti
+%%% @author Sponsored by GTNetwork LLC, Implemented by SIPLABS LLC
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_stats).
 -behaviour(gen_listener).
 
@@ -78,22 +76,13 @@
 -define(SERVER, ?MODULE).
 
 %% Public API
--spec call_waiting(api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ) -> 'ok' | {'error', any()}.
--spec call_waiting(api_binary()
-                  ,api_binary()
-                  ,integer()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binaries()
-                  ) -> 'ok' | {'error', any()}.
+-spec call_waiting(kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_integer()
+                  ) -> 'ok'.
 call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
@@ -101,12 +90,22 @@ call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPri
              ,{<<"Call-ID">>, CallId}
              ,{<<"Caller-ID-Name">>, CallerIdName}
              ,{<<"Caller-ID-Number">>, CallerIdNumber}
-             ,{<<"Entered-Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Entered-Timestamp">>, kz_time:now_s()}
              ,{<<"Caller-Priority">>, CallerPriority}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
+    call_state_change(AccountId, 'waiting', Prop),
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
 
+-spec call_waiting(kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_integer()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_binary()
+                  ,kz_term:api_integer()
+                  ,kz_term:api_binaries()
+                  ) -> 'ok'.
 call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority, RequiredSkills) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
@@ -122,22 +121,23 @@ call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber,
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
 
--spec call_abandoned(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec call_abandoned(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), atom()) -> 'ok'.
 call_abandoned(AccountId, QueueId, CallId, Reason) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Abandon-Reason">>, Reason}
-             ,{<<"Abandon-Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Abandon-Timestamp">>, kz_time:now_s()}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_abandoned/1).
+    call_state_change(AccountId, 'abandoned', Prop),
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_abandoned/1).
 
--spec call_marked_callback(ne_binary()
-                          ,ne_binary()
-                          ,ne_binary()
-                          ,ne_binary()
+-spec call_marked_callback(kz_term:ne_binary()
+                          ,kz_term:ne_binary()
+                          ,kz_term:ne_binary()
+                          ,kz_term:ne_binary()
                           ) -> 'ok' | {'error', any()}.
 call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
     Prop = props:filter_undefined(
@@ -152,19 +152,20 @@ call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
      ,fun kapi_acdc_stats:publish_call_marked_callback/1
      ).
 
--spec call_handled(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec call_handled(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 call_handled(AccountId, QueueId, CallId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Handled-Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Handled-Timestamp">>, kz_time:now_s()}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_handled/1).
+    call_state_change(AccountId, 'handled', Prop),
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_handled/1).
 
--spec call_missed(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec call_missed(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 call_missed(AccountId, QueueId, AgentId, CallId, ErrReason) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
@@ -172,131 +173,135 @@ call_missed(AccountId, QueueId, AgentId, CallId, ErrReason) ->
              ,{<<"Call-ID">>, CallId}
              ,{<<"Agent-ID">>, AgentId}
              ,{<<"Miss-Reason">>, ErrReason}
-             ,{<<"Miss-Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Miss-Timestamp">>, kz_time:now_s()}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_missed/1).
+    call_state_change(AccountId, 'missed', Prop),
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_missed/1).
 
--spec call_processed(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec call_processed(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), atom()) -> 'ok'.
 call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Processed-Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Processed-Timestamp">>, kz_time:now_s()}
              ,{<<"Hung-Up-By">>, Initiator}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_processed/1).
+    call_state_change(AccountId, 'processed', Prop),
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_processed/1).
 
--spec agent_ready(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_ready(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_ready(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"ready">>}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_ready/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_ready/1).
 
--spec agent_logged_in(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_logged_in(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_logged_in(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"logged_in">>}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_logged_in/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_logged_in/1).
 
--spec agent_logged_out(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_logged_out(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_logged_out(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"logged_out">>}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_logged_out/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_logged_out/1).
 
--spec agent_connecting(ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
--spec agent_connecting(ne_binary(), ne_binary(), ne_binary(), api_ne_binary(), api_ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_connecting(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_connecting(AcctId, AgentId, CallId) ->
     agent_connecting(AcctId, AgentId, CallId, 'undefined', 'undefined').
+
+-spec agent_connecting(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) -> 'ok'.
 agent_connecting(AcctId, AgentId, CallId, CallerIDName, CallerIDNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"connecting">>}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Caller-ID-Name">>, CallerIDName}
              ,{<<"Caller-ID-Number">>, CallerIDNumber}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_connecting/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_connecting/1).
 
--spec agent_connected(ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
--spec agent_connected(ne_binary(), ne_binary(), ne_binary(), api_ne_binary(), api_ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_connected(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_connected(AcctId, AgentId, CallId) ->
     agent_connected(AcctId, AgentId, CallId, 'undefined', 'undefined').
+
+-spec agent_connected(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) -> 'ok'.
 agent_connected(AcctId, AgentId, CallId, CallerIDName, CallerIDNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"connected">>}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Caller-ID-Name">>, CallerIDName}
              ,{<<"Caller-ID-Number">>, CallerIDNumber}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_connected/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_connected/1).
 
--spec agent_wrapup(ne_binary(), ne_binary(), pos_integer()) -> 'ok' | {'error', any()}.
+-spec agent_wrapup(kz_term:ne_binary(), kz_term:ne_binary(), pos_integer()) -> 'ok'.
 agent_wrapup(AcctId, AgentId, WaitTime) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"wrapup">>}
              ,{<<"Wait-Time">>, WaitTime}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_wrapup/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_wrapup/1).
 
--spec agent_paused(ne_binary(), ne_binary(), api_pos_integer(), api_binary()) -> 'ok' | {'error', any()}.
+-spec agent_paused(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_pos_integer(), kz_term:api_binary()) -> 'ok'.
 agent_paused(AcctId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AcctId]);
 agent_paused(AcctId, AgentId, PauseTime, Alias) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"paused">>}
              ,{<<"Pause-Time">>, PauseTime}
              ,{<<"Pause-Alias">>, Alias}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_paused/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_paused/1).
 
--spec agent_outbound(ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
+-spec agent_outbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_outbound(AcctId, AgentId, CallId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
              ,{<<"Agent-ID">>, AgentId}
-             ,{<<"Timestamp">>, kz_time:current_tstamp()}
+             ,{<<"Timestamp">>, kz_time:now_s()}
              ,{<<"Status">>, <<"outbound">>}
              ,{<<"Call-ID">>, CallId}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_outbound/1).
+    'ok' = kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_status_outbound/1).
 
--spec agent_statuses() -> ne_binaries().
+-spec agent_statuses() -> kz_term:ne_binaries().
 agent_statuses() ->
     ?STATUS_STATUSES.
 
@@ -345,31 +350,38 @@ manual_cleanup_statuses(Window) ->
     gen_listener:cast(Srv, {'remove_status', StatusMatch}).
 
 %% ETS config
+
 -spec call_table_id() -> atom().
--spec call_key_pos() -> pos_integer().
--spec call_table_opts() -> kz_proplist().
 call_table_id() -> 'acdc_stats_call'.
+
+-spec call_key_pos() -> pos_integer().
 call_key_pos() -> #call_stat.id.
+
+-spec call_table_opts() -> kz_term:proplist().
 call_table_opts() ->
     ['protected', 'named_table'
     ,{'keypos', call_key_pos()}
     ].
 
 -spec call_summary_table_id() -> atom().
--spec call_summary_key_pos() -> pos_integer().
--spec call_summary_table_opts() -> kz_proplist().
 call_summary_table_id() -> 'acdc_stats_call_summary'.
+
+-spec call_summary_key_pos() -> pos_integer().
 call_summary_key_pos() -> #call_summary_stat.id.
+
+-spec call_summary_table_opts() -> kz_term:proplist().
 call_summary_table_opts() ->
     ['protected', 'named_table'
     ,{'keypos', call_summary_key_pos()}
     ].
 
 -spec agent_call_table_id() -> atom().
--spec agent_call_key_pos() -> pos_integer().
--spec agent_call_table_opts() -> kz_proplist().
 agent_call_table_id() -> 'acdc_stats_agent_call'.
+
+-spec agent_call_key_pos() -> pos_integer().
 agent_call_key_pos() -> #agent_call_stat.id.
+
+-spec agent_call_table_opts() -> kz_term:proplist().
 agent_call_table_opts() ->
     ['bag', 'protected', 'named_table'
     ,{'keypos', agent_call_key_pos()}
@@ -423,17 +435,16 @@ agent_call_table_opts() ->
                     ]).
 -define(QUEUE_NAME, <<>>).
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_listener:start_link(?SERVER
                            ,[{'bindings', ?BINDINGS}
                             ,{'responders', ?RESPONDERS}
                             ,{'queue_name', ?QUEUE_NAME}
-                            ]
-                           ,[]
-                           ).
+                            ],
+                            []).
 
--spec handle_call_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_call_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_stat(JObj, Props) ->
     case kz_json:get_value(<<"Event-Name">>, JObj) of
         <<"waiting">> -> handle_waiting_stat(JObj, Props);
@@ -448,7 +459,7 @@ handle_call_stat(JObj, Props) ->
             lager:debug("recv unknown call stat type ~s: ~p", [_Name, JObj])
     end.
 
--spec handle_call_query(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_call_query(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_query(JObj, _Prop) ->
     'true' = kapi_acdc_stats:current_calls_req_v(JObj),
     RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
@@ -467,7 +478,7 @@ handle_call_query(JObj, _Prop) ->
         {'error', Errors} -> publish_call_query_errors(RespQ, MsgId, Errors)
     end.
 
--spec handle_call_summary_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_call_summary_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_summary_req(JObj, _Prop) ->
     'true' = kapi_acdc_stats:call_summary_req_v(JObj),
     RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
@@ -484,7 +495,7 @@ handle_call_summary_req(JObj, _Prop) ->
              end,
     publish_summary_data(RespQ, MsgId, Summary, Active).
 
--spec handle_agent_calls_req(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_agent_calls_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_agent_calls_req(JObj, _Prop) ->
     'true' = kapi_acdc_stats:agent_calls_req_v(JObj),
     RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
@@ -496,20 +507,18 @@ handle_agent_calls_req(JObj, _Prop) ->
         {'error', Errors} -> publish_agent_call_query_errors(RespQ, MsgId, Errors)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Handle requests for the average wait time of a queue based on stats
+%%------------------------------------------------------------------------------
+%% @doc Handle requests for the average wait time of a queue based on stats
 %%
 %% @end
-%%--------------------------------------------------------------------
--spec handle_average_wait_time_req(kz_json:object(), kz_proplist()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec handle_average_wait_time_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_average_wait_time_req(JObj, _Prop) ->
     'true' = kapi_acdc_stats:average_wait_time_req_v(JObj),
     Match = average_wait_time_build_match_spec(JObj),
     query_average_wait_time(Match, JObj).
 
--spec find_call(ne_binary()) -> api_object().
+-spec find_call(kz_term:ne_binary()) -> kz_term:api_object().
 find_call(CallId) ->
     MS = [{#call_stat{call_id=CallId
                      ,_ = '_'
@@ -545,11 +554,11 @@ start_archive_timer() ->
 start_cleanup_timer() ->
     erlang:send_after(?CLEANUP_PERIOD, self(), ?CLEANUP_MSG).
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Req, _From, State) ->
     {'reply', 'ok', State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'create_call', JObj}, State) ->
     Id = call_stat_id(JObj),
     lager:debug("creating new call stat ~s", [Id]),
@@ -649,7 +658,7 @@ handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'ETS-TRANSFER', _TblId, _From, _Data}, State) ->
     lager:debug("ETS control for ~p transferred to me for writing", [_TblId]),
     {'noreply', State};
@@ -748,7 +757,7 @@ call_match_builder_fold(<<"Status">>, Status, {CallStat, Contstraints}) ->
             {'error', kz_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
     end;
 call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
     try kz_term:to_integer(Start) of
@@ -771,7 +780,7 @@ call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
             {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is not an integer">>}])}
     end;
 call_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) ->
-    Now = kz_time:current_tstamp(),
+    Now = kz_time:now_s(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
     try kz_term:to_integer(End) of
@@ -879,7 +888,7 @@ average_wait_time_build_match_spec(JObj) ->
 
     average_wait_time_build_match_spec(Match, Window).
 
--spec average_wait_time_build_match_spec(ets:match_spec(), api_integer()) ->
+-spec average_wait_time_build_match_spec(ets:match_spec(), kz_term:api_integer()) ->
                                                 ets:match_spec().
 average_wait_time_build_match_spec(Match, 'undefined') ->
     Match;
@@ -894,7 +903,7 @@ is_valid_call_status(S) ->
         'false' -> 'false'
     end.
 
--spec query_calls(ets:match_spec(), pos_integer() | 'no_limit') -> kz_proplist().
+-spec query_calls(ets:match_spec(), pos_integer() | 'no_limit') -> kz_term:proplist().
 query_calls(Match, _Limit) ->
     case ets:select(call_table_id(), Match) of
         [] ->
@@ -919,7 +928,7 @@ query_calls(Match, _Limit) ->
             ]
     end.
 
--spec query_call_summary(ets:match_spec(), pos_integer() | 'no_limit') -> kz_proplist().
+-spec query_call_summary(ets:match_spec(), pos_integer() | 'no_limit') -> kz_term:proplist().
 query_call_summary(Match, _Limit) ->
     case ets:select(call_summary_table_id(), Match) of
         [] ->
@@ -940,7 +949,7 @@ query_call_summary(Match, _Limit) ->
             [{<<"Data">>, JsonResult}]
     end.
 
--spec query_call_summary_fold(call_summary_stat(), kz_proplist()) -> kz_proplist().
+-spec query_call_summary_fold(call_summary_stat(), kz_term:proplist()) -> kz_term:proplist().
 query_call_summary_fold(#call_summary_stat{queue_id=QueueId
                                           ,status=Status
                                           ,wait_time=WaitTime
@@ -952,12 +961,12 @@ query_call_summary_fold(#call_summary_stat{queue_id=QueueId
                                         end,
     props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1}, Props).
 
--spec query_agent_calls(ne_binary(), ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
+-spec query_agent_calls(kz_term:ne_binary(), kz_term:ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
     case ets:select(agent_call_table_id(), Match) of
         [] ->
             lager:debug("no stats found, sorry ~s", [RespQ]),
-            Resp = [{<<"Query-Time">>, kz_time:current_tstamp()}
+            Resp = [{<<"Query-Time">>, kz_time:now_s()}
                    ,{<<"Msg-ID">>, MsgId}
                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
@@ -966,7 +975,7 @@ query_agent_calls(RespQ, MsgId, Match, _Limit) ->
             QueryResult = lists:foldl(fun query_agent_calls_fold/2, kz_json:new(), Stats),
             Resp = kz_json:to_proplist(kz_json:set_value(<<"Data">>, QueryResult, kz_json:new())) ++
                 kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
-                [{<<"Query-Time">>, kz_time:current_tstamp()}
+                [{<<"Query-Time">>, kz_time:now_s()}
                 ,{<<"Msg-ID">>, MsgId}
                 ],
             kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp)
@@ -987,18 +996,16 @@ increment_agent_calls(#agent_call_stat{queue_id=QueueId
         _ -> AgentJObj
     end.
 
--spec increment_agent_calls(ne_binary(), kz_json:object(), ne_binary()) -> kz_json:object().
+-spec increment_agent_calls(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
 increment_agent_calls(QueueId, AgentJObj, Key) ->
     Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
     kz_json:set_value([QueueId, Key], Count, AgentJObj).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calculate and reply with the average wait time on a queue
+%%------------------------------------------------------------------------------
+%% @doc Calculate and reply with the average wait time on a queue
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec query_average_wait_time(ets:match_spec(), kz_json:object()) -> 'ok'.
 query_average_wait_time(Match, JObj) ->
     AverageWaitTime = average_wait_time_fold(ets:select(call_table_id(), Match)),
@@ -1010,14 +1017,12 @@ query_average_wait_time(Match, JObj) ->
            ],
     kapi_acdc_stats:publish_average_wait_time_resp(RespQ, Resp).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calculate the average wait time given a list of finished call stat
+%%------------------------------------------------------------------------------
+%% @doc Calculate the average wait time given a list of finished call stat
 %% timestamps
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec average_wait_time_fold(list()) -> non_neg_integer().
 average_wait_time_fold(Stats) ->
     {CallCount, TotalWaitTime} = lists:foldl(fun average_wait_time_fold/2
@@ -1049,7 +1054,7 @@ force_archive_data() ->
     'ok'.
 
 cleanup_data(Srv) ->
-    Past = kz_time:current_tstamp() - ?CLEANUP_WINDOW,
+    Past = kz_time:now_s() - ?CLEANUP_WINDOW,
     PastConstraint = {'=<', '$1', Past},
 
     TypeConstraints = [{'=/=', '$2', {'const', <<"waiting">>}}
@@ -1104,7 +1109,7 @@ archive_call_data(Srv, 'true') ->
 archive_call_data(Srv, 'false') ->
     kz_util:put_callid(<<"acdc_stats.call_archiver">>),
 
-    Past = kz_time:current_tstamp() - ?ARCHIVE_WINDOW,
+    Past = kz_time:now_s() - ?ARCHIVE_WINDOW,
     Match = [{#call_stat{entered_timestamp='$1'
                         ,status='$2'
                         ,is_archived='$3'
@@ -1248,8 +1253,9 @@ talk_time(H, P) when is_integer(H), is_integer(P) -> P - H;
 talk_time(_, _) -> 'undefined'.
 
 -spec misses_to_docs(agent_misses()) -> kz_json:objects().
--spec miss_to_doc(agent_miss()) -> kz_json:object().
 misses_to_docs(Misses) -> [miss_to_doc(Miss) || Miss <- Misses].
+
+-spec miss_to_doc(agent_miss()) -> kz_json:object().
 miss_to_doc(#agent_miss{agent_id=AgentId
                        ,miss_reason=Reason
                        ,miss_timestamp=T
@@ -1259,10 +1265,10 @@ miss_to_doc(#agent_miss{agent_id=AgentId
                       ,{<<"timestamp">>, T}
                       ]).
 
--spec publish_summary_data(ne_binary()
-                          ,ne_binary()
-                          ,kz_proplist() | {'error', _}
-                          ,kz_proplist() | {'error', _}) -> 'ok'.
+-spec publish_summary_data(kz_term:ne_binary()
+                          ,kz_term:ne_binary()
+                          ,kz_term:proplist() | {'error', _}
+                          ,kz_term:proplist() | {'error', _}) -> 'ok'.
 publish_summary_data(RespQ, MsgId, {'error', Errors}, _) ->
     publish_call_summary_query_errors(RespQ, MsgId, Errors);
 publish_summary_data(RespQ, MsgId, _, {'error', Errors}) ->
@@ -1276,28 +1282,28 @@ publish_summary_data(RespQ, MsgId, Summary, Active) ->
         ],
     kapi_acdc_stats:publish_call_summary_resp(RespQ, Resp).
 
--spec remove_missed(kz_proplist()) -> kz_proplist().
+-spec remove_missed(kz_term:proplist()) -> kz_term:proplist().
 remove_missed(Active) ->
     [{<<"Waiting">>, remove_misses_fold(props:get_value(<<"Waiting">>, Active, []))}
     ,{<<"Handled">>, remove_misses_fold(props:get_value(<<"Handled">>, Active, []))}
     ].
 
 -spec remove_misses_fold(kz_json:objects()) -> kz_json:objects().
--spec remove_misses_fold(kz_json:objects(), kz_json:objects()) -> kz_json:objects().
 remove_misses_fold(JObjs) ->
     remove_misses_fold(JObjs, []).
 
+-spec remove_misses_fold(kz_json:objects(), kz_json:objects()) -> kz_json:objects().
 remove_misses_fold([], Acc) ->
     Acc;
 remove_misses_fold([JObj|JObjs], Acc) ->
     remove_misses_fold(JObjs, [kz_json:delete_key(<<"misses">>, JObj) | Acc]).
 
--spec init_db(ne_binary()) -> 'ok'.
+-spec init_db(kz_term:ne_binary()) -> 'ok'.
 init_db(AccountId) ->
     DbName = acdc_stats_util:db_name(AccountId),
     maybe_created_db(DbName, kazoo_modb:maybe_create(DbName)).
 
--spec maybe_created_db(ne_binary(), boolean()) -> 'ok'.
+-spec maybe_created_db(kz_term:ne_binary(), boolean()) -> 'ok'.
 maybe_created_db(DbName, 'false') ->
     case kz_datamgr:db_exists(DbName) of
         'true' ->
@@ -1310,15 +1316,16 @@ maybe_created_db(DbName, 'true') ->
     lager:debug("created db ~s, adding views", [DbName]),
     kz_datamgr:revise_views_from_folder(DbName, 'acdc').
 
--spec call_stat_id(kz_json:object()) -> ne_binary().
--spec call_stat_id(ne_binary(), ne_binary()) -> ne_binary().
+-spec call_stat_id(kz_json:object()) -> kz_term:ne_binary().
 call_stat_id(JObj) ->
     call_stat_id(kz_json:get_value(<<"Call-ID">>, JObj)
                 ,kz_json:get_value(<<"Queue-ID">>, JObj)
                 ).
+
+-spec call_stat_id(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 call_stat_id(CallId, QueueId) -> <<CallId/binary, "::", QueueId/binary>>.
 
--spec handle_waiting_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_waiting_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_waiting_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_waiting_v(JObj),
 
@@ -1337,7 +1344,7 @@ handle_waiting_stat(JObj, Props) ->
             update_call_stat(Id, Updates, Props)
     end.
 
--spec handle_missed_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_missed_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_missed_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_missed_v(JObj),
 
@@ -1354,7 +1361,7 @@ create_miss(JObj) ->
                ,miss_timestamp = kz_json:get_value(<<"Miss-Timestamp">>, JObj)
                }.
 
--spec handle_abandoned_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_abandoned_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_abandoned_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_abandoned_v(JObj),
 
@@ -1371,7 +1378,7 @@ handle_abandoned_stat(JObj, Props) ->
             update_call_stat(Id, Updates, Props)
     end.
 
--spec handle_marked_callback_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_marked_callback_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_marked_callback_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_marked_callback_v(JObj),
 
@@ -1382,7 +1389,7 @@ handle_marked_callback_stat(JObj, Props) ->
                 ]),
     update_call_stat(Id, Updates, Props).
 
--spec handle_handled_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_handled_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_handled_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_handled_v(JObj),
 
@@ -1394,7 +1401,7 @@ handle_handled_stat(JObj, Props) ->
                 ]),
     update_call_stat(Id, Updates, Props).
 
--spec handle_processed_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_processed_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_processed_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_processed_v(JObj),
 
@@ -1407,7 +1414,7 @@ handle_processed_stat(JObj, Props) ->
                 ]),
     update_call_stat(Id, Updates, Props).
 
--spec handle_exited_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_exited_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_exited_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_exited_position_v(JObj),
 
@@ -1415,7 +1422,7 @@ handle_exited_stat(JObj, Props) ->
     Updates = props:filter_undefined([{#call_stat.exited_position, kz_json:get_value(<<"Exited-Position">>, JObj)}]),
     update_call_stat(Id, Updates, Props).
 
--spec flush_call_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec flush_call_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 flush_call_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_flush_v(JObj),
 
@@ -1427,7 +1434,7 @@ flush_call_stat(JObj, Props) ->
                      ,{'flush_call', Id}
                      ).
 
--spec find_call_stat(ne_binary()) -> 'undefined' | call_stat().
+-spec find_call_stat(kz_term:ne_binary()) -> 'undefined' | call_stat().
 find_call_stat(Id) ->
     case ets:lookup(call_table_id(), Id) of
         [] -> 'undefined';
@@ -1435,9 +1442,16 @@ find_call_stat(Id) ->
     end.
 
 -type updates() :: [{pos_integer(), any()}].
--spec update_call_stat(ne_binary(), updates(), kz_proplist()) -> 'ok'.
+-spec update_call_stat(kz_term:ne_binary(), updates(), kz_term:proplist()) -> 'ok'.
 update_call_stat(Id, Updates, Props) ->
     gen_listener:cast(props:get_value('server', Props), {'update_call', Id, Updates}).
+
+call_state_change(AccountId, Status, Prop) ->
+    Body = kz_json:normalize(kz_json:from_list([{<<"Event">>, <<"call_status_change">>}
+                                               ,{<<"Status">>, Status}
+                                                | Prop
+                                               ])),
+    kz_edr:event(?APP_NAME, ?APP_VERSION, 'ok', 'info', Body, AccountId).
 
 -spec maybe_add_summary_stat(call_stat()) -> boolean().
 maybe_add_summary_stat(#call_stat{status=Status}=Stat)
@@ -1451,7 +1465,7 @@ maybe_add_agent_call_stat(#call_stat{status= <<"handled">>}=Stat) ->
     ets:insert(agent_call_table_id(), call_stat_to_agent_call_stat(Stat));
 maybe_add_agent_call_stat(_) -> 'false'.
 
--spec add_agent_call_stat_miss(call_stat(), ne_binary(), non_neg_integer()) -> 'true'.
+-spec add_agent_call_stat_miss(call_stat(), kz_term:ne_binary(), non_neg_integer()) -> 'true'.
 add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
     AgentStat = call_stat_to_agent_call_stat(Stat),
     AgentStat1 = AgentStat#agent_call_stat{agent_id=AgentId

@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(trunkstore_maintenance).
 
 -export([migrate/0
@@ -19,10 +17,10 @@
 -include("ts.hrl").
 
 -spec flush() -> 'ok'.
--spec flush(ne_binary()) -> 'ok'.
 flush() ->
     kz_cache:flush_local(?CACHE_NAME).
 
+-spec flush(kz_term:ne_binary()) -> 'ok'.
 flush(Account) ->
     AccountId = kz_util:format_account_id(Account),
     Flush = kz_cache:filter_local(?CACHE_NAME
@@ -160,9 +158,7 @@ create_account_doc(Realm, AcctID, AcctDB) ->
             'ignore'
     end.
 
-%% @public
-%% @doc
-%% Some calls get stuck if they miss the CDR. This clears them out.
+%% @doc Some calls get stuck if they miss the CDR. This clears them out.
 %%@end
 -spec clear_old_calls() -> 'ok'.
 clear_old_calls() ->
@@ -182,19 +178,17 @@ clear_old_calls(Super) ->
      end || P <- Ps
     ].
 
-%% @public
 %% @doc
 %% Usage example: sup trunkstore_maintenance classifier_inherit international pbx_username@realm.domain.tld
 %% @end
--spec classifier_inherit(kz_json:object(), ne_binary()) -> 'ok'.
+-spec classifier_inherit(kz_json:object(), kz_term:ne_binary()) -> 'ok'.
 classifier_inherit(Classifier, UserR) ->
     set_classifier_action(<<"inherit">>, Classifier, UserR).
 
-%% @public
 %% @doc
 %% Usage example: sup trunkstore_maintenance classifier_deny international pbx_username@realm.domain.tld
 %% @end
--spec classifier_deny(kz_json:object(), ne_binary()) -> 'ok'.
+-spec classifier_deny(kz_json:object(), kz_term:ne_binary()) -> 'ok'.
 classifier_deny(Classifier, UserR) ->
     set_classifier_action(<<"deny">>, Classifier, UserR).
 
@@ -219,7 +213,7 @@ set_classifier_action(Action, Classifier, UserR) ->
             io:format("Failed: account with realm ~p does not exist\n", [Realm])
     end.
 
--spec is_ts_cache_object(tuple(), ne_binary()) -> boolean().
+-spec is_ts_cache_object(tuple(), kz_term:ne_binary()) -> boolean().
 is_ts_cache_object({'lookup_user_flags', _Realm, _User, AccountId}, AccountId) ->
     'true';
 is_ts_cache_object({'lookup_did', _DID, AccountId}, AccountId) ->

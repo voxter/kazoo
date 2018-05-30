@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_notify_resend).
 -behaviour(gen_server).
 
@@ -86,14 +84,15 @@
           [{<<"voicemail_new">>, ?VOICEMAIL_RESCHEDULE_RULES}
           ])).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     case gen_server:start_link(?SERVER, ?MODULE, [], []) of
         {'error', {'already_started', Pid}}
@@ -103,22 +102,15 @@ start_link() ->
         Other -> Other
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
--spec init([]) -> {'ok', state(), kz_timeout()}.
+%%------------------------------------------------------------------------------
+-spec init([]) -> {'ok', state(), timeout()}.
 init([]) ->
     kz_util:put_callid(?NAME),
     lager:debug("~s has been started", [?NAME]),
@@ -135,7 +127,7 @@ running() ->
         _ -> gen_server:call(?SERVER, 'running')
     end.
 
--spec send_single(ne_binary()) -> {'ok' | 'failed', kz_json:object()} | {'error', any()}.
+-spec send_single(kz_term:ne_binary()) -> {'ok' | 'failed', kz_json:object()} | {'error', any()}.
 send_single(Id) ->
     case kz_datamgr:open_doc(?KZ_PENDING_NOTIFY_DB, Id) of
         {'ok', JObj} ->
@@ -144,65 +136,42 @@ send_single(Id) ->
         {'error', _}=Error -> Error
     end.
 
-%% @private
 -spec next() -> 'ok'.
 next() ->
     gen_server:cast(?SERVER, 'next_cycle').
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call('running', _From, #state{running=Running}=State) ->
     {'reply', Running, State};
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('next_cycle', State) ->
     {'noreply', State#state{running=[]}, ?TIME_BETWEEN_CYCLE};
 handle_cast(stop, State) ->
-    lager:debug("notify re sender has been stopped"),
+    lager:debug("notify resender has been stopped"),
     {stop, normal, State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info('timeout', State) ->
     ViewOptions = [{'startkey', 0}
-                  ,{'endkey', kz_time:current_tstamp()}
+                  ,{'endkey', kz_time:now_s()}
                   ,{'limit', ?READ_LIMIT}
                   ,'include_docs'
                   ],
@@ -222,37 +191,34 @@ handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec process_single(kz_json:object()) -> {'ok' | 'failed', kz_json:object()}.
 process_single(JObj) ->
     API = kz_json:get_value(<<"payload">>, JObj, kz_json:new()),
@@ -291,7 +257,7 @@ send_notification(JObj, #{ok := OK}=Map) ->
         'false' -> maybe_reschedule(NotifyType, JObj, Map)
     end.
 
--spec call_collect(api_terms(), api_atom()) -> kz_amqp_worker:request_return().
+-spec call_collect(kz_term:api_terms(), kz_term:api_atom()) -> kz_amqp_worker:request_return().
 call_collect(_API, undefined) -> 'ok';
 call_collect(undefined, _) -> 'ok';
 call_collect(API, PublishFun) ->
@@ -336,7 +302,6 @@ db_bulk_result(JObj) ->
     end.
 
 -spec handle_result(kz_amqp_worker:request_return()) -> boolean().
-handle_result('ok') -> 'true';
 handle_result({'ok', Resp}) -> kapps_notify_publisher:is_completed(Resp);
 handle_result({'error', [Error|_]=List}) ->
     case kz_json:is_json_object(Error) of
@@ -347,7 +312,7 @@ handle_result({'error', _Reason}) -> 'false';
 handle_result({'returned', _, Resp}) -> kapps_notify_publisher:is_completed(Resp);
 handle_result({'timeout', Resp}) -> kapps_notify_publisher:is_completed(Resp).
 
--spec maybe_reschedule(ne_binary(), kz_json:object(), map()) -> map().
+-spec maybe_reschedule(kz_term:ne_binary(), kz_json:object(), map()) -> map().
 maybe_reschedule(NotifyType, JObj, #{ko := KO}=Map) ->
     J = apply_reschedule_logic(NotifyType, JObj),
     Attempts = kz_json:get_integer_value(<<"attempts">>, J, 0),
@@ -362,7 +327,7 @@ maybe_reschedule(NotifyType, JObj, #{ko := KO}=Map) ->
             Map#{ko := [kz_json:set_value(<<"max_retried">>, 'true', J)|KO]} %% attempts ++ 1
     end.
 
--spec apply_reschedule_logic(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec apply_reschedule_logic(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 apply_reschedule_logic(NotifyType, JObj) ->
     Attempts = kz_json:get_integer_value(<<"attempts">>, JObj, 0),
 
@@ -382,7 +347,7 @@ apply_reschedule_logic(NotifyType, JObj) ->
             JObj2
     end.
 
--spec apply_reschedule_rules(ne_binary(),{kz_json:objects(), kz_json:path()}, kz_json:object()) ->
+-spec apply_reschedule_rules(kz_term:ne_binary(),{kz_json:objects(), kz_json:path()}, kz_json:object()) ->
                                     {'ok', kz_json:object()} |
                                     {'no_rules', kz_json:object()}.
 apply_reschedule_rules(_NotifyType, {[], _}, JObj) -> {'no_rules', JObj};
@@ -409,7 +374,7 @@ apply_reschedule_rules(NotifyType, {[Rule | Rules], [Key | Keys]}, JObj) ->
 
 -spec set_default_update_fields(kz_json:object(), integer()) -> kz_json:object().
 set_default_update_fields(JObj, Attempts) ->
-    kz_json:set_values([{<<"pvt_modified">>, kz_time:current_tstamp()}
+    kz_json:set_values([{<<"pvt_modified">>, kz_time:now_s()}
                        ,{<<"retry_after">>, fudge_retry_after(Attempts)}
                        ]
                       ,JObj
@@ -419,7 +384,7 @@ set_default_update_fields(JObj, Attempts) ->
 fudge_retry_after(0) -> ?DEFAULT_RETRY_PERIOD;
 fudge_retry_after(Attempts) -> Attempts * ?DEFAULT_RETRY_PERIOD.
 
--spec map_to_publish_fun(api_binary()) -> api_atom().
+-spec map_to_publish_fun(kz_term:api_binary()) -> kz_term:api_atom().
 map_to_publish_fun(undefined) -> undefined;
 map_to_publish_fun(Type) ->
     kz_term:to_atom(<<"publish_", Type/binary>>, 'true').

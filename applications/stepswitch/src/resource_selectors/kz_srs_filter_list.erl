@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_srs_filter_list).
 
 -export([handle_req/5]).
@@ -22,9 +20,9 @@
 -define(DEFAULT_FILTER_MODE, <<"ne_subset_or_exact">>).
 
 -spec handle_req(stepswitch_resources:resources()
-                ,ne_binary()
+                ,kz_term:ne_binary()
                 ,kapi_offnet_resource:req()
-                ,ne_binary()
+                ,kz_term:ne_binary()
                 ,kz_json:object()
                 ) -> stepswitch_resources:resources().
 handle_req(Resources, Number, OffnetJObj, DB, Params) ->
@@ -55,7 +53,7 @@ handle_req(Resources, Number, OffnetJObj, DB, Params) ->
 
 -spec filter_list(sets:set()
                  ,sets:set()
-                 ,ne_binary()
+                 ,kz_term:ne_binary()
                  ) -> boolean().
 filter_list(Set, Set, <<"axact">>) -> 'true';
 filter_list(SetA, SetB, <<"subset">>) -> sets:is_subset(SetA, SetB);

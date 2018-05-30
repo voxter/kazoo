@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(blackhole_maintenance).
 
 
@@ -15,16 +13,16 @@
 -include("blackhole.hrl").
 -include_lib("kazoo/include/kz_system_config.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec start_module(text()) -> 'ok'.
--spec start_module(text(), text() | boolean()) -> 'ok'.
+%%------------------------------------------------------------------------------
+
+-spec start_module(kz_term:text()) -> 'ok'.
 start_module(ModuleBin) ->
     start_module(ModuleBin, 'true').
+
+-spec start_module(kz_term:text(), kz_term:text() | boolean()) -> 'ok'.
 start_module(ModuleBin, Persist) ->
     Req = [{<<"Module">>, ModuleBin}
           ,{<<"Action">>, <<"start">>}
@@ -32,8 +30,8 @@ start_module(ModuleBin, Persist) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req
-                                    ,fun kapi_blackhole:publish_module_req/1
-                                    ,{'blackhole', fun kapi_blackhole:module_resp_v/1, 'true'}
+                                    ,fun kapi_websockets:publish_module_req/1
+                                    ,{'blackhole', fun kapi_websockets:module_resp_v/1, 'true'}
                                     )
     of
         {'ok', JObjs} ->
@@ -46,16 +44,16 @@ start_module(ModuleBin, Persist) ->
             io:format("failed to start module ~s: ~p~n", [ModuleBin, _E])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec stop_module(text()) -> 'ok'.
--spec stop_module(text(), text() | boolean()) -> 'ok'.
+%%------------------------------------------------------------------------------
+
+-spec stop_module(kz_term:text()) -> 'ok'.
 stop_module(ModuleBin) ->
     stop_module(ModuleBin, 'true').
+
+-spec stop_module(kz_term:text(), kz_term:text() | boolean()) -> 'ok'.
 stop_module(ModuleBin, Persist) ->
     Req = [{<<"Module">>, ModuleBin}
           ,{<<"Action">>, <<"stop">>}
@@ -63,8 +61,8 @@ stop_module(ModuleBin, Persist) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req
-                                    ,fun kapi_blackhole:publish_module_req/1
-                                    ,{'blackhole', fun kapi_blackhole:module_resp_v/1, 'true'}
+                                    ,fun kapi_websockets:publish_module_req/1
+                                    ,{'blackhole', fun kapi_websockets:module_resp_v/1, 'true'}
                                     )
     of
         {'ok', JObjs} ->
@@ -77,13 +75,11 @@ stop_module(ModuleBin, Persist) ->
             io:format("failed to stop module ~s: ~p~n", [ModuleBin, _E])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec running_modules() -> atoms().
+%%------------------------------------------------------------------------------
+-spec running_modules() -> kz_term:atoms().
 running_modules() -> blackhole_bindings:modules_loaded().
 
 -spec print_module_resp(kz_json:object()) -> 'ok'.

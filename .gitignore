@@ -1,18 +1,19 @@
 .eunit
 .erlang.cookie
-.Xauthority
 *~
 .#*
 *.log*
 *.sasl
 *.plt
 *.app
+.deps.mk
 *.beam
 *.so
 *.o
 *.d
 *.pid
 *.dump
+*.swp
 *.orig
 *.DS_Store
 
@@ -42,7 +43,7 @@ core/sup/sup
 core/kazoo_number_manager/dialcodes.json
 core/kazoo_number_manager/src/knm_iso3166a2_itu.erl
 
-make/erlang-formatter/
+make/erlang-formatter-master/
 /TAGS
 
 core/kazoo_auth/c_src/env.mk
@@ -80,7 +81,4 @@ compile_commands.json
 
 /doc/mkdocs/*.local
 
-#############
-## Build
-#############
-*.rpm
+.idea/

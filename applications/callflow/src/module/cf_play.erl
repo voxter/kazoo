@@ -1,11 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% "data":{"id":"doc_id"}
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Plays a media file to the caller.
+%%%
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`id'</dt>
+%%%   <dd>Media ID.</dd>
+%%% </dl>
+%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_play).
 
 -behaviour(gen_cf_action).
@@ -16,12 +21,10 @@
 
 -define(POST_ANSWER_DELAY, kapps_config:get_integer(?CF_CONFIG_CAT, <<"post_answer_delay">>, 100)).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     AccountId = kapps_call:account_id(Call),
@@ -31,11 +34,11 @@ handle(Data, Call) ->
             lager:info("invalid data in the play callflow"),
             cf_exe:continue(Call);
         Media ->
-            NoopId = play(Data, Call, Media),
-            handle_noop_recv(Call, cf_util:wait_for_noop(Call, NoopId))
+            NoopResult = play(Data, Call, Media),
+            handle_noop_recv(Call, NoopResult)
     end.
 
--spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
@@ -58,7 +61,7 @@ handle_noop_recv(Call, {'error', _E}) ->
     lager:debug("failure playing: ~p", [_E]),
     cf_exe:continue(Call).
 
--spec play(kz_json:object(), kapps_call:call(), ne_binary()) -> ne_binary().
+-spec play(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) -> kz_term:ne_binary().
 play(Data, Call, Media) ->
     case kz_json:is_false(<<"answer">>, Data) of
         'true' -> 'ok';
@@ -67,4 +70,27 @@ play(Data, Call, Media) ->
             timer:sleep(?POST_ANSWER_DELAY)
     end,
     lager:info("playing media ~s", [Media]),
-    kapps_call_command:play(Media, Call).
+
+    NoopId = kapps_call_command:noop_id(),
+    Commands = [kz_json:from_list([{<<"Application-Name">>, <<"noop">>}
+                                  ,{<<"Call-ID">>, kapps_call:call_id(Call)}
+                                  ,{<<"Msg-ID">>, NoopId}
+                                  ])
+               ,play_command(Data, kapps_call:call_id_direct(Call), Media)
+               ],
+    Command = [{<<"Application-Name">>, <<"queue">>}
+              ,{<<"Commands">>, Commands}
+              ],
+    kapps_call_command:send_command(Command, Call),
+    cf_util:wait_for_noop(Call, NoopId).
+
+-spec play_command(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().
+play_command(Data, CallId, Media) ->
+    kz_json:from_list(
+      [{<<"Application-Name">>, <<"play">>}
+      ,{<<"Media-Name">>, Media}
+      ,{<<"Terminators">>, kapps_call_command:play_terminators(kz_json:get_list_value(<<"terminators">>, Data))}
+      ,{<<"Call-ID">>, CallId}
+      ,{<<"Endless-Playback">>, kz_json:is_true(<<"endless_playback">>, Data)}
+      ,{<<"Loop-Count">>, kz_json:get_integer_value(<<"loop_count">>, Data)}
+      ]).

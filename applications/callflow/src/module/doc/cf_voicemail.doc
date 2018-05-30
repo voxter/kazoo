@@ -1,8 +1,0 @@
-#-------------------------------------------------------------------
-# "data":{
-#   "action":"compose"|"check"
-#   // optional
-#   ,"id":"vmbox_id"
-#   ,"max_message_length":500
-#   ,"interdigit_timeout":2000 // in milliseconds
-# }

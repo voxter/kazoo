@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_ips).
 
 -include("kazoo_ips.hrl").
@@ -18,23 +16,21 @@
 -export([hosts/0]).
 -export([summary/1]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec available() -> {'ok', kz_json:objects()} |
                      {'error', any()}.
--spec available(api_binary()) ->
-                       {'ok', kz_json:objects()} |
-                       {'error', any()}.
-
 available() -> available('undefined').
 
+-spec available(kz_term:api_binary()) ->
+                       {'ok', kz_json:objects()} |
+                       {'error', any()}.
 available(Zone) -> available(Zone, 1).
 
--spec available(api_binary(), non_neg_integer()) ->
+-spec available(kz_term:api_binary(), non_neg_integer()) ->
                        {'ok', kz_json:objects()} |
                        {'error', any()}.
 available(Zone, Quantity) ->
@@ -57,13 +53,11 @@ available(Zone, Quantity) ->
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec assigned(ne_binary()) ->
+%%------------------------------------------------------------------------------
+-spec assigned(kz_term:ne_binary()) ->
                       {'ok', kz_json:objects()} |
                       {'error', any()}.
 assigned(Account) ->
@@ -77,20 +71,37 @@ assigned(Account) ->
         {'error', 'not_found'} ->
             kz_ip_utils:refresh_database(fun() -> assigned(Account) end);
         {'ok', JObjs} ->
-            {'ok', [kz_json:get_value(<<"value">>, JObj) || JObj <- JObjs]};
+            {'ok', sort_assigned([kz_json:get_value(<<"value">>, JObj) || JObj <- JObjs])};
         {'error', _R}=E ->
             lager:debug("unable to get assigned dedicated ips: ~p", [_R]),
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+-spec sort_assigned(kz_json:objects()) -> kz_json:objects().
+sort_assigned(IPs) ->
+    ZoneName = get_zone_name(),
+    sort_assigned(kz_term:shuffle_list(IPs), ZoneName, []).
+
+-spec sort_assigned(kz_json:objects(), kz_term:ne_binary(), kz_json:objects()) -> kz_json:objects().
+sort_assigned([], _, Sorted) -> Sorted;
+sort_assigned([IP|IPs], ZoneName, Sorted) ->
+    case kz_json:get_value(<<"zone">>, IP) =:= ZoneName of
+        'true' -> sort_assigned(IPs, ZoneName, [IP] ++ Sorted);
+        'false' -> sort_assigned(IPs, ZoneName, Sorted ++ [IP])
+    end.
+
+-spec get_zone_name() -> kz_term:ne_binary().
+get_zone_name() ->
+    LocalZone = kz_term:to_binary(kz_nodes:local_zone()),
+    NameMap = kapps_config:get_json(?CONFIG_CAT, <<"zone_name_map">>, kz_json:new()),
+    kz_json:get_ne_value(LocalZone, NameMap, LocalZone).
+
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec zones() ->
-                   {'ok', ne_binaries()} |
+                   {'ok', kz_term:ne_binaries()} |
                    {'error', any()}.
 zones() ->
     ViewOptions = ['group'
@@ -112,14 +123,12 @@ zones() ->
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec hosts() ->
-                   {'ok', ne_binaries()} |
+                   {'ok', kz_term:ne_binaries()} |
                    {'error', any()}.
 hosts() ->
     ViewOptions = ['group'
@@ -141,13 +150,11 @@ hosts() ->
             E
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec summary(api_binary()) ->
+%%------------------------------------------------------------------------------
+-spec summary(kz_term:api_binary()) ->
                      {'ok', kz_json:objects()} |
                      {'error', any()}.
 summary(Host) ->

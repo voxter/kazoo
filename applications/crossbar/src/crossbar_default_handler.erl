@@ -1,15 +1,13 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(crossbar_default_handler).
--behaviour(cowboy_http_handler).
+-behaviour(cowboy_handler).
 
--export([init/3
+-export([init/2
         ,upgrade/4
         ,handle/2
         ,terminate/3
@@ -22,24 +20,21 @@
                        ,<<"/:version/accounts/:account_id/presence/:reportid">>
                        ]).
 
--spec init({atom(), 'http'}, cowboy_req:req(), kz_proplist()) ->
+-spec init(cowboy_req:req(), kz_term:proplist()) ->
                   {'ok', cowboy_req:req(), 'undefined'}.
-init({_Any, 'http'}, Req0, HandlerOpts) ->
-    kz_util:put_callid(?LOG_SYSTEM_ID),
-
-    {Path, Req1} = cowboy_req:path(Req0),
-
+init(Req, HandlerOpts) ->
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
+    Path = cowboy_req:path(Req),
     case get_magic_token(Path) of
-        'undefined' ->
-            {'ok', Req1, 'undefined'};
+        'undefined' -> handle(Req, HandlerOpts);
         Magic ->
             case is_valid_magic_path(Magic) of
                 'true' ->
                     lager:debug("magic path found: ~s", [Magic]),
-                    {'upgrade', 'protocol', ?MODULE, Req1, [{'magic_path', Magic} | HandlerOpts]};
+                    {?MODULE, Req, [{'magic_path', Magic} | HandlerOpts]};
                 'false' ->
                     lager:debug("invalid magic path: ~s", [Magic]),
-                    {'ok', Req1, 'undefined'}
+                    handle(Req, HandlerOpts)
             end
     end.
 
@@ -62,13 +57,10 @@ path_matches_template_tokens([Token|PathTokens], [Token|TemplateTokens]) ->
     path_matches_template_tokens(PathTokens, TemplateTokens);
 path_matches_template_tokens(_, _) -> 'false'.
 
--spec upgrade(cowboy_req:req(), kz_proplist(), any(), any()) -> cowboy_req:req().
+-spec upgrade(cowboy_req:req(), cowboy_middleware:env(), any(), any()) -> {'ok', cowboy_req:req(), cowboy_middleware:env()}.
 upgrade(Req, Env, _Handler, HandlerOpts) ->
-    cowboy_rest:upgrade(Req
-                       ,props:set_value('handler', 'api_resource', Env)
-                       ,'api_resource'
-                       ,HandlerOpts
-                       ).
+    NewEnv = maps:put('handler', 'api_resource', Env),
+    cowboy_rest:upgrade(Req, NewEnv, 'api_resource', HandlerOpts).
 
 get_magic_token(Path) ->
     get_magic_token_from_path(binary:split(Path, <<"/">>, ['global'])).
@@ -83,11 +75,9 @@ get_magic_token_from_path([Path|Paths]) ->
 
 -spec handle(cowboy_req:req(), State) -> {'ok', cowboy_req:req(), State}.
 handle(Req, State) ->
-    lager:debug("default handler executing"),
-    Headers = [{<<"Content-Type">>, <<"text/plain; charset=UTF-8">>}],
-    Path = code:priv_dir('crossbar') ++ "/kazoo.txt",
-    {'ok', Bytes} = file:read_file(Path),
-    {'ok', Req1} = cowboy_req:reply(200, Headers, Bytes, Req),
+    Headers = #{<<"content-type">> => <<"text/plain; charset=UTF-8">>},
+    {'ok', Bytes} = file:read_file(filename:join(code:priv_dir(?APP), "kazoo.txt")),
+    Req1 = cowboy_req:reply(200, Headers, Bytes, Req),
     {'ok', Req1, State}.
 
 -spec terminate(any(), cowboy_req:req(), any()) -> 'ok'.

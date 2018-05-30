@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_port_scheduled).
 
 -export([init/0
@@ -15,7 +13,6 @@
 -include("teletype.hrl").
 
 -define(TEMPLATE_ID, <<"port_scheduled">>).
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
 -define(TEMPLATE_MACROS
        ,kz_json:from_list(
@@ -29,10 +26,10 @@
 -define(TEMPLATE_NAME, <<"Port Scheduled">>).
 
 -define(TEMPLATE_TO, ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL)).
--define(TEMPLATE_FROM, teletype_util:default_from_address(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_FROM, teletype_util:default_from_address()).
 -define(TEMPLATE_CC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
 -define(TEMPLATE_BCC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
--define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to()).
 
 -spec init() -> 'ok'.
 init() ->
@@ -49,14 +46,14 @@ init() ->
                                           ]),
     teletype_bindings:bind(<<"port_scheduled">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:port_scheduled_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(?TEMPLATE_ID, <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
@@ -69,9 +66,9 @@ handle_req(JObj, 'true') ->
         'true' -> process_req(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
-    PortReqId = kz_json:get_value(<<"port_request_id">>, DataJObj),
+    PortReqId = kz_json:get_first_defined([<<"port_request_id">>, [<<"port">>, <<"port_id">>]], DataJObj),
     {'ok', PortReqJObj} = teletype_util:open_doc(<<"port_request">>, PortReqId, DataJObj),
 
     ReqData = kz_json:set_value(<<"port_request">>
@@ -84,7 +81,7 @@ process_req(DataJObj) ->
         'true' -> handle_port_request(kz_json:merge_jobjs(DataJObj, ReqData))
     end.
 
--spec handle_port_request(kz_json:object()) -> 'ok'.
+-spec handle_port_request(kz_json:object()) -> template_response().
 handle_port_request(DataJObj) ->
     Macros = [{<<"system">>, teletype_util:system_params()}
              ,{<<"account">>, teletype_util:account_params(DataJObj)}
@@ -99,17 +96,14 @@ handle_port_request(DataJObj) ->
                                              ),
 
     Subject =
-        teletype_util:render_subject(
-          kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT)
+        teletype_util:render_subject(kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT)
                                     ,Macros
-         ),
+                                    ),
 
-    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
+    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?TEMPLATE_ID),
 
     EmailAttachements = teletype_port_utils:get_attachments(DataJObj),
     case teletype_util:send_email(Emails, Subject, RenderedTemplates, EmailAttachements) of
-        'ok' ->
-            teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} ->
-            teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(?TEMPLATE_ID);
+        {'error', Reason} -> teletype_util:notification_failed(?TEMPLATE_ID, Reason)
     end.

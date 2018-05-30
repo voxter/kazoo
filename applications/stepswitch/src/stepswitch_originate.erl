@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(stepswitch_originate).
 -behaviour(gen_listener).
 
@@ -26,9 +24,9 @@
                ,endpoints = [] :: kz_json:objects()
                ,resource_req :: kapi_offnet_resource:req()
                ,request_handler :: pid()
-               ,response_queue :: api_binary()
-               ,queue :: api_binary()
-               ,timeout :: api_reference()
+               ,response_queue :: kz_term:api_binary()
+               ,queue :: kz_term:api_binary()
+               ,timeout :: kz_term:api_reference()
                }).
 -type state() :: #state{}.
 
@@ -40,14 +38,15 @@
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(kz_json:objects(), kapi_offnet_resource:req()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(kz_json:objects(), kapi_offnet_resource:req()) -> kz_types:startlink_ret().
 start_link(Endpoints, OffnetReq) ->
     gen_listener:start_link(?SERVER, [{'bindings', ?BINDINGS}
                                      ,{'responders', ?RESPONDERS}
@@ -56,21 +55,14 @@ start_link(Endpoints, OffnetReq) ->
                                      ,{'consume_options', ?CONSUME_OPTIONS}
                                      ], [Endpoints, OffnetReq]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([kz_json:objects() | kapi_offnet_resource:req()]) -> {'ok', state()}.
 init([Endpoints, OffnetReq]) ->
     kz_util:put_callid(OffnetReq),
@@ -81,36 +73,20 @@ init([Endpoints, OffnetReq]) ->
                  ,timeout=erlang:send_after(120000, self(), 'originate_timeout')
                  }}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call: ~p", [_Request]),
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'kz_amqp_channel', _}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', Q}}, State) ->
@@ -156,17 +132,11 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p~n", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info('originate_timeout', #state{timeout='undefined'}=State) ->
     {'noreply', State};
 handle_info('originate_timeout', #state{response_queue=ResponseQ
@@ -178,20 +148,16 @@ handle_info(_Info, State) ->
     lager:debug("unhandled info: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Allows listener to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {reply, Options}
+%%------------------------------------------------------------------------------
+%% @doc Allows listener to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(JObj, #state{request_handler=RequestHandler
                          ,resource_req=OffnetReq
                          ,msg_id=MsgId
                          }) ->
-    case kapps_util:get_event_type(JObj) of
+    case kz_util:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
             lager:debug("channel was destroy while waiting for execute extension"),
             gen_listener:cast(RequestHandler, {'originate_result', originate_success(JObj, OffnetReq)});
@@ -220,36 +186,34 @@ handle_event(JObj, #state{request_handler=RequestHandler
     end,
     'ignore'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 build_originate(#state{endpoints=Endpoints
                       ,resource_req=OffnetReq
                       ,queue=Q
@@ -271,38 +235,39 @@ build_originate(#state{endpoints=Endpoints
     FmtEndpoints = stepswitch_util:format_endpoints(Endpoints, CIDName, CIDNum, OffnetReq),
 
     props:filter_undefined(
-      [{<<"Dial-Endpoint-Method">>, <<"single">>}
+      [{<<"Application-Data">>, kz_json:get_value(<<"Application-Data">>, OffnetReq)}
       ,{<<"Application-Name">>, Application}
-      ,{<<"Msg-ID">>, MsgId}
       ,{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
-      ,{<<"Outbound-Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
-      ,{<<"Existing-Call-ID">>, kz_json:get_value(<<"Existing-Call-ID">>, OffnetReq)}
-      ,{<<"Originate-Immediate">>, kz_json:get_value(<<"Originate-Immediate">>, OffnetReq)}
-      ,{<<"Simplify-Loopback">>, kz_json:get_value(<<"Simplify-Loopback">>, OffnetReq)}
-      ,{<<"Loopback-Bowout">>, kz_json:get_value(<<"Loopback-Bowout">>, OffnetReq)}
-      ,{<<"Endpoints">>, FmtEndpoints}
-      ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
-      ,{<<"Outbound-Caller-ID-Name">>, CIDName}
-      ,{<<"Caller-ID-Number">>, CIDNum}
       ,{<<"Caller-ID-Name">>, CIDName}
-      ,{<<"Application-Data">>, kz_json:get_value(<<"Application-Data">>, OffnetReq)}
-      ,{<<"Timeout">>, kz_json:get_value(<<"Timeout">>, OffnetReq)}
-      ,{<<"Ignore-Early-Media">>, kz_json:get_value(<<"Ignore-Early-Media">>, OffnetReq)}
-      ,{<<"Media">>, kz_json:get_value(<<"Media">>, OffnetReq)}
-      ,{<<"Hold-Media">>, kz_json:get_value(<<"Hold-Media">>, OffnetReq)}
-      ,{<<"Presence-ID">>, kz_json:get_value(<<"Presence-ID">>, OffnetReq)}
-      ,{<<"Outbound-Callee-ID-Number">>, kz_json:get_value(<<"Outbound-Callee-ID-Number">>, OffnetReq)}
-      ,{<<"Outbound-Callee-ID-Name">>, kz_json:get_value(<<"Outbound-Callee-ID-Name">>, OffnetReq)}
-      ,{<<"Fax-Identity-Number">>, kz_json:get_value(<<"Fax-Identity-Number">>, OffnetReq, CIDNum)}
-      ,{<<"Fax-Identity-Name">>, kz_json:get_value(<<"Fax-Identity-Name">>, OffnetReq, CIDName)}
-      ,{<<"Fax-Timezone">>, kz_json:get_value(<<"Fax-Timezone">>, OffnetReq)}
-      ,{<<"Ringback">>, kz_json:get_value(<<"Ringback">>, OffnetReq)}
-      ,{<<"Custom-SIP-Headers">>, kz_json:get_value(<<"Custom-SIP-Headers">>, OffnetReq)}
+      ,{<<"Caller-ID-Number">>, CIDNum}
       ,{<<"Custom-Channel-Vars">>, kz_json:set_values(CCVUpdates, CCVs)}
+      ,{<<"Custom-SIP-Headers">>, kz_json:get_value(<<"Custom-SIP-Headers">>, OffnetReq)}
+      ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+      ,{<<"Endpoints">>, FmtEndpoints}
+      ,{<<"Existing-Call-ID">>, kz_json:get_value(<<"Existing-Call-ID">>, OffnetReq)}
+      ,{<<"Fax-Identity-Name">>, kz_json:get_value(<<"Fax-Identity-Name">>, OffnetReq, CIDName)}
+      ,{<<"Fax-Identity-Number">>, kz_json:get_value(<<"Fax-Identity-Number">>, OffnetReq, CIDNum)}
+      ,{<<"Fax-Timezone">>, kz_json:get_value(<<"Fax-Timezone">>, OffnetReq)}
+      ,{<<"Hold-Media">>, kz_json:get_value(<<"Hold-Media">>, OffnetReq)}
+      ,{<<"Ignore-Early-Media">>, kz_json:get_value(<<"Ignore-Early-Media">>, OffnetReq)}
+      ,{<<"Loopback-Bowout">>, kz_json:get_value(<<"Loopback-Bowout">>, OffnetReq)}
+      ,{<<"Media">>, kz_json:get_value(<<"Media">>, OffnetReq)}
+      ,{<<"Msg-ID">>, MsgId}
+      ,{<<"Originate-Immediate">>, kz_json:get_value(<<"Originate-Immediate">>, OffnetReq)}
+      ,{<<"Origination-Call-ID">>, kz_json:get_value(<<"Origination-Call-ID">>, OffnetReq)}
+      ,{<<"Outbound-Call-ID">>, kz_json:get_first_defined([<<"Origination-Call-ID">>, <<"Outbound-Call-ID">>], OffnetReq)}
+      ,{<<"Outbound-Callee-ID-Name">>, kz_json:get_value(<<"Outbound-Callee-ID-Name">>, OffnetReq)}
+      ,{<<"Outbound-Callee-ID-Number">>, kz_json:get_value(<<"Outbound-Callee-ID-Number">>, OffnetReq)}
+      ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+      ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
+      ,{<<"Presence-ID">>, kz_json:get_value(<<"Presence-ID">>, OffnetReq)}
+      ,{<<"Ringback">>, kz_json:get_value(<<"Ringback">>, OffnetReq)}
+      ,{<<"Simplify-Loopback">>, kz_json:get_value(<<"Simplify-Loopback">>, OffnetReq)}
+      ,{<<"Timeout">>, kz_json:get_value(<<"Timeout">>, OffnetReq)}
        | kz_api:default_headers(Q, <<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
       ]).
 
--spec originate_from_uri(ne_binary(), kz_json:object()) -> api_binary().
+-spec originate_from_uri(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_binary().
 originate_from_uri(CIDNum, OffnetReq) ->
     Realm = kz_json:get_first_defined([<<"From-URI-Realm">>
                                       ,<<"Account-Realm">>
@@ -320,7 +285,7 @@ originate_from_uri(CIDNum, OffnetReq) ->
             FromURI
     end.
 
--spec originate_caller_id(kz_json:object()) -> {api_binary(), api_binary()}.
+-spec originate_caller_id(kz_json:object()) -> {kz_term:api_binary(), kz_term:api_binary()}.
 originate_caller_id(OffnetReq) ->
     {kz_json:get_first_defined([<<"Outbound-Caller-ID-Number">>
                                ,<<"Emergency-Caller-ID-Number">>
@@ -330,7 +295,7 @@ originate_caller_id(OffnetReq) ->
                                ], OffnetReq)
     }.
 
--spec originate_timeout(kz_json:object()) -> kz_proplist().
+-spec originate_timeout(kz_json:object()) -> kz_term:proplist().
 originate_timeout(Request) ->
     lager:debug("attempt to connect to resources timed out"),
     [{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, Request)}
@@ -342,7 +307,7 @@ originate_timeout(Request) ->
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec originate_error(kz_json:object(), kz_json:object()) -> kz_proplist().
+-spec originate_error(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 originate_error(JObj, OffnetReq) ->
     lager:debug("error during originate request: ~s", [kz_term:to_binary(kz_json:encode(JObj))]),
     [{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
@@ -354,7 +319,7 @@ originate_error(JObj, OffnetReq) ->
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec originate_success(kz_json:object(), kz_json:object()) -> kz_proplist().
+-spec originate_success(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 originate_success(JObj, OffnetReq) ->
     lager:debug("originate request successfully completed"),
     [{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
@@ -365,7 +330,7 @@ originate_success(JObj, OffnetReq) ->
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec originate_failure(kz_json:object(), kz_json:object()) -> kz_proplist().
+-spec originate_failure(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 originate_failure(JObj, OffnetReq) ->
     lager:debug("originate request failed: ~s", [kz_json:get_value(<<"Application-Response">>, JObj)]),
     [{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
@@ -378,7 +343,7 @@ originate_failure(JObj, OffnetReq) ->
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec originate_ready(kz_json:object(), kz_json:object()) -> kz_proplist().
+-spec originate_ready(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 originate_ready(JObj, OffnetReq) ->
     lager:debug("originate is ready to execute"),
     [{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, JObj)}

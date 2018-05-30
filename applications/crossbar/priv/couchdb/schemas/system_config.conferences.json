@@ -11,6 +11,16 @@
             "description": "conferences bridge username",
             "type": "string"
         },
+        "controls": {
+            "properties": {
+                "default": {
+                    "description": "conferences controls default"
+                },
+                "page": {
+                    "description": "conferences controls page"
+                }
+            }
+        },
         "entry_tone": {
             "default": "tone_stream://v=-7;>=2;+=.1;%(300,0,523,659);v=-7;>=3;+=.1;%(800,0,659,783)",
             "description": "conferences entry tone",
@@ -34,6 +44,11 @@
         "number_timeout": {
             "default": 5000,
             "description": "conferences number timeout",
+            "type": "integer"
+        },
+        "participant_sanity_check_ms": {
+            "default": 60000,
+            "description": "conferences participant_sanity_check_ms",
             "type": "integer"
         },
         "pin_timeout": {

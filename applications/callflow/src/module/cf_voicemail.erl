@@ -1,20 +1,27 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%% "data":{
-%%%   "action":"compose"|"check"
-%%%   // optional
-%%%   ,"id":"vmbox_id"
-%%%   ,"max_message_length":500
-%%%   ,"interdigit_timeout":2000 // in milliseconds
-%%% }
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Check/compose Voicemail messages.
+%%%
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`action'</dt>
+%%%   <dd>One of: `compose' or `check'.</dd>
+%%%
+%%%   <dt>`id'</dt>
+%%%   <dd><strong>Optional: </strong>Voice Mailbox ID.</dd>
+%%%
+%%%   <dt>`max_message_length'</dt>
+%%%   <dd><strong>Optional: </strong>Maximum length of the voicemail message. Default is 500.</dd>
+%%%
+%%%   <dt>`interdigit_timeout'</dt>
+%%%   <dd>How long to wait for the next DTMF, in milliseconds. Default is 2000.</dd>
+%%% </dl>
+%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_voicemail).
-
 -behaviour(gen_cf_action).
 
 -include("callflow.hrl").
@@ -102,60 +109,60 @@
                                 )
        ).
 
--record(keys, {operator = <<"0">>
-                   %% Compose Voicemail
-              ,login = <<"*">>
+-record(keys, {operator = <<"0">> :: kz_term:ne_binary()
+                                     %% Compose Voicemail
+              ,login = <<"*">> :: kz_term:ne_binary()
 
-                   %% Record Review
-              ,save = <<"1">>
-              ,listen = <<"2">>
-              ,record = <<"3">>
+                                  %% Record Review
+              ,save = <<"1">> :: kz_term:ne_binary()
+              ,listen = <<"2">> :: kz_term:ne_binary()
+              ,record = <<"3">> :: kz_term:ne_binary()
 
-                   %% Main Menu
-              ,hear_new = <<"1">>
-              ,hear_saved = <<"2">>
-              ,configure = <<"5">>
-              ,exit = <<"#">>
+                                   %% Main Menu
+              ,hear_new = <<"1">> :: kz_term:ne_binary()
+              ,hear_saved = <<"2">> :: kz_term:ne_binary()
+              ,configure = <<"5">> :: kz_term:ne_binary()
+              ,exit = <<"#">> :: kz_term:ne_binary()
 
-                   %% Config Menu
-              ,rec_unavailable  = <<"1">>
-              ,rec_name = <<"2">>
-              ,set_pin = <<"3">>
-              ,rec_temporary_unavailable  = <<"4">>
-              ,del_temporary_unavailable  = <<"5">>
-              ,return_main = <<"0">>
+                                 %% Config Menu
+              ,rec_unavailable  = <<"1">> :: kz_term:ne_binary()
+              ,rec_name = <<"2">> :: kz_term:ne_binary()
+              ,set_pin = <<"3">> :: kz_term:ne_binary()
+              ,rec_temporary_unavailable = <<"4">> :: kz_term:ne_binary()
+              ,del_temporary_unavailable = <<"5">> :: kz_term:ne_binary()
+              ,return_main = <<"0">> :: kz_term:ne_binary()
 
-                   %% Post playbak
-              ,keep = <<"1">>
-              ,replay = <<"2">>
-              ,forward = <<"3">>
-              ,prev = <<"4">>
-              ,envelope = <<"5">>
-              ,next = <<"6">>
-              ,delete = <<"7">>
+                                        %% Post playbak
+              ,keep = <<"1">> :: kz_term:ne_binary()
+              ,replay = <<"2">> :: kz_term:ne_binary()
+              ,forward = <<"3">> :: kz_term:ne_binary()
+              ,prev = <<"4">> :: kz_term:ne_binary()
+              ,envelope = <<"5">> :: kz_term:ne_binary()
+              ,next = <<"6">> :: kz_term:ne_binary()
+              ,delete = <<"7">> :: kz_term:ne_binary()
 
-                   %% Greeting or instructions
-              ,continue = 'undefined'
+                                   %% Greeting or instructions
+              ,continue = 'undefined' :: kz_term:api_ne_binary()
               }).
 -type vm_keys() :: #keys{}.
 
 -define(KEY_LENGTH, 1).
 
--record(mailbox, {mailbox_id :: api_ne_binary()
+-record(mailbox, {mailbox_id :: kz_term:api_ne_binary()
                  ,mailbox_number = <<>> :: binary()
                  ,exists = 'false' :: boolean()
                  ,skip_instructions = 'false' :: boolean()
                  ,skip_greeting = 'false' :: boolean()
                  ,skip_envelope = 'false' :: boolean()
-                 ,unavailable_media_id :: api_ne_binary()
-                 ,temporary_unavailable_media_id :: api_ne_binary()
-                 ,name_media_id :: api_ne_binary()
+                 ,unavailable_media_id :: kz_term:api_ne_binary()
+                 ,temporary_unavailable_media_id :: kz_term:api_ne_binary()
+                 ,name_media_id :: kz_term:api_ne_binary()
                  ,pin = <<>> :: binary()
-                 ,timezone :: api_ne_binary()
+                 ,timezone :: kz_term:api_ne_binary()
                  ,max_login_attempts = ?MAX_LOGIN_ATTEMPTS :: non_neg_integer()
                  ,require_pin = 'false' :: boolean()
                  ,check_if_owner = 'true' :: boolean()
-                 ,owner_id :: api_ne_binary()
+                 ,owner_id :: kz_term:api_ne_binary()
                  ,is_setup = 'false' :: boolean()
                  ,message_count = 0 :: non_neg_integer()
                  ,max_message_count = 0 :: non_neg_integer()
@@ -163,7 +170,7 @@
                  ,min_message_length = ?MAILBOX_DEFAULT_MSG_MIN_LENGTH :: pos_integer()
                  ,keys = #keys{} :: vm_keys()
                  ,transcribe_voicemail = 'false' :: boolean()
-                 ,notifications :: api_object()
+                 ,notifications :: kz_term:api_object()
                  ,after_notify_action = 'nothing' :: 'nothing' | 'delete' | 'save'
                  ,interdigit_timeout = kapps_call_command:default_interdigit_timeout() :: pos_integer()
                  ,play_greeting_intro = 'false' :: boolean()
@@ -172,19 +179,17 @@
                  ,hunt_deny = <<>> :: binary()
                  ,hunt_allow = <<>> :: binary()
                  ,not_configurable = 'false' :: boolean()
-                 ,account_db :: api_ne_binary()
-                 ,media_extension :: api_ne_binary()
-                 ,forward_type :: api_ne_binary()
+                 ,account_db :: kz_term:api_ne_binary()
+                 ,media_extension :: kz_term:api_ne_binary()
+                 ,forward_type :: kz_term:api_ne_binary()
                  }).
 -type mailbox() :: #mailbox{}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module, based on the payload will either
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module, based on the payload will either
 %% connect a caller to check_voicemail or compose_voicemail.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     case kz_json:get_ne_binary_value(<<"action">>, Data, <<"compose">>) of
@@ -212,29 +217,27 @@ handle(Data, Call) ->
             cf_exe:continue(Call)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec check_mailbox(mailbox(), kapps_call:call()) ->
                            'ok' | {'error', 'channel_hungup'}.
--spec check_mailbox(mailbox(), kapps_call:call(), non_neg_integer()) ->
-                           'ok' | {'error', 'channel_hungup'}.
--spec check_mailbox(mailbox(), boolean(), kapps_call:call(), non_neg_integer()) ->
-                           'ok' | {'error', 'channel_hungup'}.
-
 check_mailbox(Box, Call) ->
     %% Wrapper to initalize the attempt counter
     Resp = check_mailbox(Box, Call, 1),
-    _ = send_mwi_update(Box, Call),
+    _ = send_mwi_update(Box),
     Resp.
 
+-spec check_mailbox(mailbox(), kapps_call:call(), non_neg_integer()) ->
+                           'ok' | {'error', 'channel_hungup'}.
 check_mailbox(#mailbox{owner_id=OwnerId}=Box, Call, Loop) ->
     IsOwner = is_owner(Call, OwnerId),
     check_mailbox(Box, IsOwner, Call, Loop).
 
+-spec check_mailbox(mailbox(), boolean(), kapps_call:call(), non_neg_integer()) ->
+                           'ok' | {'error', 'channel_hungup'}.
 check_mailbox(#mailbox{max_login_attempts=MaxLoginAttempts}, _, Call, Loop) when Loop > MaxLoginAttempts ->
     %% if we have exceeded the maximum loop attempts then terminate this call
     lager:info("maximum number of invalid attempts to check mailbox"),
@@ -291,13 +294,11 @@ check_mailbox(#mailbox{pin=Pin
             'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec find_mailbox(mailbox(), kapps_call:call(), ne_binary(), non_neg_integer()) ->
+%%------------------------------------------------------------------------------
+-spec find_mailbox(mailbox(), kapps_call:call(), kz_term:ne_binary(), non_neg_integer()) ->
                           {'ok', mailbox(), non_neg_integer()} |
                           {'error', 'not_found'}.
 
@@ -339,15 +340,15 @@ find_mailbox(#mailbox{interdigit_timeout=Interdigit}=Box, Call, VmEntryIdMedia, 
             {'error', 'not_found'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% find the voicemail box, by making a fake 'callflow data payload' we look for it now because if the
-%% caller is the owner, and the pin is not required then we skip requesting the pin
+%%------------------------------------------------------------------------------
+%% @doc Find the voicemail box, by making a fake 'callflow data payload' we look
+%% for it now because if the caller is the owner, and the pin is not required
+%% then we skip requesting the pin.
 %%
-%% Note: Check mailbox existence here to properly updating Loop in find_mailbox/4
+%% <div class="notice">Check mailbox existence here to properly updating `Loop' in
+%% {@link find_mailbox/4}.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec find_mailbox_by_number(non_neg_integer(), kapps_call:call()) ->
                                     {'ok', mailbox()} |
                                     {'error', any()}.
@@ -364,7 +365,7 @@ find_mailbox_by_number(BoxNum, Call) ->
         Error -> Error
     end.
 
--spec find_destination_mailbox(mailbox(), kapps_call:call(), ne_binary(), non_neg_integer()) -> mailbox().
+-spec find_destination_mailbox(mailbox(), kapps_call:call(), kz_term:ne_binary(), non_neg_integer()) -> mailbox().
 find_destination_mailbox(#mailbox{max_login_attempts=MaxLoginAttempts}, Call, _SrcBoxId, Loop)
   when Loop > MaxLoginAttempts ->
     lager:info("maximum number of invalid attempts to find destination mailbox"),
@@ -382,22 +383,21 @@ find_destination_mailbox(#mailbox{max_login_attempts=MaxLoginAttempts}=Box, Call
             find_destination_mailbox(Box, Call, SrcBoxId, MaxLoginAttempts + 1)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec compose_voicemail(mailbox(), kapps_call:call()) ->
-                               'ok' | {'branch', _} |
-                               {'error', 'channel_hungup'}.
--spec compose_voicemail(mailbox(), boolean(), kapps_call:call()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
 compose_voicemail(#mailbox{owner_id=OwnerId}=Box, Call) ->
     IsOwner = is_owner(Call, OwnerId),
     compose_voicemail(Box, IsOwner, Call).
 
+-spec compose_voicemail(mailbox(), boolean(), kapps_call:call()) ->
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
 compose_voicemail(#mailbox{check_if_owner='true'}=Box, 'true', Call) ->
     lager:info("caller is the owner of this mailbox"),
     lager:info("overriding action as check (instead of compose)"),
@@ -440,24 +440,20 @@ compose_voicemail(Box, _, Call) ->
     _ = play_greeting(Box, Call),
     maybe_hunt(Box, Call).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec play_greeting_intro(mailbox(), kapps_call:call()) -> ne_binary() | 'ok'.
+%%------------------------------------------------------------------------------
+-spec play_greeting_intro(mailbox(), kapps_call:call()) -> kz_term:ne_binary() | 'ok'.
 play_greeting_intro(#mailbox{play_greeting_intro='true'}, Call) ->
     kapps_call_command:audio_macro([{'prompt', <<"vm-greeting_intro">>}], Call);
 play_greeting_intro(_, _) -> 'ok'.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec play_greeting(mailbox(), kapps_call:call()) -> ne_binary() | 'ok'.
+%%------------------------------------------------------------------------------
+-spec play_greeting(mailbox(), kapps_call:call()) -> kz_term:ne_binary() | 'ok'.
 play_greeting(#mailbox{skip_greeting='true'}, _Call) -> 'ok';
 play_greeting(#mailbox{temporary_unavailable_media_id= <<_/binary>> = MediaId}
              ,Call
@@ -485,23 +481,19 @@ play_greeting(#mailbox{unavailable_media_id=MediaId}, Call) ->
     lager:info("mailbox has a greeting: '~s', corrected to '~s'", [MediaId, Corrected]),
     kapps_call_command:play(Corrected, Call).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec play_instructions(mailbox(), kapps_call:call()) -> ne_binary() | 'ok'.
+%%------------------------------------------------------------------------------
+-spec play_instructions(mailbox(), kapps_call:call()) -> kz_term:ne_binary() | 'ok'.
 play_instructions(#mailbox{skip_instructions='true'}, _) -> 'ok';
 play_instructions(#mailbox{skip_instructions='false'}, Call) ->
     kapps_call_command:prompt(<<"vm-record_message">>, Call).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec maybe_hunt(mailbox(), kapps_call:call()) ->
                         'ok' | {'branch', _} |
                         {'error', 'channel_hungup'}.
@@ -516,12 +508,10 @@ maybe_hunt(Mailbox, Call) ->
         {'error', 'channel_hungup'}=E -> E
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec do_compose_voicemail(mailbox(), kapps_call:call()) ->
                                   'ok' | {'branch', _} |
                                   {'error', 'channel_hungup'}.
@@ -560,13 +550,11 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
             lager:info("error while playing voicemail greeting: ~p", [R])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec do_hunt(mailbox(), kapps_call:call(), ne_binary()) ->
+%%------------------------------------------------------------------------------
+-spec do_hunt(mailbox(), kapps_call:call(), kz_term:ne_binary()) ->
                      'ok' | {'branch', _} |
                      {'error', 'channel_hungup'}.
 do_hunt(Mailbox, Call, Digits) ->
@@ -581,13 +569,11 @@ do_hunt(Mailbox, Call, Digits) ->
             {'branch', Flow}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% The primary sequence logic to route the collected digits
+%%------------------------------------------------------------------------------
+%% @doc The primary sequence logic to route the collected digits
 %% @end
-%%--------------------------------------------------------------------
--spec try_match_digits(ne_binary(), mailbox(), kapps_call:call()) -> 'false' | {'branch', kz_json:object()}.
+%%------------------------------------------------------------------------------
+-spec try_match_digits(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'false' | {'branch', kz_json:object()}.
 try_match_digits(Digits, Mailbox, Call) ->
     lager:info("trying to match digits ~s", [Digits]),
     case is_callflow_child(Digits, Mailbox, Call)
@@ -598,13 +584,11 @@ try_match_digits(Digits, Mailbox, Call) ->
         'false' -> 'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if the digits are a exact match for the auto-attendant children
+%%------------------------------------------------------------------------------
+%% @doc Check if the digits are a exact match for the auto-attendant children
 %% @end
-%%--------------------------------------------------------------------
--spec is_callflow_child(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_callflow_child(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_callflow_child(Digits, _, Call) ->
     case cf_exe:attempt(Digits, Call) of
         {'attempt_resp', 'ok'} ->
@@ -613,23 +597,19 @@ is_callflow_child(Digits, _, Call) ->
         {'attempt_resp', {'error', _}} -> 'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check if hunting is enabled
+%%------------------------------------------------------------------------------
+%% @doc Check if hunting is enabled
 %% @end
-%%--------------------------------------------------------------------
--spec is_hunt_enabled(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_hunt_enabled(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_enabled(_, #mailbox{hunt=Hunt}, _) ->
     Hunt.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check whitelist hunt digit patterns
+%%------------------------------------------------------------------------------
+%% @doc Check whitelist hunt digit patterns
 %% @end
-%%--------------------------------------------------------------------
--spec is_hunt_allowed(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_hunt_allowed(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_allowed(_, #mailbox{hunt_allow = <<>>}, _) ->
     lager:info("hunt_allow implicitly accepted digits"),
     'true';
@@ -647,13 +627,11 @@ is_hunt_allowed(Digits, #mailbox{hunt_allow=RegEx}, _) ->
             'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Check blacklisted hunt digit patterns
+%%------------------------------------------------------------------------------
+%% @doc Check blacklisted hunt digit patterns
 %% @end
-%%--------------------------------------------------------------------
--spec is_hunt_denied(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_hunt_denied(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_denied(_, #mailbox{hunt_deny = <<>>}, _) ->
     lager:info("hunt_deny implicitly accepted digits"),
     'false';
@@ -671,13 +649,11 @@ is_hunt_denied(Digits, #mailbox{hunt_deny=RegEx}, _) ->
             'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Hunt for a callflow with these numbers
+%%------------------------------------------------------------------------------
+%% @doc Hunt for a callflow with these numbers
 %% @end
-%%--------------------------------------------------------------------
--spec hunt_for_callflow(ne_binary(), mailbox(), kapps_call:call()) -> 'false' | kz_json:object().
+%%------------------------------------------------------------------------------
+-spec hunt_for_callflow(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'false' | kz_json:object().
 hunt_for_callflow(Digits, _, Call) ->
     AccountId = kapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
@@ -690,13 +666,11 @@ hunt_for_callflow(Digits, _, Call) ->
             'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec record_voicemail(ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec record_voicemail(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
 record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
                                          ,media_extension=Ext
                                          }=Box, Call) ->
@@ -735,11 +709,10 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
             lager:info("error while attempting to record a new message: ~p", [_R])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec setup_mailbox(mailbox(), kapps_call:call()) -> mailbox().
 setup_mailbox(#mailbox{media_extension=Ext}=Box, Call) ->
     lager:debug("starting voicemail configuration wizard"),
@@ -758,15 +731,12 @@ setup_mailbox(#mailbox{media_extension=Ext}=Box, Call) ->
     {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_complete">>, Call),
     Box1#mailbox{is_setup='true'}.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec main_menu(mailbox(), kapps_call:call()) ->
-                       'ok' | {'error', 'channel_hungup'}.
--spec main_menu(mailbox(), kapps_call:call(), non_neg_integer()) ->
                        'ok' | {'error', 'channel_hungup'}.
 main_menu(#mailbox{is_setup='false'}=Box, Call) ->
     try setup_mailbox(Box, Call) of
@@ -780,12 +750,14 @@ main_menu(#mailbox{is_setup='false'}=Box, Call) ->
     end;
 main_menu(Box, Call) -> main_menu(Box, Call, 1).
 
+-spec main_menu(mailbox(), kapps_call:call(), non_neg_integer()) ->
+                       'ok' | {'error', 'channel_hungup'}.
 main_menu(Box, Call, Loop) when Loop > 4 ->
     %% If there have been too may loops with no action from the caller this
     %% is likely a abandonded channel, terminate
     lager:info("entered main menu with too many invalid entries"),
     _ = kapps_call_command:b_prompt(<<"vm-goodbye">>, Call),
-    send_mwi_update(Box, Call);
+    send_mwi_update(Box);
 main_menu(#mailbox{keys=#keys{hear_new=HearNew
                              ,hear_saved=HearSaved
                              ,exit=Exit
@@ -817,22 +789,22 @@ main_menu(#mailbox{keys=#keys{hear_new=HearNew
     of
         {'error', _} ->
             lager:info("error during mailbox main menu"),
-            send_mwi_update(Box, Call);
+            send_mwi_update(Box);
         {'ok', Exit} ->
             lager:info("user choose to exit voicemail menu"),
-            send_mwi_update(Box, Call);
+            send_mwi_update(Box);
         {'ok', HearNew} ->
             lager:info("playing all messages in folder: ~s", [?VM_FOLDER_NEW]),
             Folder = kzd_box_message:filter_folder(Messages, ?VM_FOLDER_NEW),
             case play_messages(Folder, New, Box, Call) of
-                'ok' -> send_mwi_update(Box, Call);
+                'ok' -> send_mwi_update(Box);
                 _Else -> main_menu(Box, Call)
             end;
         {'ok', HearSaved} ->
             lager:info("playing all messages in folder: ~s", [?VM_FOLDER_SAVED]),
             Folder = kzd_box_message:filter_folder(Messages, ?VM_FOLDER_SAVED),
             case play_messages(Folder, Saved, Box, Call) of
-                'ok' -> send_mwi_update(Box, Call);
+                'ok' -> send_mwi_update(Box);
                 _Else ->  main_menu(Box, Call)
             end;
         _ ->
@@ -868,22 +840,22 @@ main_menu(#mailbox{keys=#keys{hear_new=HearNew
     of
         {'error', _} ->
             lager:info("error during mailbox main menu"),
-            send_mwi_update(Box, Call);
+            send_mwi_update(Box);
         {'ok', Exit} ->
             lager:info("user choose to exit voicemail menu"),
-            send_mwi_update(Box, Call);
+            send_mwi_update(Box);
         {'ok', HearNew} ->
             lager:info("playing all messages in folder: ~s", [?VM_FOLDER_NEW]),
             Folder = kzd_box_message:filter_folder(Messages, ?VM_FOLDER_NEW),
             case play_messages(Folder, New, Box, Call) of
-                'ok' -> send_mwi_update(Box, Call);
+                'ok' -> send_mwi_update(Box);
                 _Else -> main_menu(Box, Call)
             end;
         {'ok', HearSaved} ->
             lager:info("playing all messages in folder: ~s", [?VM_FOLDER_SAVED]),
             Folder = kzd_box_message:filter_folder(Messages, ?VM_FOLDER_SAVED),
             case play_messages(Folder, Saved, Box, Call) of
-                'ok' -> send_mwi_update(Box, Call);
+                'ok' -> send_mwi_update(Box);
                 _Else ->  main_menu(Box, Call)
             end;
         {'ok', Configure} ->
@@ -899,13 +871,11 @@ main_menu(#mailbox{keys=#keys{hear_new=HearNew
             main_menu(Box, Call, Loop + 1)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec message_count_prompts(integer(), integer()) -> kz_proplist().
+%%------------------------------------------------------------------------------
+-spec message_count_prompts(integer(), integer()) -> kz_term:proplist().
 message_count_prompts(0, 0) ->
     [{'prompt', <<"vm-no_messages">>}];
 message_count_prompts(1, 0) ->
@@ -957,12 +927,10 @@ message_count_prompts(New, Saved) ->
     ,{'prompt', <<"vm-saved_messages">>}
     ].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the message audio prompt
+%%------------------------------------------------------------------------------
+%% @doc Returns the message audio prompt
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec message_prompt(kz_json:objects(), binary(), non_neg_integer(), mailbox()) ->
                             kapps_call_command:audio_macro_prompts().
 message_prompt([H|_]=Messages, Message, Count, #mailbox{timezone=Timezone
@@ -986,13 +954,11 @@ message_prompt(Messages, Message, Count, #mailbox{skip_envelope='true'}) ->
     ].
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Plays back a message then the menu, and continues to loop over the
+%%------------------------------------------------------------------------------
+%% @doc Plays back a message then the menu, and continues to loop over the
 %% menu utill
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec play_messages(kz_json:objects(), non_neg_integer(), mailbox(), kapps_call:call()) ->
                            'ok' | 'complete'.
 play_messages(Messages, Count, Box, Call) ->
@@ -1069,12 +1035,10 @@ play_prev_message(Messages, [] = PrevMessages, Count, Box, Call) ->
 play_prev_message(Messages, [H|T], Count, Box, Call) ->
     play_messages([H|Messages], T, Count, Box, Call).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Main function for forwarding a message to another vmbox of this account
+%%------------------------------------------------------------------------------
+%% @doc Main function for forwarding a message to another vmbox of this account
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec forward_message(kz_json:object(), mailbox(), kapps_call:call()) -> 'ok'.
 forward_message(Message, #mailbox{mailbox_id=SrcBoxId} = SrcBox, Call) ->
     lager:info("enter destination mailbox number"),
@@ -1125,15 +1089,15 @@ forward_message_menu(#mailbox{interdigit_timeout=Interdigit}=DestBox, Call) ->
         _ -> forward_message_menu(DestBox, Call)
     end.
 
--spec compose_forward_message(kz_json:object(), ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
+-spec compose_forward_message(kz_json:object(), kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
 compose_forward_message(Message, SrcBoxId, #mailbox{media_extension=Ext}=DestBox, Call) ->
     lager:debug("playing forwarding instructions to caller"),
     _ = play_instructions(DestBox, Call),
     _NoopId = kapps_call_command:noop(Call),
-    %% timeout after 5 min for saftey, so this process cant hang around forever
+    %% timeout after 5 min for safety, so this process cant hang around forever
     case kapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
         {'ok', _} ->
-            lager:info("played fowarding instructions to caller, recording new message"),
+            lager:info("played forwarding instructions to caller, recording new message"),
             record_forward(tmp_file(Ext), Message, SrcBoxId, DestBox, Call);
         {'dtmf', _Digits} ->
             _ = kapps_call_command:b_flush(Call),
@@ -1143,11 +1107,10 @@ compose_forward_message(Message, SrcBoxId, #mailbox{media_extension=Ext}=DestBox
             lager:info("error while playing voicemail greeting: ~p", [_R])
     end.
 
--spec record_forward(ne_binary(), kz_json:object(), ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
+-spec record_forward(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
 record_forward(AttachmentName, Message, SrcBoxId, #mailbox{media_extension=Ext
                                                           ,max_message_length=MaxMessageLength
                                                           }=DestBox, Call) ->
-    lager:info("composing new forward voicemail to ~s", [AttachmentName]),
     Tone = kz_json:from_list([{<<"Frequencies">>, [<<"440">>]}
                              ,{<<"Duration-ON">>, <<"500">>}
                              ,{<<"Duration-OFF">>, <<"100">>}
@@ -1171,10 +1134,10 @@ record_forward(AttachmentName, Message, SrcBoxId, #mailbox{media_extension=Ext
                                       )
             end;
         {'error', _R} ->
-            lager:info("error while attempting to record a foward message: ~p", [_R])
+            lager:info("error while attempting to record a forward message: ~p", [_R])
     end.
 
--spec forward_message(api_ne_binary(), non_neg_integer(), kz_json:object(), ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
+-spec forward_message(kz_term:api_ne_binary(), non_neg_integer(), kz_json:object(), kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
 forward_message(AttachmentName, Length, Message, SrcBoxId, #mailbox{mailbox_number=BoxNum
                                                                    ,mailbox_id=BoxId
                                                                    ,timezone=Timezone
@@ -1197,28 +1160,27 @@ forward_message(AttachmentName, Length, Message, SrcBoxId, #mailbox{mailbox_numb
                     ]
                    ),
     case kvm_message:forward_message(Call, Message, SrcBoxId, NewMsgProps) of
-        {'ok', NewCall} -> send_mwi_update(DestBox, NewCall);
+        {'ok', _NewCall} -> send_mwi_update(DestBox);
         {'error', _, _Msg} ->
             lager:warning("failed to save forwarded voice mail message recorded media : ~p", [_Msg])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Loops over the message menu after the first play back util the
+%%------------------------------------------------------------------------------
+%% @doc Loops over the message menu after the first play back util the
 %% user provides a valid option
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type message_menu_returns() :: {'ok', 'keep' | 'delete' | 'return' | 'replay' | 'prev' | 'next' | 'forward' | 'envelope'}.
 
 -spec message_menu(mailbox(), kapps_call:call()) ->
                           {'error', 'channel_hungup' | 'channel_unbridge' | kz_json:object()} |
                           message_menu_returns().
+message_menu(Box, Call) ->
+    message_menu([{'prompt', <<"vm-message_menu">>}], Box, Call).
+
 -spec message_menu(kapps_call_command:audio_macro_prompts(), mailbox(), kapps_call:call()) ->
                           {'error', 'channel_hungup' | 'channel_unbridge' | kz_json:object()} |
                           message_menu_returns().
-message_menu(Box, Call) ->
-    message_menu([{'prompt', <<"vm-message_menu">>}], Box, Call).
 message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
                                         ,keep=Keep
                                         ,forward=Forward
@@ -1252,21 +1214,20 @@ message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
         _ -> message_menu(Box, Call)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec config_menu(mailbox(), kapps_call:call()) ->
-                         'ok' | mailbox() |
-                         {'error', 'channel_hungup'}.
--spec config_menu(mailbox(), kapps_call:call(), pos_integer()) ->
                          'ok' | mailbox() |
                          {'error', 'channel_hungup'}.
 config_menu(Box, Call) ->
     config_menu(Box, Call, 1).
 
+-spec config_menu(mailbox(), kapps_call:call(), pos_integer()) ->
+                         'ok' | mailbox() |
+                         {'error', 'channel_hungup'}.
 config_menu(Box, Call, Loop) when Loop < 4 ->
     lager:info("playing mailbox configuration menu"),
     case kapps_call_command:b_flush(Call) of
@@ -1378,13 +1339,11 @@ handle_config_selection(#mailbox{}=Box
     lager:info("undefined config menu option '~s'", [_Selection]),
     config_menu(Box, Call, Loop + 1).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Recording the temporary greeting to override the common greeting
+%%------------------------------------------------------------------------------
+%% @doc Recording the temporary greeting to override the common greeting
 %% @end
-%%--------------------------------------------------------------------
--spec record_temporary_unavailable_greeting(ne_binary(), mailbox(), kapps_call:call()) ->
+%%------------------------------------------------------------------------------
+-spec record_temporary_unavailable_greeting(kz_term:ne_binary(), mailbox(), kapps_call:call()) ->
                                                    'ok' | mailbox().
 record_temporary_unavailable_greeting(AttachmentName
                                      ,#mailbox{temporary_unavailable_media_id='undefined'}=Box
@@ -1401,14 +1360,12 @@ record_temporary_unavailable_greeting(AttachmentName, Box, Call) ->
     lager:info("record new temporary greetings use existing media document"),
     overwrite_temporary_unavailable_greeting(AttachmentName, Box, Call, 'update').
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Overwrites current media document of the temporary greeting
+%%------------------------------------------------------------------------------
+%% @doc Overwrites current media document of the temporary greeting
 %% by a new recorded version.
 %% @end
-%%--------------------------------------------------------------------
--spec overwrite_temporary_unavailable_greeting(ne_binary(), mailbox(), kapps_call:call(), 'new' | 'update') ->
+%%------------------------------------------------------------------------------
+-spec overwrite_temporary_unavailable_greeting(kz_term:ne_binary(), mailbox(), kapps_call:call(), 'new' | 'update') ->
                                                       'ok' | mailbox().
 overwrite_temporary_unavailable_greeting(AttachmentName
                                         ,#mailbox{temporary_unavailable_media_id=MediaId
@@ -1422,12 +1379,11 @@ overwrite_temporary_unavailable_greeting(AttachmentName
                              ,{<<"Duration-ON">>, <<"500">>}
                              ,{<<"Duration-OFF">>, <<"100">>}
                              ]),
-    _NoopId = kapps_call_command:audio_macro(
-                [{'prompt', <<"vm-record_temp_greeting">>}
-                ,{'tones', [Tone]}
-                ]
-               ,Call
-               ),
+    _NoopId = kapps_call_command:audio_macro([{'prompt', <<"vm-record_temp_greeting">>}
+                                             ,{'tones', [Tone]}
+                                             ]
+                                            ,Call
+                                            ),
     case kapps_call_command:b_record(AttachmentName, Call) of
         {'ok', Msg} ->
             case review_recording(AttachmentName, 'false', Box, Call) of
@@ -1453,21 +1409,20 @@ overwrite_temporary_unavailable_greeting(AttachmentName
 
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Deletes current temporary greeting.
+%%------------------------------------------------------------------------------
+%% @doc Deletes current temporary greeting.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete_temporary_unavailable_greeting(mailbox(), kapps_call:call()) ->
                                                    'ok' | mailbox().
 delete_temporary_unavailable_greeting(#mailbox{temporary_unavailable_media_id='undefined'}=_Box, _Call) ->
     'ok';
 delete_temporary_unavailable_greeting(Box, Call) ->
-    'ok' = update_doc([<<"media">>, <<"temporary_unavailable">>], 'undefined', Box, Call),
+    'ok' = update_doc([<<"media">>, <<"temporary_unavailable">>], 'null', Box, Call),
+    _ = kapps_call_command:b_prompt(<<"vm-saved">>, Call),
     Box#mailbox{temporary_unavailable_media_id='undefined'}.
 
--spec record_unavailable_greeting(ne_binary(), mailbox(), kapps_call:call()) ->
+-spec record_unavailable_greeting(kz_term:ne_binary(), mailbox(), kapps_call:call()) ->
                                          'ok' | mailbox().
 record_unavailable_greeting(AttachmentName, #mailbox{unavailable_media_id='undefined'}=Box, Call) ->
     MediaId = recording_media_doc(<<"unavailable greeting">>, Box, Call),
@@ -1478,7 +1433,7 @@ record_unavailable_greeting(AttachmentName, #mailbox{unavailable_media_id=MediaI
         _ -> overwrite_unavailable_greeting(AttachmentName, Box, Call, MediaId, 'update')
     end.
 
--spec check_media_source(ne_binary(), mailbox(), kapps_call:call(), kz_json:object()) ->
+-spec check_media_source(kz_term:ne_binary(), mailbox(), kapps_call:call(), kz_json:object()) ->
                                 'ok' | mailbox().
 check_media_source(AttachmentName, Box, Call, JObj) ->
     case kz_json:get_ne_binary_value(<<"media_source">>, JObj) of
@@ -1491,7 +1446,7 @@ check_media_source(AttachmentName, Box, Call, JObj) ->
             overwrite_unavailable_greeting(AttachmentName, Box, Call, JObj, 'update')
     end.
 
--spec overwrite_unavailable_greeting(ne_binary(), mailbox(), kapps_call:call(), kz_json:object() | ne_binary(), 'new' | 'update') ->
+-spec overwrite_unavailable_greeting(kz_term:ne_binary(), mailbox(), kapps_call:call(), kz_json:object() | kz_term:ne_binary(), 'new' | 'update') ->
                                             'ok' | mailbox().
 overwrite_unavailable_greeting(AttachmentName, #mailbox{unavailable_media_id=MediaId
                                                        ,media_extension=Ext
@@ -1527,13 +1482,12 @@ overwrite_unavailable_greeting(AttachmentName, #mailbox{unavailable_media_id=Med
             lager:info("error while attempting to record unavailable recording: ~p", [_R])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec record_name(ne_binary(), mailbox(), kapps_call:call()) ->
+%%------------------------------------------------------------------------------
+
+-spec record_name(kz_term:ne_binary(), mailbox(), kapps_call:call()) ->
                          'ok' | mailbox().
 record_name(AttachmentName, #mailbox{owner_id='undefined'
                                     ,name_media_id='undefined'
@@ -1559,7 +1513,7 @@ record_name(AttachmentName, #mailbox{owner_id=OwnerId}=Box, Call) ->
     lager:info("owner_id (~s) set on mailbox, saving into owner's doc", [OwnerId]),
     record_name(AttachmentName, Box, Call, OwnerId, 'update').
 
--spec record_name(ne_binary(), mailbox(), kapps_call:call(), ne_binary(), 'new' | 'update') ->
+-spec record_name(kz_term:ne_binary(), mailbox(), kapps_call:call(), kz_term:ne_binary(), 'new' | 'update') ->
                          'ok' | mailbox().
 record_name(AttachmentName, #mailbox{name_media_id=MediaId
                                     ,media_extension=Ext
@@ -1593,12 +1547,10 @@ record_name(AttachmentName, #mailbox{name_media_id=MediaId
             lager:info("error while attempting to record recording name: ~p", [_R])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec change_pin(mailbox(), kapps_call:call()) ->
                         mailbox() | {'error', any()}.
 change_pin(#mailbox{mailbox_id=Id
@@ -1652,7 +1604,7 @@ change_pin(#mailbox{mailbox_id=Id
             invalid_pin(Box, Call)
     end.
 
--spec update_user_creds(ne_binary(), api_binary(), ne_binary()) -> 'ok'.
+-spec update_user_creds(kz_term:ne_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> 'ok'.
 update_user_creds(_, 'undefined', _) ->
     lager:debug("no owner, no creds to update");
 update_user_creds(AccountDb, OwnerId, PIN) ->
@@ -1673,11 +1625,11 @@ update_user_creds(AccountDb, OwnerId, PIN) ->
         {'error', E} -> lager:error("could not find owner doc (~p)", [E])
     end.
 
--spec should_update_user_creds(ne_binary(), ne_binary()) -> boolean().
--spec should_update_user_creds(ne_binary(), ne_binary(), boolean()) -> boolean().
+-spec should_update_user_creds(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 should_update_user_creds(Username, PrivLevel) ->
     should_update_user_creds(Username, PrivLevel, ?PIN_PASS_SYNC).
 
+-spec should_update_user_creds(kz_term:ne_binary(), kz_term:ne_binary(), boolean()) -> boolean().
 should_update_user_creds(_, _, 'false') -> 'false';
 should_update_user_creds(Username, <<"user">>, _) ->
     case catch kz_term:to_integer(Username) of
@@ -1730,7 +1682,7 @@ confirm_new_pin(Interdigit, Call) ->
     NoopId = kapps_call_command:prompt(<<"vm-enter_new_pin_confirm">>, Call),
     collect_pin(Interdigit, Call, NoopId).
 
--spec collect_pin(pos_integer(), kapps_call:call(), ne_binary()) ->
+-spec collect_pin(pos_integer(), kapps_call:call(), kz_term:ne_binary()) ->
                          {'ok', binary()} |
                          {'error', any()}.
 collect_pin(Interdigit, Call, NoopId) ->
@@ -1741,12 +1693,11 @@ collect_pin(Interdigit, Call, NoopId) ->
                                      ,Call
                                      ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec new_message(ne_binary(), non_neg_integer(), mailbox(), kapps_call:call()) -> any().
+%%------------------------------------------------------------------------------
+-spec new_message(kz_term:ne_binary(), non_neg_integer(), mailbox(), kapps_call:call()) -> any().
 new_message(_, Length, #mailbox{min_message_length=MinLength}, _)
   when Length < MinLength ->
     lager:info("attachment length is ~B and must be larger than ~B to be stored", [Length, MinLength]);
@@ -1767,17 +1718,15 @@ new_message(AttachmentName, Length, #mailbox{mailbox_number=BoxNum
                   ,{<<"Timezone">>, Timezone}
                   ],
     case kvm_message:new(Call, NewMsgProps) of
-        {'ok', NewCall} -> send_mwi_update(Box, NewCall);
+        {'ok', _NewCall} -> send_mwi_update(Box);
         {'error', _, _Msg} -> lager:warning("failed to save voice mail message recorded media : ~p", [_Msg])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Fetches the mailbox parameters from the data store and loads the
+%%------------------------------------------------------------------------------
+%% @doc Fetches the mailbox parameters from the data store and loads the
 %% mailbox record
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec get_mailbox_profile(kz_json:object(), kapps_call:call()) -> mailbox().
 get_mailbox_profile(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
@@ -1869,7 +1818,7 @@ get_mailbox_profile(Data, Call) ->
             #mailbox{}
     end.
 
--spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
@@ -1912,13 +1861,13 @@ max_message_count(Call) ->
         MMC -> MMC
     end.
 
--spec owner_info(ne_binary(), kz_json:object()) ->
-                        {api_binary(), api_binary()}.
--spec owner_info(ne_binary(), kz_json:object(), api_binary()) ->
-                        {api_binary(), api_binary()}.
+-spec owner_info(kz_term:ne_binary(), kz_json:object()) ->
+                        {kz_term:api_binary(), kz_term:api_binary()}.
 owner_info(AccountDb, MailboxJObj) ->
     owner_info(AccountDb, MailboxJObj, kz_json:get_ne_value(<<"owner_id">>, MailboxJObj)).
 
+-spec owner_info(kz_term:ne_binary(), kz_json:object(), kz_term:api_binary()) ->
+                        {kz_term:api_binary(), kz_term:api_binary()}.
 owner_info(_AccountDb, MailboxJObj, 'undefined') ->
     {kz_json:get_ne_value(?RECORDED_NAME_KEY, MailboxJObj)
     ,'undefined'
@@ -1932,12 +1881,10 @@ owner_info(AccountDb, MailboxJObj, OwnerId) ->
             {kz_json:get_ne_value(?RECORDED_NAME_KEY, MailboxJObj), 'undefined'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec populate_keys(kapps_call:call()) -> vm_keys().
 populate_keys(Call) ->
     Default = #keys{},
@@ -1963,13 +1910,11 @@ populate_keys(Call) ->
          ,continue = kz_json:get_binary_value(<<"continue">>, JObj, Default#keys.continue)
          }.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec get_mailbox_doc(ne_binary(), api_binary(), kz_json:object(), kapps_call:call()) ->
+%%------------------------------------------------------------------------------
+-spec get_mailbox_doc(kz_term:ne_binary(), kz_term:api_binary(), kz_json:object(), kapps_call:call()) ->
                              {'ok', kz_json:object()} |
                              {'error', any()}.
 get_mailbox_doc(Db, Id, Data, Call) ->
@@ -1997,17 +1942,17 @@ get_mailbox_doc(Db, Id, Data, Call) ->
 -spec get_user_mailbox_doc(kz_json:object(), kapps_call:call()) ->
                                   {'ok', kz_json:object()} |
                                   {'error', any()}.
--spec get_user_mailbox_doc(kz_json:object(), kapps_call:call(), api_binary()) ->
-                                  {'ok', kz_json:object()} |
-                                  {'error', any()}.
 get_user_mailbox_doc(Data, Call) ->
     get_user_mailbox_doc(Data, Call, kapps_call:owner_id(Call)).
 
+-spec get_user_mailbox_doc(kz_json:object(), kapps_call:call(), kz_term:api_binary()) ->
+                                  {'ok', kz_json:object()} |
+                                  {'error', any()}.
 get_user_mailbox_doc(Data, Call, 'undefined') ->
     DeviceId = kapps_call:authorizing_id(Call),
     case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), DeviceId) of
         {'ok', DeviceJObj} ->
-            case kz_device:owner_id(DeviceJObj) of
+            case kzd_devices:owner_id(DeviceJObj) of
                 'undefined' ->
                     lager:debug("device used to check voicemail has no owner assigned", []),
                     {'error', "request voicemail box number"};
@@ -2048,7 +1993,7 @@ maybe_match_callerid(Boxes, Data, Call) ->
             try_match_callerid(Boxes, CallerId)
     end.
 
--spec try_match_callerid(kz_json:objects(), ne_binary()) ->
+-spec try_match_callerid(kz_json:objects(), kz_term:ne_binary()) ->
                                 {'ok', kz_json:object()} |
                                 {'error', any()}.
 try_match_callerid([], _CallerId) ->
@@ -2063,22 +2008,20 @@ try_match_callerid([Box|Boxes], CallerId) ->
             try_match_callerid(Boxes, CallerId)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec review_recording(ne_binary(), boolean(), mailbox(), kapps_call:call()) ->
-                              {'ok', 'record' | 'save' | 'no_selection'} |
-                              {'branch', kz_json:object()}.
--spec review_recording(ne_binary(), boolean(), mailbox(), kapps_call:call(), integer()) ->
-                              {'ok', 'record' | 'save' | 'no_selection'} |
-                              {'branch', kz_json:object()}.
+%%------------------------------------------------------------------------------
 
+-spec review_recording(kz_term:ne_binary(), boolean(), mailbox(), kapps_call:call()) ->
+                              {'ok', 'record' | 'save' | 'no_selection'} |
+                              {'branch', kz_json:object()}.
 review_recording(AttachmentName, AllowOperator, Box, Call) ->
     review_recording(AttachmentName, AllowOperator, Box, Call, 1).
 
+-spec review_recording(kz_term:ne_binary(), boolean(), mailbox(), kapps_call:call(), integer()) ->
+                              {'ok', 'record' | 'save' | 'no_selection'} |
+                              {'branch', kz_json:object()}.
 review_recording(_, _, _, _, Loop) when Loop > 4 ->
     {'ok', 'no_selection'};
 review_recording(AttachmentName, AllowOperator
@@ -2125,12 +2068,11 @@ review_recording(AttachmentName, AllowOperator
             review_recording(AttachmentName, AllowOperator, Box, Call, Loop + 1)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec store_recording(ne_binary(), non_neg_integer(), ne_binary(), mailbox(), kapps_call:call()) -> 'ok' | {'error', kapps_call:call()}.
+%%------------------------------------------------------------------------------
+-spec store_recording(kz_term:ne_binary(), non_neg_integer(), kz_term:ne_binary(), mailbox(), kapps_call:call()) -> 'ok' | {'error', kapps_call:call()}.
 store_recording(_, Length, _, #mailbox{min_message_length=MinLength}, _)
   when Length < MinLength ->
     lager:info("attachment length is ~B and must be larger than ~B to be stored", [Length, MinLength]);
@@ -2146,8 +2088,8 @@ store_recording(AttachmentName, _Length, DocId, Box, Call) ->
             {'error', kapps_call:kvs_store('error_details', {'error', E}, Call1)}
     end.
 
--spec get_new_attachment_url(ne_binary(), ne_binary(), mailbox(), kapps_call:call()) ->
-                                    ne_binary().
+-spec get_new_attachment_url(kz_term:ne_binary(), kz_term:ne_binary(), mailbox(), kapps_call:call()) ->
+                                    kz_term:ne_binary().
 get_new_attachment_url(AttachmentName, MediaId, #mailbox{owner_id=OwnerId}, Call) ->
     AccountDb = kapps_call:account_db(Call),
     _ = case kz_datamgr:open_doc(AccountDb, MediaId) of
@@ -2158,7 +2100,7 @@ get_new_attachment_url(AttachmentName, MediaId, #mailbox{owner_id=OwnerId}, Call
     Opts = props:filter_undefined([{'doc_owner', OwnerId}]),
     kz_media_url:store(AccountDb, {<<"media">>, MediaId}, AttachmentName, Opts).
 
--spec maybe_remove_attachments(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
+-spec maybe_remove_attachments(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 maybe_remove_attachments(AccountDb, MediaId, JObj) ->
     JObj1 = case kz_doc:maybe_remove_attachments(JObj) of
                 {'false', _} -> JObj;
@@ -2169,11 +2111,10 @@ maybe_remove_attachments(AccountDb, MediaId, JObj) ->
     %% Undelete a possibly deleted media file
     kz_datamgr:save_doc(AccountDb, kz_doc:set_soft_deleted(JObj1, 'false')).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec min_recording_length(kapps_call:call()) -> integer().
 min_recording_length(Call) ->
     case kapps_account_config:get(kapps_call:account_id(Call)
@@ -2185,18 +2126,17 @@ min_recording_length(Call) ->
         MML -> kz_term:to_integer(MML)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec recording_media_doc(ne_binary(), mailbox(), kapps_call:call()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec recording_media_doc(kz_term:ne_binary(), mailbox(), kapps_call:call()) -> kz_term:ne_binary().
 recording_media_doc(Recording, Box, Call) ->
     AccountDb = kapps_call:account_db(Call),
     {'ok', JObj} = kz_datamgr:save_doc(AccountDb, set_recording_media_doc(Recording, Box, AccountDb, kz_json:new())),
     kz_doc:id(JObj).
 
--spec maybe_update_recording_media_doc(ne_binary(), mailbox(), kapps_call:call(), kz_json:object() | ne_binary(), 'new' | 'update') -> 'ok'.
+-spec maybe_update_recording_media_doc(kz_term:ne_binary(), mailbox(), kapps_call:call(), kz_json:object() | kz_term:ne_binary(), 'new' | 'update') -> 'ok'.
 maybe_update_recording_media_doc(_, _, _, _, 'new') ->
     'ok';
 maybe_update_recording_media_doc(AttachmentName, Box, Call, ?NE_BINARY=MediaId, 'update') ->
@@ -2204,7 +2144,7 @@ maybe_update_recording_media_doc(AttachmentName, Box, Call, ?NE_BINARY=MediaId, 
 maybe_update_recording_media_doc(AttachmentName, Box, Call, JObj, 'update') ->
     update_recording_media_doc(AttachmentName, Box, Call, kz_doc:id(JObj)).
 
--spec update_recording_media_doc(ne_binary(), mailbox(), kapps_call:call(), ne_binary()) -> 'ok'.
+-spec update_recording_media_doc(kz_term:ne_binary(), mailbox(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
 update_recording_media_doc(AttachmentName, Box, Call, MediaId) ->
     AccountDb = kapps_call:account_db(Call),
     case kz_datamgr:open_doc(AccountDb, MediaId) of
@@ -2218,7 +2158,7 @@ update_recording_media_doc(AttachmentName, Box, Call, MediaId) ->
             lager:info("unable to update media_source for media doc ~s in ~s: ~p", [MediaId, AccountDb, _Reason])
     end.
 
--spec set_recording_media_doc(ne_binary(), mailbox(), ne_binary(), kz_json:object()) -> kz_json:object().
+-spec set_recording_media_doc(kz_term:ne_binary(), mailbox(), kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 set_recording_media_doc(Recording, #mailbox{mailbox_number=BoxNum
                                            ,mailbox_id=Id
                                            ,owner_id=OwnerId
@@ -2235,16 +2175,14 @@ set_recording_media_doc(Recording, #mailbox{mailbox_number=BoxNum
             ], JObj),
     kz_doc:update_pvt_parameters(Doc, AccountDb, [{'type', <<"media">>}]).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_doc(kz_json:path()
                 ,kz_json:api_json_term()
-                ,mailbox() | ne_binary()
-                ,kapps_call:call() | ne_binary()
+                ,mailbox() | kz_term:ne_binary()
+                ,kapps_call:call() | kz_term:ne_binary()
                 ) ->
                         'ok' |
                         {'error', atom()}.
@@ -2268,34 +2206,29 @@ update_doc(Key, Value, Id, ?NE_BINARY = Db) ->
 update_doc(Key, Value, Id, Call) ->
     update_doc(Key, Value, Id, kapps_call:account_db(Call)).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec tmp_file(ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec tmp_file(kz_term:ne_binary()) -> kz_term:ne_binary().
 tmp_file(Ext) ->
     <<(kz_binary:rand_hex(16))/binary, ".", Ext/binary>>.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Accepts Universal Coordinated Time (UTC) and convert it to binary
+%%------------------------------------------------------------------------------
+%% @doc Accepts Universal Coordinated Time (UTC) and convert it to binary
 %% encoded Unix epoch in the provided timezone
 %% @end
-%%--------------------------------------------------------------------
--spec get_unix_epoch(integer(), ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec get_unix_epoch(integer(), kz_term:ne_binary()) -> kz_term:ne_binary().
 get_unix_epoch(Epoch, Timezone) ->
     UtcDateTime = calendar:gregorian_seconds_to_datetime(Epoch),
     LocalDateTime = localtime:utc_to_local(UtcDateTime, Timezone),
     kz_term:to_binary(calendar:datetime_to_gregorian_seconds(LocalDateTime) - ?UNIX_EPOCH_IN_GREGORIAN).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec find_max_message_length(kz_json:objects()) -> pos_integer().
 find_max_message_length([]) -> ?MAILBOX_DEFAULT_MSG_MAX_LENGTH;
 find_max_message_length([JObj | T]) ->
@@ -2305,7 +2238,7 @@ find_max_message_length([JObj | T]) ->
         _ -> find_max_message_length(T)
     end.
 
--spec is_owner(kapps_call:call(), ne_binary()) -> boolean().
+-spec is_owner(kapps_call:call(), kz_term:ne_binary()) -> boolean().
 is_owner(Call, OwnerId) ->
     case kapps_call:owner_id(Call) of
         <<>> -> 'false';
@@ -2314,30 +2247,9 @@ is_owner(Call, OwnerId) ->
         _Else -> 'false'
     end.
 
--spec send_mwi_update(mailbox(), kapps_call:call()) -> 'ok'.
-send_mwi_update(#mailbox{mailbox_id='undefined'
-                        }
-               ,_Call) ->
-    'ok';
-send_mwi_update(#mailbox{owner_id=OwnerId
-                        ,mailbox_number=BoxNumber
-                        ,account_db=AccountDb
+-spec send_mwi_update(mailbox()) -> 'ok'.
+send_mwi_update(#mailbox{mailbox_id='undefined'}) -> 'ok';
+send_mwi_update(#mailbox{account_db=AccountDb
                         ,mailbox_id=BoxId
-                        }
-               ,Call) ->
-    _ = kz_util:spawn(fun cf_util:unsolicited_owner_mwi_update/2, [AccountDb, OwnerId]),
-    {New, Saved} = kvm_messages:count_non_deleted(kapps_call:account_id(Call), BoxId),
-    _ = kz_util:spawn(fun send_mwi_update/4, [New, Saved, BoxNumber, Call]),
-    lager:debug("sent MWI updates for vmbox ~s in account ~s (~b/~b)", [BoxNumber, kapps_call:account_id(Call), New, Saved]).
-
--spec send_mwi_update(non_neg_integer(), non_neg_integer(), ne_binary(), kapps_call:call()) -> 'ok'.
-send_mwi_update(New, Saved, BoxNumber, Call) ->
-    Realm = kapps_call:account_realm(Call),
-    Command = [{<<"To">>, <<BoxNumber/binary, "@", Realm/binary>>}
-              ,{<<"Messages-New">>, New}
-              ,{<<"Messages-Saved">>, Saved}
-              ,{<<"Call-ID">>, kapps_call:call_id(Call)}
-               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-              ],
-    lager:debug("updating MWI for vmbox ~s@~s (~b/~b)", [BoxNumber, Realm, New, Saved]),
-    kz_amqp_worker:cast(Command, fun kapi_presence:publish_mwi_update/1).
+                        }) ->
+    kvm_mwi:notify_vmbox(AccountDb, BoxId).

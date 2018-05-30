@@ -1,12 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
-%%% @doc
-%%% Hang up the call
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Hang up the call
 %%% Data = {}
+%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(konami_hangup).
 
 -export([handle/2
@@ -42,7 +41,7 @@ number_builder(DefaultJObj) ->
         NumberJObj -> kz_json:set_value(K, NumberJObj, DefaultJObj)
     end.
 
--spec number_builder_check(api_object()) -> api_object().
+-spec number_builder_check(kz_term:api_object()) -> kz_term:api_object().
 number_builder_check('undefined') ->
     metaflow_jobj(kz_json:new());
 number_builder_check(NumberJObj) ->
@@ -52,7 +51,7 @@ number_builder_check(NumberJObj) ->
     {'ok', [Option]} = io:fread("What would you like to do: ", "~s"),
     number_builder_check_option(NumberJObj, Option).
 
--spec number_builder_check_option(kz_json:object(), string()) -> api_object().
+-spec number_builder_check_option(kz_json:object(), string()) -> kz_term:api_object().
 number_builder_check_option(NumberJObj, "e") ->
     metaflow_jobj(NumberJObj);
 number_builder_check_option(_NumberJObj, "d") ->

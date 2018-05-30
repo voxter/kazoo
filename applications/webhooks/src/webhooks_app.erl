@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(webhooks_app).
 
 -behaviour(application).
@@ -14,23 +12,21 @@
 
 -export([start/2, stop/1]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application start behaviour
-%%--------------------------------------------------------------------
--spec start(application:start_type(), any()) -> startapp_ret().
+%%------------------------------------------------------------------------------
+%% @doc Implement the application start behaviour.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_Type, _Args) ->
     _ = declare_exchanges(),
-    _ = kapps_maintenance:bind({'refresh', ?KZ_WEBHOOKS_DB}, 'webhooks_maintenance', 'reset_webhooks_list'),
     webhooks_sup:start_link().
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Implement the application stop behaviour
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Implement the application stop behaviour.
+%% @end
+%%------------------------------------------------------------------------------
 -spec stop(any()) -> any().
 stop(_State) ->
-    _ = kapps_maintenance:unbind({'refresh', ?KZ_WEBHOOKS_DB}, 'webhooks_maintenance', 'reset_webhooks_list'),
     'ok'.
 
 -spec declare_exchanges() -> 'ok'.

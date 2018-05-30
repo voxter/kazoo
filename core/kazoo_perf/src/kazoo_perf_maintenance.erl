@@ -1,8 +1,12 @@
-%%
-%% Simple (and mostly naive) script that connects to a remote Erlang node,
-%% fetches memory and process statistics and prints them in a Sensu compatible way
-%% for metrics gathering (great for Graphite)
-%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2017-2018, 2600Hz
+%%% @doc Simple (and mostly naive) script that connects to a remote Erlang node,
+%%% fetches memory and process statistics and prints them in a Sensu compatible way
+%%% for metrics gathering (great for Graphite)
+%%%
+%%% @author Pierre Fenoll
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(kazoo_perf_maintenance).
 
 -export([graphite_metrics/3
@@ -13,7 +17,7 @@
 
 %% API
 
--spec graphite_metrics(ne_binary(), ne_binary(), ne_binary()) -> no_return.
+-spec graphite_metrics(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
 graphite_metrics(Account, Cluster, Zone) ->
     Scheme = scheme(Account, Cluster, Zone),
     F = fun ({Metric, Measured}) -> graphite(Scheme, Metric, Measured) end,
@@ -85,7 +89,7 @@ graphite(Scheme, scheduler_reductions, {TotalReductions, _ReductionsSinceLastCal
 graphite(Scheme, processes_in_run_queue_of_each_schedulers, RunQueue) ->
     print_metric(Scheme, run_queue, RunQueue);
 graphite(Scheme, ets_tables_sizes, Tabs) ->
-    [print_metric(Scheme, "tab_" ++ kz_term:to_list(Tab), Size)
+    [print_metric(Scheme, "tab_" ++ kz_term:to_list(maybe_from_ref(Tab)), Size)
      || {Tab, Size} <- Tabs,
         Size =/= 0
     ];
@@ -122,7 +126,7 @@ to_props(processes_in_run_queue_of_each_schedulers, RunQueue) ->
     [{run_queue, RunQueue}
     ];
 to_props(ets_tables_sizes, Tabs) ->
-    [{kz_term:to_binary(Tab), Size}
+    [{kz_term:to_binary(maybe_from_ref(Tab)), Size}
      || {Tab, Size} <- Tabs,
         Size =/= 0
     ];
@@ -155,3 +159,11 @@ bin_to_integer(Value=?NE_BINARY) ->
     try binary_to_integer(Value)
     catch error:badarg -> not_an_int
     end.
+
+maybe_from_ref(Tab)
+  when is_reference(Tab) ->
+    Bin1 = iolist_to_binary(io_lib:format("~p", [Tab])),
+    Bin2 = binary:replace(Bin1, [<<$<>>,<<$>>>],<<>>, [global]),
+    binary:replace(Bin2, <<$.>>, <<$_>>, [global]);
+maybe_from_ref(Tab) ->
+    Tab.

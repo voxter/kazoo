@@ -2,6 +2,7 @@
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
 -include_lib("kazoo_stdlib/include/kz_log.hrl").
 -include_lib("kazoo_stdlib/include/kz_databases.hrl").
+-include_lib("kazoo/include/kz_api_literals.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 -define(ROUTES_DB, ?KZ_OFFNET_DB).
@@ -13,6 +14,7 @@
 -define(LIST_ROUTE_ACCOUNTS, <<"routes/listing_by_account">>).
 -define(LIST_RESOURCES_BY_ID, <<"resources/listing_by_id">>).
 
+-define(APP, 'stepswitch').
 -define(APP_NAME, <<"stepswitch">>).
 -define(APP_VERSION, <<"4.0.0">>).
 

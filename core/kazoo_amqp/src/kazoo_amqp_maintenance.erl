@@ -1,11 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributions
-%%%
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_amqp_maintenance).
 
 -export([add_broker/1
@@ -25,22 +22,22 @@
         ,consumer_details/3
         ]).
 
+-export([gc_pools/0, gc_pool/1]).
+
 -include("amqp_util.hrl").
 
 -define(ASSIGNMENTS, 'kz_amqp_assignments').
 -define(CONNECTIONS, 'kz_amqp_connections').
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec add_broker(ne_binary()) -> 'ok' | 'no_return'.
+%%------------------------------------------------------------------------------
+-spec add_broker(kz_term:ne_binary()) -> 'ok' | 'no_return'.
 add_broker(Broker) ->
     add_broker(Broker, 'local').
 
--spec add_broker(ne_binary(), atom()) -> 'ok' | 'no_return'.
+-spec add_broker(kz_term:ne_binary(), atom()) -> 'ok' | 'no_return'.
 add_broker(Broker, Zone) when not is_binary(Broker) ->
     add_broker(kz_term:to_binary(Broker), Zone);
 add_broker(Broker, Zone) when not is_atom(Zone) ->
@@ -63,29 +60,25 @@ add_broker(Broker, Zone) ->
         #kz_amqp_connection{} -> 'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec remove_broker(ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec remove_broker(kz_term:ne_binary()) -> 'ok'.
 remove_broker(Broker) when not is_binary(Broker) ->
     remove_broker(kz_term:to_binary(Broker));
 remove_broker(Broker) ->
     kz_amqp_connections:remove(Broker).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec add_connection(ne_binary()) -> 'ok' | 'no_return'.
+%%------------------------------------------------------------------------------
+-spec add_connection(kz_term:ne_binary()) -> 'ok' | 'no_return'.
 add_connection(Broker) ->
     add_connection(Broker, 'local').
 
--spec add_connection(ne_binary(), atom()) -> 'ok' | 'no_return'.
+-spec add_connection(kz_term:ne_binary(), atom()) -> 'ok' | 'no_return'.
 add_connection(Broker, Zone) when not is_binary(Broker) ->
     add_connection(kz_term:to_binary(Broker), Zone);
 add_connection(Broker, Zone) when not is_atom(Zone) ->
@@ -99,23 +92,19 @@ add_connection(Broker, Zone) ->
         #kz_amqp_connection{} -> 'ok'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec primary_broker() -> 'no_return'.
 primary_broker() ->
     io:format("~s~n", [kz_amqp_connections:primary_broker()]),
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate_assignments() -> 'ok'.
 validate_assignments() ->
     Pattern = #kz_amqp_assignment{_='_'},
@@ -208,12 +197,10 @@ validate_assignments({[#kz_amqp_assignment{}=Assignment], Continuation}) ->
 log_invalid_assignment(#kz_amqp_assignment{}=Assignment) ->
     io:format("invalid assignment:~n ~p~n", [lager:pr(Assignment, ?MODULE)]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec connection_summary() -> 'ok'.
 connection_summary() ->
     io:format("+--------------------------------------------------+------------------+----------+-----------+------------+---------+~n"),
@@ -249,12 +236,10 @@ connection_summary({[#kz_amqp_connections{connection=Connection
     io:format("+--------------------------------------------------+------------------+----------+-----------+------------+---------+~n"),
     connection_summary(ets:match_object(Continuation), PrimaryBroker).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec broker_summary() -> 'ok'.
 broker_summary() ->
     Pattern = #kz_amqp_assignment{broker='$1', _='_'},
@@ -390,12 +375,10 @@ broker_summary_prechannels(Broker) ->
                 ],
     io:format(" ~-11B |~n", [ets:select_count(?ASSIGNMENTS, MatchSpec)]).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec channel_summary() -> 'ok'.
 channel_summary() ->
     io:format("+--------------------------------------------------+----------+----------+-----------------+-----------------+-----------------+----------+----------+~n"),
@@ -422,12 +405,10 @@ channel_summary({[#kz_amqp_assignment{}=Assignment], Continuation}) ->
 channel_summary_age('undefined') -> 0;
 channel_summary_age(Timestamp) -> kz_time:elapsed_s(Timestamp).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec consumer_details() -> 'ok'.
 consumer_details() ->
     MatchSpec = [{#kz_amqp_assignment{channel='$1'
@@ -443,11 +424,11 @@ consumer_details() ->
                  }],
     print_consumer_details(ets:select(?ASSIGNMENTS, MatchSpec, 1)).
 
--spec consumer_details(ne_binary()) -> 'ok'.
+-spec consumer_details(kz_term:ne_binary()) -> 'ok'.
 consumer_details(ProcessUpper) ->
     consumer_details(<<"0">>, ProcessUpper, <<"0">>).
 
--spec consumer_details(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec consumer_details(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 consumer_details(NodeNumber, ProcessUpper, ProcessLower) when not is_binary(NodeNumber) ->
     consumer_details(kz_term:to_binary(NodeNumber), ProcessUpper, ProcessLower);
 consumer_details(NodeNumber, ProcessUpper, ProcessLower) when not is_binary(ProcessUpper) ->
@@ -455,14 +436,12 @@ consumer_details(NodeNumber, ProcessUpper, ProcessLower) when not is_binary(Proc
 consumer_details(NodeNumber, ProcessUpper, ProcessLower) when not is_binary(ProcessLower) ->
     consumer_details(NodeNumber, ProcessUpper, kz_term:to_binary(ProcessLower));
 consumer_details(NodeNumber, ProcessUpper, ProcessLower) ->
-    Pid = list_to_pid(
-            kz_term:to_list(
-              <<"<", NodeNumber/binary
-                ,".", ProcessUpper/binary
-                ,".", ProcessLower/binary
-                ,">"
-              >>
-             )),
+    ProtoPid = list_to_binary(["<", NodeNumber
+                              ,".", ProcessUpper
+                              ,".", ProcessLower
+                              ,">"
+                              ]),
+    Pid = list_to_pid(kz_term:to_list(ProtoPid)),
     print_consumer_details(Pid).
 
 print_consumer_details('$end_of_table') -> 'ok';
@@ -520,3 +499,84 @@ print_consumer_history([Command|Commands]) ->
     {'$lager_record', Name, Props} = lager:pr(Command, ?MODULE),
     io:format("    ~s~n      ~p~n", [Name, Props]),
     print_consumer_history(Commands).
+
+-spec gc_pools() -> 'ok'.
+gc_pools() ->
+    _ = [gc_pool(Pool, Pid) || {Pool, Pid} <- kz_amqp_sup:pools()],
+    'ok'.
+
+-spec gc_pool(kz_term:text()) -> 'ok'.
+gc_pool(Pool) when is_atom(Pool) ->
+    case [P || {Name, _}=P <- kz_amqp_sup:pools(), Pool =:= Name] of
+        [] -> io:format("no pool named ~p found~n", [Pool]);
+        [{Pool, Pid}] -> gc_pool(Pool, Pid)
+    end;
+gc_pool(PoolBin) ->
+    gc_pool(kz_term:to_atom(PoolBin)).
+
+-spec gc_pool(atom(), pid()) -> 'ok'.
+gc_pool(Pool, PoolPid) ->
+    print_gc_results(Pool, gc_workers(PoolPid)).
+
+-spec gc_workers(pid()) -> [{pid(), integer(), integer(), integer()}].
+gc_workers(Pid) ->
+    lists:reverse(
+      lists:keysort(3, [gc_worker(W) || {_, W, _, _} <- gen_server:call(Pid, 'get_all_workers')])
+     ).
+
+-spec gc_worker(pid()) -> {pid(), integer(), integer(), integer()}.
+gc_worker(P) ->
+    [{_, S1}] = process_info(P, ['total_heap_size']),
+    garbage_collect(P),
+    [{_, S2}] = process_info(P, ['total_heap_size']),
+    {P, abs(S2-S1), S1, S2}.
+
+-define(GC_RESULT_FORMAT, "  ~-16s | ~-8s | ~-8s | ~-8s~n").
+
+print_gc_results(Pool, Results) ->
+    io:format("gc'd ~p:~n", [Pool]),
+    print_gc_summary(Results),
+    io:format(?GC_RESULT_FORMAT, ["Worker", "Delta", "Before", "After"]),
+    lists:foreach(fun print_gc_result/1, Results).
+
+-spec print_gc_summary([{pid(), integer(), integer(), integer()}]) -> 'ok'.
+print_gc_summary(Results) ->
+    {Min, Max, Sum, Count} = gc_summary(Results),
+    Summary = kz_binary:join([kz_util:pretty_print_bytes(kz_term:words_to_bytes(Min), 'truncated')
+                             ,kz_util:pretty_print_bytes(kz_term:words_to_bytes(Sum div Count), 'truncated')
+                             ,kz_util:pretty_print_bytes(kz_term:words_to_bytes(Max), 'truncated')
+                             ]
+                            ,<<" < ">>
+                            ),
+    io:format("  Min/Avg/Max of ~p workers: ~s~n", [Count, Summary]).
+
+-spec gc_summary([{pid(), integer(), integer(), integer()}]) ->
+                        {integer(), integer(), integer(), integer()}.
+gc_summary([{_W, Diff, _B, _A} | Results]) ->
+    lists:foldl(fun gc_summary_fold/2
+               ,{Diff, Diff, Diff, 1}
+               ,Results
+               ).
+
+-spec gc_summary_fold({pid(), integer(), integer(), integer()}
+                     ,{integer(), integer(), integer(), integer()}
+                     ) ->
+                             {integer(), integer(), integer(), integer()}.
+gc_summary_fold({_W, Diff, _B, _A}
+               ,{Min, Max, Sum, Count}
+               ) ->
+    {lists:min([Diff, Min])
+    ,lists:max([Diff, Max])
+    ,Diff + Sum
+    ,Count + 1
+    }.
+
+-spec print_gc_result({pid(), integer(), integer(), integer()}) -> 'ok'.
+print_gc_result({W, Diff, Before, After}) ->
+    io:format(?GC_RESULT_FORMAT
+             ,[kz_term:to_list(W)
+              ,kz_util:pretty_print_bytes(kz_term:words_to_bytes(Diff), 'truncated')
+              ,kz_util:pretty_print_bytes(kz_term:words_to_bytes(Before), 'truncated')
+              ,kz_util:pretty_print_bytes(kz_term:words_to_bytes(After), 'truncated')
+              ]
+             ).

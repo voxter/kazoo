@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle e911 provisioning
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Handle e911 provisioning
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_telnyx_e911).
 -behaviour(knm_gen_provider).
 
@@ -20,22 +16,22 @@
 
 -define(MOD_CONFIG_CAT, <<(?KNM_CONFIG_CAT)/binary, ".telnyx">>).
 
--define(IS_SANDBOX_PROVISIONING_TRUE,
-        kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')).
+-define(IS_SANDBOX_PROVISIONING_TRUE
+       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')
+       ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is saved, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is saved, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec save(knm_number:knm_number()) -> knm_number:knm_number().
--spec save(knm_number:knm_number(), ne_binary()) -> knm_number:knm_number().
 save(Number) ->
     State = knm_phone_number:state(knm_number:phone_number(Number)),
     save(Number, State).
 
+-spec save(knm_number:knm_number(), kz_term:ne_binary()) -> knm_number:knm_number().
 save(Number, ?NUMBER_STATE_RESERVED) ->
     maybe_update_e911(Number);
 save(Number, ?NUMBER_STATE_IN_SERVICE) ->
@@ -45,13 +41,11 @@ save(Number, ?NUMBER_STATE_PORT_IN) ->
 save(Number, _State) ->
     delete(Number).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is deleted, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is deleted, and will
 %% provision e911 or remove the number depending on the state
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) -> knm_number:knm_number().
 delete(Number) ->
     case feature(Number) of
@@ -62,28 +56,31 @@ delete(Number) ->
             knm_services:deactivate_feature(NewNumber, ?FEATURE_E911)
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%% @private
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec feature(knm_number:knm_number()) -> kz_json:api_json_term().
 feature(Number) ->
     knm_phone_number:feature(knm_number:phone_number(Number), ?FEATURE_E911).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec maybe_update_e911(knm_number:knm_number()) -> knm_number:knm_number().
--spec maybe_update_e911(knm_number:knm_number(), boolean()) -> knm_number:knm_number().
 maybe_update_e911(Number) ->
     IsDryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     maybe_update_e911(Number, (IsDryRun
-                               orelse ?IS_SANDBOX_PROVISIONING_TRUE)).
+                               orelse ?IS_SANDBOX_PROVISIONING_TRUE
+                              )).
 
+-spec maybe_update_e911(knm_number:knm_number(), boolean()) -> knm_number:knm_number().
 maybe_update_e911(Number, 'true') ->
     CurrentE911 = feature(Number),
     E911 = kz_json:get_ne_value(?FEATURE_E911, knm_phone_number:doc(knm_number:phone_number(Number))),
@@ -121,10 +118,9 @@ maybe_update_e911(Number, 'false') ->
             end
     end.
 
-%% @private
 -spec update_e911(knm_number:knm_number(), kz_json:object()) ->
                          {'ok', knm_number:knm_number()} |
-                         {'error', ne_binary()}.
+                         {'error', kz_term:ne_binary()}.
 update_e911(Number, AddressJObj) ->
     remove_number_address(Number),
     case create_address(Number, AddressJObj) of
@@ -133,8 +129,8 @@ update_e911(Number, AddressJObj) ->
     end.
 
 -spec create_address(knm_number:knm_number(), kz_json:object()) ->
-                            {'ok', ne_binary()} |
-                            {'error', ne_binary() | any()}.
+                            {'ok', kz_term:ne_binary()} |
+                            {'error', kz_term:ne_binary() | any()}.
 create_address(Number, AddressJObj) ->
     Body = e911_address(Number, AddressJObj),
     try knm_telnyx_util:req('post', ["e911_addresses"], Body) of
@@ -155,9 +151,9 @@ create_address(Number, AddressJObj) ->
             {'error', Reason}
     end.
 
--spec assign_address(knm_number:knm_number(), ne_binary() | 'null') ->
+-spec assign_address(knm_number:knm_number(), kz_term:ne_binary() | 'null') ->
                             {'ok', knm_number:knm_number()} |
-                            {'error', ne_binary()}.
+                            {'error', kz_term:ne_binary()}.
 assign_address(Number, AddressId) ->
     IsEnabling = is_binary(AddressId),
     Body = kz_json:from_list([{<<"e911_enabled">>, IsEnabling}
@@ -184,7 +180,7 @@ assign_address(Number, AddressId) ->
 toogle('true') -> "enable";
 toogle('false') -> "disable".
 
--spec set_address_id(knm_number:knm_number(), ne_binary() | 'null') -> knm_number:knm_number().
+-spec set_address_id(knm_number:knm_number(), kz_term:ne_binary() | 'null') -> knm_number:knm_number().
 set_address_id(Number, AddressId) ->
     PN = knm_number:phone_number(Number),
     Data = kz_json:from_list([{?ADDRESS_ID, AddressId}]),
@@ -192,7 +188,7 @@ set_address_id(Number, AddressId) ->
     knm_number:set_phone_number(Number, NewPN).
 
 -spec remove_number(knm_number:knm_number()) -> {'ok', knm_number:knm_number()} |
-                                                {'error', ne_binary()}.
+                                                {'error', kz_term:ne_binary()}.
 remove_number(Number) ->
     CarrierData = knm_phone_number:carrier_data(knm_number:phone_number(Number)),
     case kz_json:get_ne_binary_value(?ADDRESS_ID, CarrierData) of
@@ -213,7 +209,7 @@ remove_number_address(Number) ->
             'ok'
     end.
 
--spec reason(kz_json:object()) -> ne_binary().
+-spec reason(kz_json:object()) -> kz_term:ne_binary().
 reason(RepJObj) ->
     Message = <<"message">>,
     Reasons = <<"reasons">>,
@@ -239,7 +235,7 @@ e911_address(Number, JObj) ->
         ,{<<"line_2">>, cleanse(kz_json:get_ne_binary_value(?E911_STREET2, JObj))}
         ])).
 
--spec cleanse(api_ne_binary()) -> api_binary().
+-spec cleanse(kz_term:api_ne_binary()) -> kz_term:api_binary().
 cleanse('undefined') -> 'undefined';
 cleanse(NEBin) ->
     Upper = kz_term:to_upper_binary(NEBin),

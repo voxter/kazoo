@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_call_hook).
 
 -export([init/1, bindings/1, responders/1, handle_event/1, handle_event/2]).
@@ -8,21 +13,21 @@
 %% Public functions
 %%
 
--spec init(ne_binary()) -> 'ok'.
+-spec init(kz_term:ne_binary()) -> 'ok'.
 init(AccountId) ->
     kz_hooks:register(AccountId).
 
--spec bindings(kz_proplist()) -> kz_proplist().
+-spec bindings(kz_term:proplist()) -> kz_term:proplist().
 bindings(_) -> [].
 
--spec responders(kz_proplist()) -> kz_proplist().
+-spec responders(kz_term:proplist()) -> kz_term:proplist().
 responders(_) -> [].
 
 -spec handle_event(kz_json:object()) -> 'ok'.
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
 
--spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_event(EventJObj, Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj, Props).

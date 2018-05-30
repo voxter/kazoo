@@ -1,13 +1,11 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
+%%% @author Karl Anderson
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%   Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_command).
 
 -export([set/3, unset/3
@@ -20,13 +18,11 @@
 
 -define(FS_CMD_SET_MULTIVAR, 'kz_uuid_setvar_multi').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% set channel and call variables in FreeSWITCH
+%%------------------------------------------------------------------------------
+%% @doc set channel and call variables in FreeSWITCH
 %% @end
-%%--------------------------------------------------------------------
--spec set(atom(), api_ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec set(atom(), kz_term:api_ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 set(_, _, []) -> 'ok';
 set(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for setting on node ~s: ~p", [_Node, _Props]);
@@ -38,13 +34,11 @@ set(Node, UUID, Props) ->
             api(Node, UUID, ?FS_CMD_SET_MULTIVAR, AppArgs)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% set channel and call variables in FreeSWITCH (in background)
+%%------------------------------------------------------------------------------
+%% @doc set channel and call variables in FreeSWITCH (in background)
 %% @end
-%%--------------------------------------------------------------------
--spec bg_set(atom(), api_ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec bg_set(atom(), kz_term:api_ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 bg_set(_, _, []) -> 'ok';
 bg_set(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for setting on node ~s: ~p", [_Node, _Props]);
@@ -56,13 +50,11 @@ bg_set(Node, UUID, Props) ->
             bgapi(Node, UUID, ?FS_CMD_SET_MULTIVAR, AppArgs)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% unset channel and call variables in FreeSWITCH
+%%------------------------------------------------------------------------------
+%% @doc unset channel and call variables in FreeSWITCH
 %% @end
-%%--------------------------------------------------------------------
--spec unset(atom(), api_ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec unset(atom(), kz_term:api_ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 unset(_, _, []) -> 'ok';
 unset(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for unsetting on node ~s: ~p", [_Node, _Props]);
@@ -70,13 +62,11 @@ unset(Node, UUID, Props) ->
     AppArgs = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'unset'),
     api(Node, UUID, ?FS_CMD_SET_MULTIVAR, AppArgs).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% unset channel and call variables in FreeSWITCH (in background)
+%%------------------------------------------------------------------------------
+%% @doc unset channel and call variables in FreeSWITCH (in background)
 %% @end
-%%--------------------------------------------------------------------
--spec bg_unset(atom(), api_ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec bg_unset(atom(), kz_term:api_ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 bg_unset(_, _, []) -> 'ok';
 bg_unset(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for unsetting on node ~s: ~p", [_Node, _Props]);
@@ -84,13 +74,11 @@ bg_unset(Node, UUID, Props) ->
     AppArgs = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'unset'),
     bgapi(Node, UUID, ?FS_CMD_SET_MULTIVAR, AppArgs).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% export channel and call variables in FreeSWITCH
+%%------------------------------------------------------------------------------
+%% @doc export channel and call variables in FreeSWITCH
 %% @end
-%%--------------------------------------------------------------------
--spec export(atom(), api_ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec export(atom(), kz_term:api_ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 export(_, _, []) -> 'ok';
 export(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for exporting on node ~s: ~p", [_Node, _Props]);
@@ -103,13 +91,11 @@ export(Node, UUID, Props) ->
                                        ]),
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec bridge_export(atom(), ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec bridge_export(atom(), kz_term:ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 bridge_export(_, _, []) -> 'ok';
 bridge_export(_Node, 'undefined', _Props) ->
     lager:warning("no UUID for bridge_export on node ~s: ~p", [_Node, _Props]);
@@ -122,13 +108,11 @@ bridge_export(Node, UUID, Props) ->
                                         ]) || AppArg <- Exports],
     'ok'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec record_call(atom(), ne_binary(), kz_proplist()) -> ecallmgr_util:send_cmd_ret().
+%%------------------------------------------------------------------------------
+-spec record_call(atom(), kz_term:ne_binary(), kz_term:proplist()) -> ecallmgr_util:send_cmd_ret().
 record_call(Node, UUID, Args) ->
     lager:debug("execute on node ~p: uuid_record(~p)", [Node, Args]),
     case freeswitch:api(Node, 'uuid_record', Args) of
@@ -137,30 +121,30 @@ record_call(Node, UUID, Args) ->
             Ret;
         {'error', <<"-ERR ", E/binary>>} ->
             lager:debug("error executing uuid_record: ~p", [E]),
-            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>, 'false')
+            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>)
                                  ,",kazoo_application_response="
                                  ,"'",binary:replace(E, <<"\n">>, <<>>),"'"
                                  ]),
             lager:debug("publishing event: ~p", [Evt]),
-            _ = ecallmgr_util:send_cmd(Node, UUID, <<"event">>, Evt),
+            _ = ecallmgr_util:send_cmd(Node, UUID, "application", Evt),
             {'error', E};
         {'error', _Reason}=Error ->
             lager:debug("error executing uuid_record: ~p", [_Reason]),
-            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>, 'false')
+            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>)
                                  ,",kazoo_application_response=timeout"
                                  ]),
             lager:debug("publishing event: ~p", [Evt]),
-            _ = ecallmgr_util:send_cmd(Node, UUID, <<"event">>, Evt),
+            _ = ecallmgr_util:send_cmd(Node, UUID, "application", Evt),
             Error
     end.
 
--spec maybe_export_vars(atom(), ne_binary(), kz_proplist()) -> kz_proplist().
+-spec maybe_export_vars(atom(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 maybe_export_vars(Node, UUID, Props) ->
     lists:foldl(fun({<<"Hold-Media">> = K, V}, Acc) ->
-                        export(Node, UUID, [{K, V}]),
+                        _ = export(Node, UUID, [{K, V}]),
                         Acc;
                    ({<<"ringback">> = K, V}, Acc) ->
-                        export(Node, UUID, [{K, V}]),
+                        _ = export(Node, UUID, [{K, V}]),
                         Acc;
                    (KV, Acc) -> [KV| Acc]
                 end, [], Props).
@@ -169,24 +153,18 @@ maybe_export_vars(Node, UUID, Props) ->
 api(Node, Cmd, Args) ->
     freeswitch:api(Node, Cmd, Args).
 
--spec api(atom(), api_ne_binary(), atom(), binary() | list()) -> ecallmgr_util:send_cmd_ret().
+-spec api(atom(), kz_term:ne_binary(), atom(), list()) -> ecallmgr_util:send_cmd_ret().
 api(_, _, _, []) -> 'ok';
-api(_Node, 'undefined', _Cmd, _Args) ->
-    lager:warning("no UUID to run cmd on ~s: ~s: ~s", [_Node, _Cmd, _Args]);
 api(Node, UUID, Cmd, Args)
   when is_list(Args)->
-    api(Node, Cmd, list_to_binary([UUID, " ", ecallmgr_util:fs_args_to_binary(Args)]));
-api(Node, UUID, Cmd, Args) ->
-    api(Node, Cmd, <<UUID/binary, " ", Args/binary>>).
+    api(Node, Cmd, list_to_binary([UUID, " ", ecallmgr_util:fs_args_to_binary(Args)])).
 
 -spec bgapi(atom(), atom(), binary()) -> ecallmgr_util:send_cmd_ret().
 bgapi(Node, Cmd, Args) ->
     freeswitch:bgapi(Node, Cmd, Args).
 
--spec bgapi(atom(), binary(), atom(), binary() | list()) -> ecallmgr_util:send_cmd_ret().
+-spec bgapi(atom(), kz_term:ne_binary(), atom(), list()) -> ecallmgr_util:send_cmd_ret().
 bgapi(_, _, _, []) -> 'ok';
 bgapi(Node, UUID, Cmd, Args)
   when is_list(Args)->
-    bgapi(Node, Cmd, list_to_binary([UUID, " ", ecallmgr_util:fs_args_to_binary(Args)]));
-bgapi(Node, UUID, Cmd, Args) ->
-    bgapi(Node, Cmd, <<UUID/binary, " ", Args/binary>>).
+    bgapi(Node, Cmd, list_to_binary([UUID, " ", ecallmgr_util:fs_args_to_binary(Args)])).

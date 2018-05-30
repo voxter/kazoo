@@ -1,12 +1,16 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz Inc
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Callflow action to branch the call to another callflow.
 %%%
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`id'</dt>
+%%%   <dd>The Id of the Callflow to branch.</dd>
+%%% </dl>
+%%%
+%%% @author Karl Anderson
 %%% @end
-%%%
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_callflow).
 
 -behaviour(gen_cf_action).
@@ -15,12 +19,10 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
@@ -35,7 +37,7 @@ handle(Data, Call) ->
             cf_exe:branch(Flow, Call)
     end.
 
--spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->

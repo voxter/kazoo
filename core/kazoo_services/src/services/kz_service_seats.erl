@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017 Voxter Communications
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2017-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_service_seats).
 
 -export([reconcile/1]).
@@ -14,8 +12,8 @@
 
 -define(SERVICE_CATEGORY, <<"seats">>).
 
--record(state, {account_id     = 'undefined' :: api_binary()
-               ,account_db     = 'undefined' :: api_binary()
+-record(state, {account_id     = 'undefined' :: kz_term:api_binary()
+               ,account_db     = 'undefined' :: kz_term:api_binary()
                ,basic_seats    = 0           :: non_neg_integer()
                ,standard_seats = 0           :: non_neg_integer()
                ,premium_seats  = 0           :: non_neg_integer()
@@ -30,12 +28,10 @@
                }).
 -type state() :: #state{}.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile(kz_services:services()) -> kz_services:services().
 reconcile(Services) ->
     {State, _} = reconcile_seats(Services),
@@ -43,13 +39,11 @@ reconcile(Services) ->
                       ,kz_services:update(?SERVICE_CATEGORY, <<"standard">>, State#state.standard_seats
                                          ,kz_services:update(?SERVICE_CATEGORY, <<"premium">>, State#state.premium_seats, Services))).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Start the process of reconciling seats.
+%%------------------------------------------------------------------------------
+%% @doc Start the process of reconciling seats.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_seats(kz_services:services()) -> {state(), kz_services:services()}.
 reconcile_seats(Services) ->
     AccountId = kz_services:account_id(Services),
@@ -63,14 +57,12 @@ reconcile_seats(Services) ->
                                }
                         ,Services).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle users that should be considered premium seats (user owns
+%%------------------------------------------------------------------------------
+%% @doc Handle users that should be considered premium seats (user owns
 %% more than one device).
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_user_seats(state(), kz_services:services()) ->
                                   {state(), kz_services:services()}.
 reconcile_user_seats(#state{account_db=AccountDb
@@ -103,14 +95,12 @@ reconcile_user_seats(#state{premium_seats=PremiumSeats
              end,
     reconcile_user_seats(State1#state{users_todo=Users}, Services).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle users that have a voicemail box and should therefore be
+%%------------------------------------------------------------------------------
+%% @doc Handle users that have a voicemail box and should therefore be
 %% considered standard seats.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_vmbox_seats(state(), kz_services:services()) ->
                                    {state(), kz_services:services()}.
 reconcile_vmbox_seats(#state{account_db=AccountDb
@@ -152,14 +142,12 @@ reconcile_vmbox_seats(#state{standard_seats=StandardSeats
                                              }, Services)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle users or devices that appear in callflows. If they are in a
+%%------------------------------------------------------------------------------
+%% @doc Handle users or devices that appear in callflows. If they are in a
 %% callflow that has a DID, they are considered standard seats.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_standard_seats_due_to_dids(state(), kz_services:services()) ->
                                                   {state(), kz_services:services()}.
 reconcile_standard_seats_due_to_dids(#state{account_db=AccountDb
@@ -181,15 +169,13 @@ reconcile_standard_seats_due_to_dids(#state{callflows_todo=[Callflow|Callflows]}
                                                 ,Services)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handle all remaining seats as basic. Remaining users are done first
+%%------------------------------------------------------------------------------
+%% @doc Handle all remaining seats as basic. Remaining users are done first
 %% in order to filter out their device. Then remaining devices are
 %% counted.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec reconcile_basic_seats(state(), kz_services:services()) ->
                                    {state(), kz_services:services()}.
 reconcile_basic_seats(#state{users_next=[]
@@ -229,18 +215,16 @@ reconcile_basic_seats(#state{basic_seats=BasicSeats
                                      ,owned_devices=RemainingDevices
                                      }, Services).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Return true if a given callflow JSON object has a DID assigned.
+%%------------------------------------------------------------------------------
+%% @doc Return true if a given callflow JSON object has a DID assigned.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec callflow_has_did(kz_json:object()) -> boolean().
 callflow_has_did(Callflow) ->
     callflow_has_did2(kz_json:get_list_value([<<"value">>, <<"numbers">>], Callflow)).
 
--spec callflow_has_did2(api_binaries()) -> boolean().
+-spec callflow_has_did2(kz_term:api_binaries()) -> boolean().
 callflow_has_did2('undefined') -> 'false';
 callflow_has_did2([]) -> 'false';
 callflow_has_did2([Number|Numbers]) ->
@@ -249,14 +233,12 @@ callflow_has_did2([Number|Numbers]) ->
         'false' -> callflow_has_did2(Numbers)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% For callflows that have a DID, determine if there is a user or
+%%------------------------------------------------------------------------------
+%% @doc For callflows that have a DID, determine if there is a user or
 %% device in the flow that should be considered as standard.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec check_standard_seat_in_callflow(state(), kz_services:services()) ->
                                              {state(), kz_services:services()}.
 check_standard_seat_in_callflow(#state{account_db=AccountDb
@@ -335,7 +317,7 @@ unmatched_basic_seat(Node, UsersDone, DevicesDone) ->
         _ -> 'false'
     end.
 
--spec unmatched_basic_seat_device(ne_binary(), kz_json:objects()) ->
+-spec unmatched_basic_seat_device(kz_term:ne_binary(), kz_json:objects()) ->
                                          {'device', kz_json:object()} | 'false'.
 unmatched_basic_seat_device(DeviceId, []) ->
     Device = kz_json:set_value(<<"id">>, DeviceId, kz_json:new()),
@@ -346,7 +328,7 @@ unmatched_basic_seat_device(DeviceId, [Device|Devices]) ->
         _ -> unmatched_basic_seat_device(DeviceId, Devices)
     end.
 
--spec unmatched_basic_seat_user(ne_binary(), kz_json:objects()) ->
+-spec unmatched_basic_seat_user(kz_term:ne_binary(), kz_json:objects()) ->
                                        {'user', kz_json:object()} | 'false'.
 unmatched_basic_seat_user(UserId, []) ->
     User = kz_json:set_value(<<"id">>, UserId, kz_json:new()),
@@ -357,20 +339,18 @@ unmatched_basic_seat_user(UserId, [User|Users]) ->
         _ -> unmatched_basic_seat_user(UserId, Users)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% When a device is detected as a standard seat (due to DID), check if
+%%------------------------------------------------------------------------------
+%% @doc When a device is detected as a standard seat (due to DID), check if
 %% it is an owned device, and then associate the user with the seat.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec device_detected_standard(kz_json:object(), state()) -> state().
--spec device_detected_standard(kz_json:object(), kz_json:objects(), state()) ->
-                                      state().
 device_detected_standard(Device, #state{owned_devices=OwnedDevices}=State) ->
     device_detected_standard(Device, OwnedDevices, State).
 
+-spec device_detected_standard(kz_json:object(), kz_json:objects(), state()) ->
+                                      state().
 device_detected_standard(Device, [], #state{standard_seats=StandardSeats
                                            ,devices_done=DevicesDone
                                            }=State) ->
@@ -413,7 +393,7 @@ device_detected_standard(Device, [OwnedDevice|Devices], #state{standard_seats=St
             device_detected_standard(Device, Devices, State)
     end.
 
--spec fetch_users(ne_binary()) -> kz_json:objects().
+-spec fetch_users(kz_term:ne_binary()) -> kz_json:objects().
 fetch_users(AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"users/crossbar_listing">>) of
         {'ok', JObjs} -> JObjs;
@@ -422,7 +402,7 @@ fetch_users(AccountDb) ->
             []
     end.
 
--spec fetch_devices(ne_binary()) -> kz_json:objects().
+-spec fetch_devices(kz_term:ne_binary()) -> kz_json:objects().
 fetch_devices(AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"devices/crossbar_listing">>) of
         {'ok', JObjs} -> JObjs;
@@ -431,7 +411,7 @@ fetch_devices(AccountDb) ->
             []
     end.
 
--spec fetch_owned_devices(ne_binary()) -> kz_json:objects().
+-spec fetch_owned_devices(kz_term:ne_binary()) -> kz_json:objects().
 fetch_owned_devices(AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"devices/listing_by_owner">>) of
         {'ok', JObjs} -> JObjs;
@@ -440,7 +420,7 @@ fetch_owned_devices(AccountDb) ->
             []
     end.
 
--spec fetch_vmboxes(ne_binary()) -> kz_json:objects().
+-spec fetch_vmboxes(kz_term:ne_binary()) -> kz_json:objects().
 fetch_vmboxes(AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>) of
         {'ok', JObjs} -> JObjs;
@@ -449,7 +429,7 @@ fetch_vmboxes(AccountDb) ->
             []
     end.
 
--spec fetch_callflows(ne_binary()) -> kz_json:objects().
+-spec fetch_callflows(kz_term:ne_binary()) -> kz_json:objects().
 fetch_callflows(AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"callflows/crossbar_listing">>) of
         {'ok', JObjs} -> JObjs;
@@ -458,7 +438,7 @@ fetch_callflows(AccountDb) ->
             []
     end.
 
--spec filter_out_user_id(ne_binary(), kz_json:objects()) -> kz_json:objects().
+-spec filter_out_user_id(kz_term:ne_binary(), kz_json:objects()) -> kz_json:objects().
 filter_out_user_id(UserId, Users) ->
     lists:filter(fun(User) ->
                          case kz_json:get_ne_binary_value(<<"id">>, User) of
@@ -467,14 +447,12 @@ filter_out_user_id(UserId, Users) ->
                          end
                  end, Users).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Partition a list of devices by an owning user Id.
+%%------------------------------------------------------------------------------
+%% @doc Partition a list of devices by an owning user Id.
 %%
 %% @end
-%%--------------------------------------------------------------------
--spec partition_owned_devices(ne_binary(), kz_json:objects()) ->
+%%------------------------------------------------------------------------------
+-spec partition_owned_devices(kz_term:ne_binary(), kz_json:objects()) ->
                                      {kz_json:objects(), kz_json:objects()}.
 partition_owned_devices(UserId, Devices) ->
     lists:partition(fun(Device) ->
@@ -484,15 +462,13 @@ partition_owned_devices(UserId, Devices) ->
                             end
                     end, Devices).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Return true if the given Id is the Id of at least one of the list
+%%------------------------------------------------------------------------------
+%% @doc Return true if the given Id is the Id of at least one of the list
 %% of JSON objects.
 %%
 %% @end
-%%--------------------------------------------------------------------
--spec exists(ne_binary(), kz_json:objects()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec exists(kz_term:ne_binary(), kz_json:objects()) -> boolean().
 exists(_, []) -> 'false';
 exists(Id, [JObj|JObjs]) ->
     case kz_json:get_ne_binary_value(<<"id">>, JObj) of

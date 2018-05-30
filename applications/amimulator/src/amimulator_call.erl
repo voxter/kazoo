@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_call).
 
 -include("amimulator.hrl").
@@ -31,12 +36,10 @@
 -type call() :: #call{}.
 -export_type([call/0]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% API
+%%------------------------------------------------------------------------------
+%% @doc API
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 -spec from_json(kz_json:objects() | kz_json:object()) -> call().
 from_json(JObjs) when is_list(JObjs) ->
@@ -44,8 +47,8 @@ from_json(JObjs) when is_list(JObjs) ->
       fun(JObj, Calls) ->
               [from_json(JObj) | Calls]
       end
-               ,[]
-               ,JObjs);
+     ,[]
+     ,JObjs);
 from_json(JObj) ->
     Call = #call{call_id = kz_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj)
                 ,other_leg_call_id = kz_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj)
@@ -195,61 +198,61 @@ update_from_other(OtherCall, #call{direction=Direction}=Call) ->
                                          ,lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters))
     end.
 
--spec call_id(call()) -> api_binary().
+-spec call_id(call()) -> kz_term:api_binary().
 call_id(#call{call_id=CallId}) ->
     CallId.
 
--spec set_call_id(api_binary(), call()) -> call().
+-spec set_call_id(kz_term:api_binary(), call()) -> call().
 set_call_id(CallId, Call) ->
     Call#call{call_id=CallId}.
 
--spec other_leg_call_id(call()) -> api_binary().
+-spec other_leg_call_id(call()) -> kz_term:api_binary().
 other_leg_call_id(#call{other_leg_call_id=OtherLegCallId}) ->
     OtherLegCallId.
 
--spec set_other_leg_call_id(api_binary(), call()) -> call().
+-spec set_other_leg_call_id(kz_term:api_binary(), call()) -> call().
 set_other_leg_call_id(CallId, Call) ->
     Call#call{other_leg_call_id=CallId}.
 
--spec channel(call()) -> api_binary().
+-spec channel(call()) -> kz_term:api_binary().
 channel(#call{channel=Channel}) ->
     Channel.
 
--spec short_channel(call()) -> api_binary().
+-spec short_channel(call()) -> kz_term:api_binary().
 short_channel(#call{channel='undefined'}) ->
     'undefined';
 short_channel(#call{channel=Channel}) ->
     hd(binary:split(Channel, <<"-">>)).
 
 -spec set_channel(call()) -> call().
--spec set_channel(api_binary(), call()) -> call().
 set_channel(Call) ->
     set_channel(amimulator_util:channel_string(Call), Call).
 
+-spec set_channel(kz_term:api_binary(), call()) -> call().
 set_channel(Channel, Call) ->
     Call#call{channel=Channel}.
 
--spec other_channel(call()) -> api_binary().
+-spec other_channel(call()) -> kz_term:api_binary().
 other_channel(#call{other_channel=Channel}) ->
     Channel.
 
--spec set_other_channel(api_binary(), call()) -> call().
+-spec set_other_channel(kz_term:api_binary(), call()) -> call().
 set_other_channel(Channel, Call) ->
     Call#call{other_channel=Channel}.
 
--spec account_id(call()) -> api_binary().
+-spec account_id(call()) -> kz_term:api_binary().
 account_id(#call{account_id=AccountId}) ->
     AccountId.
 
--spec account_db(call()) -> api_binary().
+-spec account_db(call()) -> kz_term:api_binary().
 account_db(#call{account_id=AccountId}) ->
     kz_util:format_account_id(AccountId, 'encoded').
 
--spec authorizing_id(call()) -> api_binary().
+-spec authorizing_id(call()) -> kz_term:api_binary().
 authorizing_id(#call{authorizing_id=AuthorizingId}) ->
     AuthorizingId.
 
--spec authorizing_type(call()) -> api_binary().
+-spec authorizing_type(call()) -> kz_term:api_binary().
 authorizing_type(#call{authorizing_type=AuthorizingType}) ->
     AuthorizingType.
 
@@ -265,7 +268,7 @@ set_ccv(Key, Value, #call{custom_channel_vars=CCVs}=Call) ->
 delete_ccv(Key, #call{custom_channel_vars=CCVs}=Call) ->
     Call#call{custom_channel_vars=kz_json:delete_key(Key, CCVs)}.
 
--spec control_queue(call()) -> api_binary().
+-spec control_queue(call()) -> kz_term:api_binary().
 control_queue(#call{call_id=CallId
                    ,control_q='undefined'
                    }) ->
@@ -302,31 +305,31 @@ control_queue(#call{call_id=CallId
 control_queue(#call{control_q=ControlQueue}) ->
     ControlQueue.
 
--spec set_control_queue(api_binary(), call()) -> call().
+-spec set_control_queue(kz_term:api_binary(), call()) -> call().
 set_control_queue(ControlQueue, Call) ->
     Call#call{control_q=ControlQueue}.
 
--spec acdc_queue_id(call()) -> api_binary().
+-spec acdc_queue_id(call()) -> kz_term:api_binary().
 acdc_queue_id(#call{acdc_queue_id=QueueId}) ->
     QueueId.
 
--spec set_acdc_queue_id(api_binary(), call()) -> call().
+-spec set_acdc_queue_id(kz_term:api_binary(), call()) -> call().
 set_acdc_queue_id(QueueId, Call) ->
     Call#call{acdc_queue_id=QueueId}.
 
--spec username(call()) -> api_binary().
+-spec username(call()) -> kz_term:api_binary().
 username(#call{username=Username}) ->
     Username.
 
--spec to_user(call()) -> ne_binary().
+-spec to_user(call()) -> kz_term:ne_binary().
 to_user(#call{to=To}) ->
     parse_user_at_realm('user', To).
 
--spec from_user(call()) -> ne_binary().
+-spec from_user(call()) -> kz_term:ne_binary().
 from_user(#call{from=From}) ->
     parse_user_at_realm('user', From).
 
--spec id_name(call()) -> api_binary().
+-spec id_name(call()) -> kz_term:api_binary().
 id_name(#call{direction = <<"inbound">>
              ,caller_id_name=CIDName
              }) ->
@@ -336,7 +339,7 @@ id_name(#call{direction = <<"outbound">>
              }) ->
     CIDName.
 
--spec id_number(call()) -> api_binary().
+-spec id_number(call()) -> kz_term:api_binary().
 id_number(#call{direction = <<"inbound">>
                ,caller_id_number=CIDNumber
                }) ->
@@ -346,7 +349,7 @@ id_number(#call{direction = <<"outbound">>
                }) ->
     CIDNumber.
 
--spec other_id_name(call()) -> api_binary().
+-spec other_id_name(call()) -> kz_term:api_binary().
 other_id_name(#call{direction = <<"inbound">>
                    ,callee_id_name=CIDName
                    }) ->
@@ -356,7 +359,7 @@ other_id_name(#call{direction = <<"outbound">>
                    }) ->
     CIDName.
 
--spec other_id_number(call()) -> api_binary().
+-spec other_id_number(call()) -> kz_term:api_binary().
 other_id_number(#call{direction = <<"inbound">>
                      ,callee_id_number=CIDNumber
                      }) ->
@@ -366,15 +369,15 @@ other_id_number(#call{direction = <<"outbound">>
                      }) ->
     CIDNumber.
 
--spec direction(call()) -> api_binary().
+-spec direction(call()) -> kz_term:api_binary().
 direction(#call{direction=Direction}) ->
     Direction.
 
--spec set_direction(api_binary(), call()) -> call().
+-spec set_direction(kz_term:api_binary(), call()) -> call().
 set_direction(Direction, Call) ->
     Call#call{direction=Direction}.
 
--spec answered(call()) -> api_boolean().
+-spec answered(call()) -> kz_term:api_boolean().
 answered(#call{answered=Answered}) ->
     Answered.
 
@@ -382,58 +385,57 @@ answered(#call{answered=Answered}) ->
 set_answered(Answered, Call) ->
     Call#call{answered=Answered}.
 
--spec elapsed_s(call()) -> api_integer().
+-spec elapsed_s(call()) -> kz_term:api_integer().
 elapsed_s(#call{timestamp=Timestamp}) ->
     kz_time:current_tstamp() - Timestamp.
 
--spec caller_id_name(call()) -> api_binary().
+-spec caller_id_name(call()) -> kz_term:api_binary().
 caller_id_name(#call{caller_id_name=CIDName}) ->
     CIDName.
 
--spec caller_id_number(call()) -> api_binary().
+-spec caller_id_number(call()) -> kz_term:api_binary().
 caller_id_number(#call{caller_id_number=CIDNumber}) ->
     CIDNumber.
 
--spec set_caller_id_name(api_binary(), call()) -> call().
+-spec set_caller_id_name(kz_term:api_binary(), call()) -> call().
 set_caller_id_name(CIDName, Call) ->
     Call#call{caller_id_name=CIDName}.
 
--spec set_caller_id_number(api_binary(), call()) -> call().
+-spec set_caller_id_number(kz_term:api_binary(), call()) -> call().
 set_caller_id_number(CIDNumber, Call) ->
     Call#call{caller_id_number=CIDNumber}.
 
--spec callee_id_name(call()) -> api_binary().
+-spec callee_id_name(call()) -> kz_term:api_binary().
 callee_id_name(#call{callee_id_name=CIDName}) ->
     CIDName.
 
--spec callee_id_number(call()) -> api_binary().
+-spec callee_id_number(call()) -> kz_term:api_binary().
 callee_id_number(#call{callee_id_number=CIDNumber}) ->
     CIDNumber.
 
--spec set_callee_id_name(api_binary(), call()) -> call().
+-spec set_callee_id_name(kz_term:api_binary(), call()) -> call().
 set_callee_id_name(CIDName, Call) ->
     Call#call{callee_id_name=CIDName}.
 
--spec set_callee_id_number(api_binary(), call()) -> call().
+-spec set_callee_id_number(kz_term:api_binary(), call()) -> call().
 set_callee_id_number(CIDNumber, Call) ->
     Call#call{callee_id_number=CIDNumber}.
 
--spec endpoint(call()) -> api_object().
+-spec endpoint(call()) -> kz_term:api_object().
 endpoint(Call) ->
     case kz_endpoint:get(to_kapps_call(Call)) of
         {'ok', Endpoint} -> Endpoint;
         {'error', _} -> maybe_cellphone_endpoint(Call)
     end.
 
--spec user(call()) -> api_object().
+-spec user(call()) -> kz_term:api_object().
 user(Call) ->
     maybe_endpoint_owner(endpoint(Call)).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 -spec update_post_create(call()) -> call().
 update_post_create(Call) ->
@@ -446,7 +448,7 @@ update_post_create(Call) ->
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
--spec directional_update_from_other(api_binary(), call(), call()) -> call().
+-spec directional_update_from_other(kz_term:api_binary(), call(), call()) -> call().
 directional_update_from_other(<<"inbound">>, OtherCall, Call) ->
     Updaters = [fun(Call2) -> set_callee_id_name(callee_id_name(OtherCall), Call2) end
                ,fun(Call2) -> set_callee_id_number(callee_id_number(OtherCall), Call2) end
@@ -487,7 +489,6 @@ unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
     end.
 
 -spec set_id(call()) -> call().
--spec set_id(api_binary(), {api_binary(), api_binary()} | 'undefined', call()) -> call().
 set_id(#call{direction=Direction}=Call) ->
     CallerId = case endpoint(Call) of
                    'undefined' -> 'undefined';
@@ -495,6 +496,7 @@ set_id(#call{direction=Direction}=Call) ->
                end,
     set_id(Direction, CallerId, Call).
 
+-spec set_id(kz_term:api_binary(), {kz_term:api_binary(), kz_term:api_binary()} | 'undefined', call()) -> call().
 set_id(_, 'undefined', Call) ->
     Call;
 set_id(<<"inbound">>, {Name, Number}, Call) ->
@@ -509,10 +511,10 @@ set_id(<<"outbound">>, {Name, Number}, Call) ->
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec set_other_id(call()) -> call().
--spec set_other_id(api_binary(), call()) -> call().
 set_other_id(#call{direction=Direction}=Call) ->
     set_other_id(Direction, Call).
 
+-spec set_other_id(kz_term:api_binary(), call()) -> call().
 set_other_id(<<"inbound">>, #call{callee_id_name=CIDName
                                  ,callee_id_number=CIDNumber
                                  }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
@@ -532,7 +534,7 @@ set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
 set_other_id(<<"outbound">>, Call) ->
     Call.
 
--spec endpoint_caller_id(kz_json:object(), call()) -> {api_binary(), api_binary()} | 'undefined'.
+-spec endpoint_caller_id(kz_json:object(), call()) -> {kz_term:api_binary(), kz_term:api_binary()} | 'undefined'.
 endpoint_caller_id(Endpoint, Call) ->
     case kz_json:get_value(<<"owner_id">>, Endpoint) of
         'undefined' -> 'undefined';%{kz_json:get_value(<<"name">>, Endpoint), }
@@ -546,7 +548,7 @@ endpoint_caller_id(Endpoint, Call) ->
 
 
 
--spec parse_user_at_realm(atom(), ne_binary()) -> ne_binary().
+-spec parse_user_at_realm(atom(), kz_term:ne_binary()) -> kz_term:ne_binary().
 parse_user_at_realm('user', Data) ->
     case binary:split(Data, <<"@">>) of
         [ToUser, _ToRealm] ->
@@ -555,7 +557,7 @@ parse_user_at_realm('user', Data) ->
             ToUser
     end.
 
--spec maybe_cellphone_endpoint(call()) -> api_object().
+-spec maybe_cellphone_endpoint(call()) -> kz_term:api_object().
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
     E164 = case direction(Call) of
@@ -569,13 +571,13 @@ maybe_cellphone_endpoint(Call) ->
                end,
     find_cellphone_endpoint_fold(AccountDb, E164, Results1).
 
--spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), kz_json:objects()) -> api_object().
+-spec find_cellphone_endpoint_fold(kz_term:api_binary(), kz_term:ne_binary(), kz_json:objects()) -> kz_term:api_object().
 find_cellphone_endpoint_fold(_, _, []) ->
     'undefined';
 find_cellphone_endpoint_fold(AccountDb, E164, [Result|Results]) ->
     find_cellphone_endpoint_fold(AccountDb, E164, kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)), Results).
 
--spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', kz_json:object()} | kz_datamgr:couchbeam_error() | {'error', 'not_found'}, kz_json:objects()) -> api_object().
+-spec find_cellphone_endpoint_fold(kz_term:api_binary(), kz_term:ne_binary(), {'ok', kz_json:object()} | kz_datamgr:couchbeam_error() | {'error', 'not_found'}, kz_json:objects()) -> kz_term:api_object().
 find_cellphone_endpoint_fold(AccountDb, E164, {'error', 'req_timedout'}, Results) ->
     find_cellphone_endpoint_fold(AccountDb, E164, Results);
 find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
@@ -585,7 +587,7 @@ find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
         _ -> find_cellphone_endpoint_fold(AccountDb, E164, Results)
     end.
 
--spec maybe_endpoint_owner(api_object()) -> api_object().
+-spec maybe_endpoint_owner(kz_term:api_object()) -> kz_term:api_object().
 maybe_endpoint_owner('undefined') ->
     'undefined';
 maybe_endpoint_owner(Endpoint) ->

@@ -1,17 +1,15 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (c) 2015-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%% Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(ci_parsers_util).
 
 %% ci_parsers_util: utilities for parsers.
 
 -export([timestamp/1, timestamp/0]).
--export([open_file/1]).
+-export([open_file_for_read/1]).
 -export([parse_interval/0]).
 -export([make_name/1]).
 -export([call_id/1
@@ -31,12 +29,12 @@
 timestamp() ->
     {_, _, Micro} = os:timestamp(),
     kz_term:to_integer(Micro) / ?MICROSECONDS_IN_SECOND +
-        kz_time:current_tstamp().
+        kz_time:now_s().
 
--spec timestamp(ne_binary() | kz_now()) -> api_float().
+-spec timestamp(kz_term:ne_binary() | kz_time:now()) -> kz_term:api_float().
 timestamp(<<YYYY:4/binary, "-", MM:2/binary, "-", DD:2/binary, "T"
-            ,HH:2/binary, ":", MMM:2/binary, ":", SS:2/binary, "."
-            ,Micro:6/binary, "+", _H:2/binary, ":", _M:2/binary, " ", _/binary
+           ,HH:2/binary, ":", MMM:2/binary, ":", SS:2/binary, "."
+           ,Micro:6/binary, "+", _H:2/binary, ":", _M:2/binary, " ", _/binary
           >>) ->
     kz_term:to_integer(Micro) / ?MICROSECONDS_IN_SECOND +
         calendar:datetime_to_gregorian_seconds(
@@ -48,26 +46,27 @@ timestamp({_,_,_} = TS) ->
     kz_time:now_s(TS);
 timestamp(_) -> 'undefined'.
 
--spec open_file(iodata()) -> file:io_device().
-open_file(Filename) ->
-    Options = ['read','append'     %% Read whole file then from its end
+-spec open_file_for_read(iodata()) -> {'ok', file:io_device()} | {'error', any()}.
+open_file_for_read(Filename) ->
+    Options = ['read'              %% Read whole file
               ,'binary'            %% Return binaries instead of lists
-              ,'raw','read_ahead'  %% Faster access to file
+              ,'raw', 'read_ahead' %% Faster access to file
               ],
     case file:open(Filename, Options) of
-        {'ok', IoDevice} -> IoDevice;
-        {'error', _FileOpenError} ->
-            lager:debug("parser cannot open '~p': ~p", [Filename,_FileOpenError])
+        {'ok', _}=OK -> OK;
+        {'error', _FileOpenError}=Error ->
+            lager:debug("parser cannot open '~p': ~p", [Filename,_FileOpenError]),
+            {'error', Error}
     end.
 
 -spec parse_interval() -> pos_integer().
 parse_interval() ->
     2 * ?MILLISECONDS_IN_SECOND.  %% Milliseconds
 
--type parser_args() :: {'parser_args', ne_binary(), any()} |
-                       {'parser_args', file:filename_all(), ne_binary(), any()}.
+-type parser_args() :: {'parser_args', kz_term:ne_binary(), any()} |
+                       {'parser_args', file:filename_all(), kz_term:ne_binary(), any()}.
 
--spec make_name(ne_binary() | parser_args()) -> atom().
+-spec make_name(kz_term:ne_binary() | parser_args()) -> atom().
 make_name(Bin)
   when is_binary(Bin) ->
     binary_to_atom(Bin, 'utf8');
@@ -79,27 +78,27 @@ make_name({'parser_args', Filename, _IP, _Port}) ->
     FName = filename:absname(Filename),
     make_name(kz_term:to_binary(FName)).
 
--spec call_id(ne_binaries()) -> ne_binary().
+-spec call_id(kz_term:ne_binaries()) -> kz_term:ne_binary().
 call_id(Data) ->
     sip_field([<<"Call-ID">>, <<"i">>], Data).
 
 %% @doc Gets the CSeq field from SIP transaction data.
 %%   To use with HEP or FreeSwitch data; Kamailio has another format!
--spec c_seq(ne_binaries()) -> ne_binary().
+-spec c_seq(kz_term:ne_binaries()) -> kz_term:ne_binary().
 c_seq(Data) ->
     sip_field([<<"CSeq">>], Data).
 
--spec to(ne_binaries()) -> ne_binary().
+-spec to(kz_term:ne_binaries()) -> kz_term:ne_binary().
 to(Data) ->
     sip_field([<<"To">>], Data).
 
--spec from(ne_binaries()) -> ne_binary().
+-spec from(kz_term:ne_binaries()) -> kz_term:ne_binary().
 from(Data) ->
     sip_field([<<"From">>], Data).
 
 %% Internals
 
--spec sip_field(ne_binaries(), ne_binaries()) -> api_binary().
+-spec sip_field(kz_term:ne_binaries(), kz_term:ne_binaries()) -> kz_term:api_binary().
 sip_field(_Fields, []) ->
     'undefined';
 sip_field(Fields, [Data|Rest]) ->
@@ -113,7 +112,7 @@ sip_field(Fields, [Data|Rest]) ->
             Value
     end.
 
--spec try_all(ne_binary(), ne_binary()) -> 'false' | ne_binary().
+-spec try_all(kz_term:ne_binary(), kz_term:ne_binary()) -> 'false' | kz_term:ne_binary().
 try_all(Data, Field) ->
     FieldSz = byte_size(Field),
     case Data of

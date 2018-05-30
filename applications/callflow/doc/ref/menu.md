@@ -8,11 +8,11 @@ Validator for the menu callflow's data object
 
 
 
-Key | Description | Type | Default | Required
---- | ----------- | ---- | ------- | --------
-`id` | Menu ID to use | `string()` |   | `false`
-`interdigit_timeout` | Amount of time, in milliseconds, to wait between keypresses | `integer()` |   | `false`
-`var` | Custom variable to check for menu ID | `string()` |   | `false`
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`id` | Menu ID to use | `string()` |   | `false` |  
+`interdigit_timeout` | Amount of time, in milliseconds, to wait between keypresses | `integer()` |   | `false` |  
+`var` | Custom variable to check for menu ID | `string()` |   | `false` |  
 
 
 

@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_move).
 -behaviour(gen_cf_action).
 
@@ -14,12 +12,10 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(_Data, Call) ->
     case kapps_call:owner_id(Call) of
@@ -42,7 +38,7 @@ handle(_Data, Call) ->
     end,
     cf_exe:stop(Call).
 
--spec get_channels(ne_binary(), kapps_call:call()) -> dict:dict().
+-spec get_channels(kz_term:ne_binary(), kapps_call:call()) -> dict:dict().
 get_channels(OwnerId, Call) ->
     DeviceIds = kz_attributes:owned_by(OwnerId, <<"device">>, Call),
     lager:debug("devices owned by ~p: ~p", [OwnerId, DeviceIds]),

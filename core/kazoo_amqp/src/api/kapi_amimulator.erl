@@ -1,4 +1,8 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 
 %%%-------------------------------------------------------------------
 -module(kapi_amimulator).
@@ -35,10 +39,10 @@
        ,<<"amimulator.control_queue.", (amqp_util:encode(CallId))/binary>>
        ).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
--spec control_queue_req(kz_json:object() | kz_proplist()) ->
+%%------------------------------------------------------------------------------
+-spec control_queue_req(kz_json:object() | kz_term:proplist()) ->
                                {'ok', iolist()} |
                                {'error', string()}.
 control_queue_req(Prop) when is_list(Prop) ->
@@ -48,15 +52,15 @@ control_queue_req(Prop) when is_list(Prop) ->
     end;
 control_queue_req(JObj) -> control_queue_req(kz_json:to_proplist(JObj)).
 
--spec control_queue_req_v(kz_json:object() | kz_proplist()) -> boolean().
+-spec control_queue_req_v(kz_json:object() | kz_term:proplist()) -> boolean().
 control_queue_req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?CONTROL_QUEUE_REQ_VALUES, ?CONTROL_QUEUE_REQ_TYPES);
 control_queue_req_v(JObj) -> control_queue_req_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
--spec control_queue_resp(kz_json:object() | kz_proplist()) ->
+%%------------------------------------------------------------------------------
+-spec control_queue_resp(kz_json:object() | kz_term:proplist()) ->
                                 {'ok', iolist()} |
                                 {'error', string()}.
 control_queue_resp(Prop) when is_list(Prop) ->
@@ -66,40 +70,40 @@ control_queue_resp(Prop) when is_list(Prop) ->
     end;
 control_queue_resp(JObj) -> control_queue_resp(kz_json:to_proplist(JObj)).
 
--spec control_queue_resp_v(kz_json:object() | kz_proplist()) -> boolean().
+-spec control_queue_resp_v(kz_json:object() | kz_term:proplist()) -> boolean().
 control_queue_resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?CONTROL_QUEUE_RESP_VALUES, ?CONTROL_QUEUE_RESP_TYPES);
 control_queue_resp_v(JObj) -> control_queue_resp_v(kz_json:to_proplist(JObj)).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
--spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec bind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     amqp_util:bind_q_to_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
--spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
+-spec unbind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     amqp_util:unbind_q_from_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% declare the exchanges used by this API
+%%------------------------------------------------------------------------------
+%% @doc declare the exchanges used by this API
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
     amqp_util:kapps_exchange().
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
--spec publish_control_queue_req(api_terms()) -> 'ok'.
--spec publish_control_queue_req(api_terms(), ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec publish_control_queue_req(kz_term:api_terms()) -> 'ok'.
 publish_control_queue_req(JObj) ->
     publish_control_queue_req(JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_control_queue_req(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_control_queue_req(Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_REQ_VALUES, fun ?MODULE:control_queue_req/1),
     amqp_util:kapps_publish(?CONTROL_QUEUE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
@@ -109,13 +113,14 @@ call_id([_|_]=API) ->
 call_id(JObj) ->
     kz_json:get_value(<<"Call-ID">>, JObj).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
-%%--------------------------------------------------------------------
--spec publish_control_queue_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_control_queue_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec publish_control_queue_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_control_queue_resp(Q, JObj) ->
     publish_control_queue_resp(Q, JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_control_queue_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_control_queue_resp(Q, Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_RESP_VALUES, fun ?MODULE:control_queue_resp/1),
     amqp_util:targeted_publish(Q, Payload, ContentType).

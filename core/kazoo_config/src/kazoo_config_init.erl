@@ -1,10 +1,8 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz, INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kazoo_config_init).
 
 -include("kazoo_config.hrl").
@@ -15,11 +13,11 @@
 
 -export([read_cookie/1]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc Starts the app for inclusion in a supervisor tree
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the application for inclusion in a supervisor tree.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     set_env(),
     'ignore'.
@@ -31,11 +29,11 @@ ini_files() ->
         File    -> [File]
     end.
 
--spec load_file() -> kz_proplist().
+-spec load_file() -> kz_term:proplist().
 load_file() ->
     maybe_load_file(ini_files()).
 
--spec maybe_load_file(list(file:name())) -> kz_proplist().
+-spec maybe_load_file(list(file:name())) -> kz_term:proplist().
 maybe_load_file([]) ->
     lager:warning("out of config files to attempt, loading defaults..."),
     ?SECTION_DEFAULTS;
@@ -51,7 +49,7 @@ maybe_load_file([File|T]) ->
             maybe_load_file(T);
 
         {'error', _}=Error ->
-            lager:warning("error loading file ~s: ~s", [File, Error]),
+            lager:warning("error loading file ~s: ~p", [File, Error]),
             maybe_load_file(T)
     end.
 
@@ -64,11 +62,21 @@ set_env() ->
 
 set_zone(AppEnv) ->
     erlang:put(?SETTINGS_KEY, AppEnv),
-    [Local] = kz_config:get(kz_config:get_node_section_name(), 'zone', ['local']),
-    Zone = kz_term:to_atom(Local, 'true'),
+    Zone = maybe_zone_from_env(),
     lager:notice("setting zone to ~p", [Zone]),
     application:set_env(?APP, 'zone', Zone).
 
+-spec maybe_zone_from_env() -> atom().
+maybe_zone_from_env() ->
+    case os:getenv("KAZOO_ZONE", "noenv") of
+        "noenv" -> zone_from_ini();
+        Zone -> kz_term:to_atom(Zone, 'true')
+    end.
+
+-spec zone_from_ini() -> atom().
+zone_from_ini() ->
+    [Local] = kz_config:get(kz_config:get_node_section_name(), 'zone', ['local']),
+    kz_term:to_atom(Local, 'true').
 
 -spec reload() -> 'ok'.
 reload() ->
@@ -104,12 +112,10 @@ cleanup_zone_prop({'amqp_uri', URI}) ->
     {'amqp_uri', kz_term:to_list(URI)};
 cleanup_zone_prop(Prop) -> Prop.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Reads config.ini without starting the kazoo_config application.
+%%------------------------------------------------------------------------------
+%% @doc Reads `config.ini' without starting the `kazoo_config' application.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec read_cookie(atom()) -> [atom()].
 read_cookie(NodeName) ->
     AppEnv = load_file(),

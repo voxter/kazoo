@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% proplists-like interface to json objects
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc proplists-like interface to json objects
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_json_test).
 
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
@@ -72,12 +70,35 @@ prop_get_value() ->
 
 prop_set_value() ->
     ?FORALL({JObj, Key, Value}
-           ,{test_object(), keys(), json_term()}
-           ,?WHENFAIL(?debugFmt("Failed prop_set_value with ~p:~p -> ~p~n", [Key, Value, JObj]),
-                      begin
-                          JObj1 = kz_json:set_value(Key, Value, JObj),
-                          Value =:= kz_json:get_value(Key, JObj1, Value)
-                      end)
+           ,{test_object(), keys(), non_null_json_term()}
+           ,?TRAPEXIT(
+               ?WHENFAIL(?debugFmt("Failed prop_set_value with ~w:~w -> ~p~n"
+                                  ,[Key, Value, JObj]
+                                  ),
+                         begin
+                             JObj1 = kz_json:set_value(Key, Value, JObj),
+
+                             'true' =:= kz_json:is_defined(Key, JObj1)
+                                 andalso (Value =:= kz_json:get_value(Key, JObj1))
+                         end)
+              )
+           ).
+
+prop_delete_key() ->
+    ?FORALL({JObj, Key, Value}
+           ,{test_object(), keys(), non_null_json_term()}
+           ,?TRAPEXIT(
+               ?WHENFAIL(?debugFmt("Failed prop_set_value with ~w:~w -> ~p~n"
+                                  ,[Key, Value, JObj]
+                                  ),
+                         begin
+                             JObj1 = kz_json:set_value(Key, Value, JObj),
+                             JObj2 = kz_json:delete_key(Key, JObj1),
+
+                             'true' =:= kz_json:is_defined(Key, JObj1)
+                                 andalso 'false' =:= kz_json:is_defined(Key, JObj2)
+                         end)
+              )
            ).
 
 prop_to_proplist() ->
@@ -235,6 +256,29 @@ log_failure(Key, Value, Missing) ->
 
 -define(SP, kz_json:decode(<<"{\"plan\":{\"phone_numbers\":{\"did_us\":{\"discounts\":{\"cumulative\":{\"rate\":1}}}}}}">>)).
 -define(O, kz_json:decode(<<"{\"phone_numbers\":{\"did_us\":{\"discounts\":{\"cumulative\":{\"rate\":20}}}}}">>)).
+
+get_first_defined_test_() ->
+    Paths = [{<<"d1v1">>, [<<"d1k1">>, <<"d1k2">>]}
+            ,{<<"d1v2">>, [<<"d1k2">>, <<"d1k1">>]}
+            ,{'undefined', [<<"nope">>, <<"definitely_nope">>]}
+            ,{'undefined', []}
+            ,{<<"d1v1">>, [<<"nope">>, <<"d1k1">>]}
+            ],
+    [?_assertEqual('undefined', kz_json:get_first_defined([<<"foo">>, <<"bar">>], kz_json:new()))
+     |
+     [?_assertEqual(V, kz_json:get_first_defined(Path, ?D1))
+      || {V, Path} <- Paths
+     ]
+    ].
+
+find_test_() ->
+    KVs = [{<<"d1v1">>, <<"d1k1">>}
+          ,{1, <<"d2k1">>}
+          ,{<<"d3v1">>, <<"d3k1">>}
+          ,{'undefined', <<"foo">>}
+          ,{'undefined', [<<"d3k1">>, <<"foo">>]}
+          ],
+    [?_assertEqual(V, kz_json:find(K, ?D4)) || {V, K} <- KVs].
 
 merge_recursive_overrides_test_() ->
     AP = kz_json:merge_recursive(?SP, kz_json:from_list([{<<"plan">>, ?O}])),
@@ -440,6 +484,9 @@ delete_key_test_() ->
     ,?_assertEqual(?D6_AFTER_SUB_PRUNE, kz_json:delete_key([<<"sub_d1">>, <<"d1k1">>], ?D6, 'prune'))
     ,?_assertEqual(?P_ARR, kz_json:delete_key([<<"k1">>, 1], ?D_ARR))
     ,?_assertEqual(?EMPTY_JSON_OBJECT, kz_json:delete_key([<<"k1">>, 1], ?D_ARR, 'prune'))
+
+    ,?_assertError('badarg', kz_json:delete_key([<<"foo">>, <<"bar">>], kz_json:from_list([{<<"foo">>, 5}])))
+    ,?_assertError('badarg', kz_json:delete_key([<<"foo">>, <<"bar">>], kz_json:from_list([{<<"foo">>, 5}]), 'prune'))
     ].
 
 get_value_test_() ->
@@ -466,10 +513,13 @@ get_value_test_() ->
      %% an array of objects, but change the default return if it is not present.
      %% Also tests the ability to have indexs represented as strings
     ,?_assertEqual(<<"not">>, kz_json:get_value([3, <<"sub_docs">>, <<"2">>, <<"d2k2">>], [], <<"not">>))
-    ,?_assertEqual(<<"not">>, kz_json:get_value([3, <<"sub_docs">>, <<"2">>, <<"d2k2">>], ?D1, <<"not">>))
-    ,?_assertEqual(<<"not">>, kz_json:get_value([3, <<"sub_docs">>, <<"2">>, <<"d2k2">>], ?D2, <<"not">>))
-    ,?_assertEqual(<<"not">>, kz_json:get_value([3, <<"sub_docs">>, <<"2">>, <<"d2k2">>], ?D3, <<"not">>))
     ,?_assertEqual(3.14,      kz_json:get_value([3, <<"sub_docs">>, 2, <<"d2k2">>], ?D4, <<"not">>))
+    ,?_assertEqual('undefined'
+                  ,kz_json:get_value([<<"en-us">>, <<"label">>], ?D1)
+                  )
+    ,?_assertEqual(<<"boom">>
+                  ,kz_json:get_value([<<"en-us">>, <<"label">>], ?D1, <<"boom">>)
+                  )
     ].
 
 -define(T2R1, ?JSON_WRAPPER([{<<"d1k1">>, <<"d1v1">>}, {<<"d1k2">>, <<"update">>}, {<<"d1k3">>, [<<"d1v3.1">>, <<"d1v3.2">>, <<"d1v3.3">>]}])).
@@ -482,9 +532,9 @@ set_value_object_test_() ->
     [?_assertEqual(?T2R1, kz_json:set_value([<<"d1k2">>], <<"update">>, ?D1))
      %% Test setting a non-existing key
     ,?_assertEqual(?T2R2, kz_json:set_value([<<"d1k4">>], <<"new_value">>, ?D1))
-     %% Test setting an existing key followed by a non-existant key
+     %% Test setting an existing key followed by a nonexistent key
     ,?_assertEqual(?T2R3, kz_json:set_value([<<"d1k2">>, <<"new_key">>], <<"added_value">>, ?D1))
-     %% Test setting a non-existing key followed by another non-existant key
+     %% Test setting a non-existing key followed by another nonexistent key
     ,?_assertEqual(?T2R4, kz_json:set_value([<<"d1k4">>, <<"new_key">>], <<"added_value">>, ?D1))
     ].
 
@@ -500,7 +550,7 @@ set_value_multiple_object_test_() ->
     [?_assertEqual(?T3R1, kz_json:set_value([1, <<"k1">>], <<"test">>, ?D5))
      %% Set a non-existing key in the first kz_json:object()
     ,?_assertEqual(?T3R2, kz_json:set_value([1, <<"pi">>], 3.14, ?D5))
-     %% Set a non-existing key followed by another non-existant key in the first kz_json:object()
+     %% Set a non-existing key followed by another nonexistent key in the first kz_json:object()
     ,?_assertEqual(?T3R3, kz_json:set_value([1, <<"callerid">>, <<"name">>], <<"2600hz">>, ?D5))
      %% Set an existing key in the second kz_json:object()
     ,?_assertEqual(?T3R4, kz_json:set_value([2, <<"k2">>], <<"updated">>, ?D5))
@@ -541,21 +591,21 @@ set_value_normalizer_test_() ->
                    ,[<<"d1v3.1">>, <<"d1v3.2">>, <<"d1v3.3">>]
                    ]).
 
-get_values_test() ->
+get_values_test_() ->
     {Values, Keys} = kz_json:get_values(?D1),
-    ?assertEqual('true', are_all_there(Values
-                                      ,Keys
-                                      ,?D1_values
-                                      ,[<<"d1k1">>, <<"d1k2">>, <<"d1k3">>]
-                                      )).
+    are_all_there(Values
+                 ,Keys
+                 ,?D1_values
+                 ,kz_json:get_keys(?D1)
+                 ).
 
-values_test() ->
+values_test_() ->
     Values = kz_json:values(?D1),
-    ?assertEqual('true', are_all_there(Values, [], ?D1_values, [])).
+    are_all_there(Values, [], ?D1_values, []).
 
 are_all_there(Values, Keys, Vs, Ks) ->
-    lists:all(fun(K) -> lists:member(K, Keys) end, Ks)
-        andalso lists:all(fun(V) -> lists:member(V, Values) end, Vs).
+    [?_assert(lists:member(K, Keys)) || K <- Ks]
+        ++ [?_assert(lists:member(V, Values)) || V <- Vs].
 
 -define(K3_JOBJ, ?JSON_WRAPPER([{<<"k3.1">>, <<"v3.1">>}])).
 -define(CODEC_JOBJ, ?JSON_WRAPPER([{<<"k1">>, <<"v1">>}
@@ -581,6 +631,7 @@ find_value_test_() ->
     [?_assertEqual(<<"{\"k1\":\"v1\"}">>, kz_json:encode(kz_json:find_value(<<"k1">>, <<"v1">>, JObjs)))
     ,?_assertEqual(<<"{\"k1\":\"v2\"}">>, kz_json:encode(kz_json:find_value(<<"k1">>, <<"v2">>, JObjs)))
     ,?_assertEqual('undefined', kz_json:find_value(<<"k1">>, <<"v3">>, JObjs))
+    ,?_assertEqual('undefined', kz_json:find_value([<<"k1">>, <<"k9">>], <<"v1">>, JObjs))
     ].
 
 insert_value_test_() ->
@@ -764,6 +815,68 @@ set_value_test_() ->
     Value = null,
     JObj1 = kz_json:set_value(Key, Value, JObj),
     [{"prop_set_value error", ?_assertEqual(Value, kz_json:get_value(Key, JObj1, Value))}].
+
+-define(FROM_MAP_JSON_1,
+        kz_json:from_list([{options, kz_json:from_list([{opt1,<<"my-opt1">>}
+                                                       ,{opt2,<<"my-opt2">>}
+                                                       ])}])).
+-define(FROM_MAP_JSON_2,
+        kz_json:from_list([{outer_key, kz_json:from_list([{inner_key,<<"inner_value">>}])}])).
+
+-define(FROM_MAP_JSON_3,
+        kz_json:from_list([{outer_key, kz_json:from_list([{inner_key,<<"inner_value">>}
+                                                         ,{inner_options, kz_json:from_list([{opt1,<<"my-opt1">>}
+                                                                                            ,{opt2,<<"my-opt2">>}
+                                                                                            ])}
+                                                         ])}])).
+-define(FROM_MAP_JSON_4_WRONG,
+        kz_json:from_list([{outer_key, kz_json:from_list([{inner_key,<<"inner_value">>}
+                                                         ,{inner_options, [{opt1,<<"my-opt1">>}
+                                                                          ,<<"anykey">>
+                                                                          ,{opt1,<<"my-opt1">>}
+                                                                          ]}
+                                                         ])}])).
+-define(FROM_MAP_JSON_4_RIGHT,
+        kz_json:from_list([{outer_key, kz_json:from_list([{inner_key,<<"inner_value">>}
+                                                         ,{inner_options, [kz_json:from_list([{opt1,<<"my-opt1">>}])
+                                                                          ,<<"anykey">>
+                                                                          ,kz_json:from_list([{opt1,<<"my-opt1">>}])
+                                                                          ]}
+                                                         ])}])).
+
+-define(FROM_MAP_MAP_1, #{options => [{opt1,<<"my-opt1">>},{opt2,<<"my-opt2">>}]}).
+-define(FROM_MAP_MAP_2, #{outer_key => #{inner_key => <<"inner_value">>}}).
+-define(FROM_MAP_MAP_3, #{outer_key => #{inner_key => <<"inner_value">>
+                                        ,inner_options => [{opt1,<<"my-opt1">>}
+                                                          ,{opt2,<<"my-opt2">>}
+                                                          ]}}).
+-define(FROM_MAP_MAP_4, #{outer_key => #{inner_key => <<"inner_value">>
+                                        ,inner_options => [{opt1,<<"my-opt1">>}
+                                                          ,<<"anykey">>
+                                                          ,{opt1,<<"my-opt1">>}
+                                                          ]}}).
+
+from_map_test_() ->
+    [{"Map with a proplist as a key's value"
+     ,?_assertEqual(?FROM_MAP_JSON_1, kz_json:from_map(?FROM_MAP_MAP_1))
+     }
+    ,{"Normal map", ?_assertEqual(?FROM_MAP_JSON_2, kz_json:from_map(?FROM_MAP_MAP_2))}
+    ,{"Submap with a proplist as a key's value"
+     ,?_assertEqual(?FROM_MAP_JSON_3, kz_json:from_map(?FROM_MAP_MAP_3))
+     }
+    ,{"wrong from_map with a mixed proplist inside map"
+     ,?_assertNotEqual(?FROM_MAP_JSON_4_WRONG, kz_json:from_map(?FROM_MAP_MAP_4))
+     }
+    ,{"correct from_map with a mixed proplist inside map"
+     ,?_assertEqual(?FROM_MAP_JSON_4_RIGHT, kz_json:from_map(?FROM_MAP_MAP_4))
+     }
+    ,{"error encoding the invalid json generated in from_map with a mixed proplist inside map"
+     ,?_assertException(throw, {error,{invalid_ejson,{opt1,<<"my-opt1">>}}}, kz_json:encode(?FROM_MAP_JSON_4_WRONG))
+     }
+    ,{"encoding the invalid json generated in from_map with a mixed proplist inside map"
+     ,?_assertEqual(kz_json:encode(?FROM_MAP_JSON_4_RIGHT), kz_json:encode(kz_json:from_map(?FROM_MAP_MAP_4)))
+     }
+    ].
 
 -ifdef(PERF).
 -define(REPEAT, 100000).

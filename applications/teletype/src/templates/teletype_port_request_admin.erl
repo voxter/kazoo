@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_port_request_admin).
 
 -export([init/0
@@ -15,7 +13,6 @@
 -include("teletype.hrl").
 
 -define(TEMPLATE_ID, <<"port_request_admin">>).
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
 -define(TEMPLATE_MACROS
        ,kz_json:from_list(
@@ -29,10 +26,10 @@
 -define(TEMPLATE_NAME, <<"Admin Port Request">>).
 
 -define(TEMPLATE_TO, ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL)).
--define(TEMPLATE_FROM, teletype_util:default_from_address(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_FROM, teletype_util:default_from_address()).
 -define(TEMPLATE_CC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
 -define(TEMPLATE_BCC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
--define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to()).
 
 -spec init() -> 'ok'.
 init() ->
@@ -49,14 +46,14 @@ init() ->
                                           ]),
     teletype_bindings:bind(<<"port_request">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:port_request_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(?TEMPLATE_ID, <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
@@ -69,9 +66,9 @@ handle_req(JObj, 'true') ->
         'true' -> process_req(DataJObj)
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
-    PortReqId = kz_json:get_value(<<"port_request_id">>, DataJObj),
+    PortReqId = kz_json:get_first_defined([<<"port_request_id">>, [<<"port">>, <<"port_id">>]], DataJObj),
     {'ok', PortReqJObj} = teletype_util:open_doc(<<"port_request">>, PortReqId, DataJObj),
 
     ReqData = kz_json:set_value(<<"port_request">>
@@ -84,15 +81,14 @@ process_req(DataJObj) ->
         'true' -> handle_port_request(kz_json:merge_jobjs(DataJObj, ReqData))
     end.
 
--spec handle_port_request(kz_json:object()) -> 'ok'.
+-spec handle_port_request(kz_json:object()) -> template_response().
 handle_port_request(DataJObj) ->
-    Macros =
-        props:filter_undefined(
-          [{<<"system">>, teletype_util:system_params()}
-          ,{<<"account">>, teletype_util:account_params(DataJObj)}
-          ,{<<"port_request">>, teletype_util:public_proplist(<<"port_request">>, DataJObj)}
-          ,{<<"account_tree">>, account_tree(kz_json:get_value(<<"account_id">>, DataJObj))}
-          ]),
+    Macros = props:filter_undefined(
+               [{<<"system">>, teletype_util:system_params()}
+               ,{<<"account">>, teletype_util:account_params(DataJObj)}
+               ,{<<"port_request">>, teletype_util:public_proplist(<<"port_request">>, DataJObj)}
+               ,{<<"account_tree">>, account_tree(kz_json:get_value(<<"account_id">>, DataJObj))}
+               ]),
 
     RenderedTemplates = teletype_templates:render(?TEMPLATE_ID, Macros, DataJObj),
     AccountId = kapi_notifications:account_id(DataJObj),
@@ -100,36 +96,26 @@ handle_port_request(DataJObj) ->
     Subject0 = kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT),
     Subject = teletype_util:render_subject(Subject0, Macros),
 
-    Emails = teletype_util:find_addresses(maybe_set_emails(DataJObj), TemplateMetaJObj, ?MOD_CONFIG_CAT),
-
+    Emails = teletype_util:find_addresses(maybe_set_emails(DataJObj), TemplateMetaJObj, ?TEMPLATE_ID),
     EmailAttachements = teletype_port_utils:get_attachments(DataJObj),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates, EmailAttachements) of
-        'ok' ->
-            teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} ->
-            teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(?TEMPLATE_ID);
+        {'error', Reason} -> teletype_util:notification_failed(?TEMPLATE_ID, Reason)
     end.
 
--spec account_tree(ne_binary()) -> kz_proplist().
--spec account_tree(ne_binaries(), kz_proplist()) -> kz_proplist().
+-spec account_tree(kz_term:ne_binary()) -> kz_term:proplist().
 account_tree(AccountId) ->
-    {'ok', AccountJObj} = kz_account:fetch(AccountId),
-    account_tree(kz_account:tree(AccountJObj), []).
-
-account_tree([], KVs) -> KVs;
-account_tree([AncestorId | AncestorIds], KVs) ->
-    {'ok', AncestorJObj} = kz_account:fetch(AncestorId),
-    account_tree(AncestorIds, [{AncestorId, kz_account:name(AncestorJObj)} | KVs]).
+    {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
+    [{AncestorId, kzd_accounts:fetch_name(AncestorId)}
+     || AncestorId <- kzd_accounts:tree(AccountJObj)
+    ].
 
 maybe_set_emails(DataJObj) ->
     Fs = [fun maybe_set_from/1
          ,fun maybe_set_to/1
          ],
-    lists:foldl(fun(F, Acc) -> F(Acc) end
-               ,DataJObj
-               ,Fs
-               ).
+    lists:foldl(fun(F, Acc) -> F(Acc) end, DataJObj, Fs).
 
 -spec maybe_set_from(kz_json:object()) -> kz_json:object().
 maybe_set_from(DataJObj) ->
@@ -146,31 +132,33 @@ maybe_set_to(DataJObj) ->
     {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
     case find_port_authority(MasterAccountId, AccountId) of
         'undefined' -> DataJObj;
-        <<_/binary>> = To ->
+        ?NE_BINARY=To ->
             lager:debug("found port authority: ~p", [To]),
             kz_json:set_value(<<"to">>, [To], DataJObj);
-        [_|_] = To ->
+        [?NE_BINARY=_|_] = To ->
             lager:debug("found port authority: ~p", [To]),
-            kz_json:set_value(<<"to">>, To, DataJObj)
+            kz_json:set_value(<<"to">>, To, DataJObj);
+        _ ->
+            DataJObj
     end.
 
--spec find_port_authority(ne_binary(), ne_binary()) -> api_binary() | ne_binaries().
+-spec find_port_authority(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_binary() | kz_term:ne_binaries().
 find_port_authority(MasterAccountId, MasterAccountId) ->
-    case kz_whitelabel:fetch(MasterAccountId) of
+    case kzd_whitelabel:fetch(MasterAccountId) of
         {'error', _R} ->
             lager:debug("failed to find master account ~s, using system value", [MasterAccountId]),
-            kapps_config:get_ne_binary_or_ne_binaries(?MOD_CONFIG_CAT, <<"default_to">>);
+            teletype_util:template_system_value(?TEMPLATE_ID, <<"default_to">>);
         {'ok', JObj} ->
             lager:debug("getting master account's port authority"),
-            kz_whitelabel:port_authority(JObj)
+            kzd_whitelabel:port_authority(JObj)
     end;
 find_port_authority(MasterAccountId, AccountId) ->
-    case kz_whitelabel:fetch(AccountId) of
+    case kzd_whitelabel:fetch(AccountId) of
         {'error', _R} ->
             ResellerId = kz_services:get_reseller_id(AccountId),
             lager:debug("failed to find whitelabel for ~s, checking ~s", [AccountId, ResellerId]),
             find_port_authority(MasterAccountId, ResellerId);
         {'ok', JObj} ->
             lager:debug("using account ~s for port authority", [AccountId]),
-            kz_whitelabel:port_authority(JObj)
+            kzd_whitelabel:port_authority(JObj)
     end.

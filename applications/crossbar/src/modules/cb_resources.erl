@@ -1,14 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle client requests for resource documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle client requests for resource documents
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_resources).
 
 -export([init/0
@@ -32,16 +28,16 @@
 
 -define(KEY_SUCCESS, <<"success">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
-    _ = kz_datamgr:db_create(?KZ_OFFNET_DB),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_SIP_DB, 'crossbar', "views/resources.json"),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_OFFNET_DB, 'crossbar', "views/resources.json"),
-
     _Pid = maybe_start_jobs_listener(),
     lager:debug("started jobs listener: ~p", [_Pid]),
     Binder = fun ({Binding, F}) -> crossbar_bindings:bind(Binding, ?MODULE, F) end,
@@ -79,19 +75,19 @@ maybe_start_jobs_listener() ->
         Pid -> Pid
     end.
 
--spec jobs_listener_pid() -> api_pid().
+-spec jobs_listener_pid() -> kz_term:api_pid().
 jobs_listener_pid() ->
     whereis('cb_jobs_listener').
 
 -spec authorize(cb_context:context()) ->
                        boolean() |
-                       {'halt', cb_context:context()}.
--spec authorize(cb_context:context(), req_nouns()) ->
-                       boolean() |
-                       {'halt', cb_context:context()}.
+                       {'stop', cb_context:context()}.
 authorize(Context) ->
     authorize(Context, cb_context:req_nouns(Context)).
 
+-spec authorize(cb_context:context(), req_nouns()) ->
+                       boolean() |
+                       {'stop', cb_context:context()}.
 authorize(Context, [{<<"global_resources">>, _}|_]) ->
     maybe_authorize_admin(Context);
 authorize(Context, [{<<"resources">>, _} | _]) ->
@@ -104,30 +100,28 @@ authorize(_Context, _Nouns) ->
 
 -spec maybe_authorize_admin(cb_context:context()) ->
                                    'true' |
-                                   {'halt', cb_context:context()}.
+                                   {'stop', cb_context:context()}.
 maybe_authorize_admin(Context) ->
     case cb_context:is_superduper_admin(Context) of
         'true' ->
             lager:debug("authz the request for global resources"),
             'true';
-        'false' -> {'halt', Context}
+        'false' -> {'stop', Context}
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?COLLECTION) ->
     [?HTTP_PUT, ?HTTP_POST];
 allowed_methods(?JOBS) ->
@@ -135,36 +129,34 @@ allowed_methods(?JOBS) ->
 allowed_methods(_ResourceId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(?JOBS, _JobId) ->
     [?HTTP_GET].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(?JOBS, _ID) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     case is_global_resource_request(Context) of
         'true' ->
@@ -175,6 +167,7 @@ validate(Context) ->
             validate_resources(Context, cb_context:req_verb(Context))
     end.
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?COLLECTION) ->
     case is_global_resource_request(Context) of
         'true' ->
@@ -195,6 +188,7 @@ validate(Context, Id) ->
             validate_resource(Context, Id, cb_context:req_verb(Context))
     end.
 
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context, ?JOBS, JobId) ->
     read_job(maybe_set_account_to_master(Context), JobId).
 
@@ -314,64 +308,34 @@ validate_jobs(Context, ?HTTP_PUT) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, ?COLLECTION) ->
-    do_collection(Context, cb_context:account_db(Context));
+    maybe_reload_acls(cb_context:account_db(Context)),
+    collection_process(Context);
 post(Context, Id) ->
-    do_post(Context, Id, cb_context:account_db(Context)).
+    do_post(Context, Id).
+
+-spec do_post(cb_context:context(), path_token()) -> cb_context:context().
+do_post(Context, _Id) ->
+    Db = cb_context:account_db(Context),
+    maybe_reload_acls(Db),
+    Context1 = crossbar_doc:save(Context),
+    maybe_aggregate_resource(Context1, Db).
 
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
-patch(Context, Id) ->
-    do_post(Context, Id, cb_context:account_db(Context)).
-
--spec do_collection(cb_context:context(), ne_binary()) -> cb_context:context().
-do_collection(Context, ?KZ_OFFNET_DB) ->
-    _ = reload_acls(),
-    _ = reload_gateways(),
-    collection_process(Context);
-do_collection(Context, _AccountDb) ->
-    collection_process(Context).
-
--spec do_post(cb_context:context(), path_token(), ne_binary()) -> cb_context:context().
-do_post(Context, _Id, ?KZ_OFFNET_DB) ->
-    _ = reload_acls(),
-    _ = reload_gateways(),
-    crossbar_doc:save(Context);
-do_post(Context, _Id, _AccountDb) ->
-    Context1 = crossbar_doc:save(Context),
-    _ = cb_local_resources:maybe_aggregate_resource(Context1),
-    Context1.
+patch(Context, Id) -> do_post(Context, Id).
 
 -spec put(cb_context:context()) -> cb_context:context().
--spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context) ->
-    do_put(Context, cb_context:account_db(Context)).
-
-put(Context, ?COLLECTION) ->
-    put_collection(Context, cb_context:account_db(Context));
-put(Context, ?JOBS) ->
-    put_job(Context).
-
--spec do_put(cb_context:context(), ne_binary()) -> cb_context:context().
-do_put(Context, ?KZ_OFFNET_DB) ->
-    _ = reload_acls(),
-    _ = reload_gateways(),
-    crossbar_doc:save(Context);
-do_put(Context, _AccountDb) ->
+    Db = cb_context:account_db(Context),
+    maybe_reload_acls(Db),
     Context1 = crossbar_doc:save(Context),
-    _ = cb_local_resources:maybe_aggregate_resource(Context1),
-    Context1.
+    maybe_aggregate_resource(Context1, Db).
 
--spec put_collection(cb_context:context(), ne_binary()) -> cb_context:context().
-put_collection(Context, ?KZ_OFFNET_DB) ->
+-spec put(cb_context:context(), path_token()) -> cb_context:context().
+put(Context, ?COLLECTION) ->
+    maybe_reload_acls(cb_context:account_db(Context)),
     collection_process(Context);
-put_collection(Context, _AccountDb) ->
-    _ = reload_acls(),
-    _ = reload_gateways(),
-    collection_process(Context).
-
--spec put_job(cb_context:context()) -> cb_context:context().
-put_job(Context) ->
-    Modb = cb_context:account_modb(Context),
-    Context1 = crossbar_doc:save(cb_context:set_account_db(Context, Modb)),
+put(Context, ?JOBS) ->
+    Context1 = crossbar_doc:save(cb_context:set_account_db(Context, cb_context:account_modb(Context))),
 
     case cb_context:resp_status(Context1) of
         'success' ->
@@ -383,33 +347,39 @@ put_job(Context) ->
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, ResourceId) ->
-    do_delete(Context, ResourceId, cb_context:account_db(Context)).
-
--spec do_delete(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
-do_delete(Context, _ResourceId, ?KZ_OFFNET_DB) ->
-    _ = reload_acls(),
-    _ = reload_gateways(),
-    crossbar_doc:delete(Context);
-do_delete(Context, ResourceId, _AccountDb) ->
+    maybe_reload_acls(cb_context:account_db(Context)),
     Context1 = crossbar_doc:delete(Context),
-    _ = cb_local_resources:maybe_remove_aggregate(ResourceId, Context1),
-    Context1.
+    maybe_remove_aggregate(Context1, ResourceId, cb_context:account_db(Context)).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%% Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
--spec read(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec maybe_aggregate_resource(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+maybe_aggregate_resource(Context, ?KZ_OFFNET_DB) -> Context;
+maybe_aggregate_resource(Context, _AccountDb) ->
+    _ = cb_local_resources:maybe_aggregate_resource(Context),
+    Context.
+
+-spec maybe_remove_aggregate(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
+maybe_remove_aggregate(Context, _ResourceId, ?KZ_OFFNET_DB) -> Context;
+maybe_remove_aggregate(Context, ResourceId, _AccountDb) ->
+    _ = cb_local_resources:maybe_remove_aggregate(ResourceId, Context),
+    Context.
+
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
+%% @end
+%%------------------------------------------------------------------------------
+-spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"resource">>)).
 
--spec read_job(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec read_job(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 read_job(Context, ?MATCH_MODB_PREFIX(Year,Month,_) = JobId) ->
     Modb = cb_context:account_modb(Context, kz_term:to_integer(Year), kz_term:to_integer(Month)),
     leak_job_fields(crossbar_doc:load(JobId, cb_context:set_account_db(Context, Modb), ?TYPE_CHECK_OPTION(<<"resource_job">>)));
@@ -425,72 +395,43 @@ leak_job_fields(Context) ->
     case cb_context:resp_status(Context) of
         'success' ->
             JObj = cb_context:doc(Context),
-            cb_context:set_resp_data(Context
-                                    ,kz_json:set_values([{<<"timestamp">>, kz_doc:created(JObj)}
-                                                        ,{<<"status">>, kz_json:get_value(<<"pvt_status">>, JObj)}
-                                                        ], cb_context:resp_data(Context))
-                                    );
+            RespData = [{<<"timestamp">>, kz_doc:created(JObj)}
+                       ,{<<"status">>, kz_json:get_value(<<"pvt_status">>, JObj)}
+                       ],
+            cb_context:set_resp_data(Context, kz_json:set_values(RespData, cb_context:resp_data(Context)));
         _Status -> Context
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec jobs_summary(cb_context:context()) -> cb_context:context().
 jobs_summary(Context) ->
-    case cb_modules_util:range_view_options(Context) of
-        {CreatedFrom, CreatedTo} ->
-            crossbar_doc:load_view(?JOBS_LIST
-                                  ,[{'startkey', CreatedFrom}
-                                   ,{'endkey', CreatedTo}
-                                   ,{'limit', crossbar_doc:pagination_page_size(Context)}
-                                   ,{'databases', databases(Context, CreatedFrom, CreatedTo)}
-                                   ]
-                                  ,cb_context:set_account_db(Context, cb_context:account_modb(Context))
-                                  ,fun normalize_view_results/2
-                                  );
-        Context1 -> Context1
-    end.
+    crossbar_view:load_modb(Context, ?JOBS_LIST, [{'mapper', crossbar_view:map_doc_fun()}]).
 
--spec databases(cb_context:context(), pos_integer(), pos_integer()) -> ne_binaries().
-databases(Context, CreatedFrom, CreatedTo) ->
-    FromDb = cb_context:account_modb(Context, CreatedFrom),
-    case cb_context:account_modb(Context, CreatedTo) of
-        FromDb -> [FromDb];
-        ToDb -> [FromDb, ToDb]
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Create a new instance with the data provided, if it is valid
+%%------------------------------------------------------------------------------
+%% @doc Create a new instance with the data provided, if it is valid
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create(cb_context:context()) -> cb_context:context().
 create(Context) ->
     OnSuccess = fun(C) -> on_successful_validation('undefined', C) end,
@@ -506,62 +447,51 @@ create_local(Context) ->
     OnSuccess = fun(C) -> on_successful_local_validation('undefined', C) end,
     cb_context:validate_request_data(<<"resources">>, Context, OnSuccess).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Update an existing instance with the data provided, if it is
+%%------------------------------------------------------------------------------
+%% @doc Update an existing instance with the data provided, if it is
 %% valid
 %% @end
-%%--------------------------------------------------------------------
--spec update(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec update(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 update(Id, Context) ->
     OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
     cb_context:validate_request_data(<<"resources">>, Context, OnSuccess).
 
--spec update_local(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec update_local(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 update_local(Context, Id) ->
     OnSuccess = fun(C) -> on_successful_local_validation(Id, C) end,
     cb_context:validate_request_data(<<"resources">>, Context, OnSuccess).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     cb_context:set_doc(Context, kz_doc:set_type(cb_context:doc(Context), <<"resource">>));
 on_successful_validation(Id, Context) ->
     crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"resource">>)).
 
 
--spec on_successful_local_validation(api_binary(), cb_context:context()) -> cb_context:context().
+-spec on_successful_local_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_local_validation(Id, Context) ->
     cb_local_resources:validate_request(Id, Context).
 
 -spec on_successful_job_validation('undefined', cb_context:context()) -> cb_context:context().
 on_successful_job_validation('undefined', Context) ->
-    {Year, Month, _} = erlang:date(),
-    Id = list_to_binary([kz_term:to_binary(Year)
-                        ,kz_date:pad_month(Month)
-                        ,"-"
-                        ,kz_binary:rand_hex(8)
-                        ]),
+    Props = [{<<"_id">>, kazoo_modb_util:modb_id(kz_binary:rand_hex(8))}
+            ,{<<"errors">>, kz_json:new()}
+            ,{<<"pvt_status">>, <<"pending">>}
+            ,{?KEY_SUCCESS, kz_json:new()}
+            ,{<<"pvt_type">>, <<"resource_job">>}
+            ],
+    cb_context:set_doc(Context, kz_json:set_values(Props, cb_context:doc(Context))).
 
-    cb_context:set_doc(Context
-                      ,kz_json:set_values([{<<"pvt_type">>, <<"resource_job">>}
-                                          ,{<<"pvt_status">>, <<"pending">>}
-                                          ,{<<"pvt_auth_account_id">>, cb_context:auth_account_id(Context)}
-                                          ,{<<"pvt_request_id">>, cb_context:req_id(Context)}
-                                          ,{<<"_id">>, Id}
-
-                                          ,{?KEY_SUCCESS, kz_json:new()}
-                                          ,{<<"errors">>, kz_json:new()}
-                                          ]
-                                         ,cb_context:doc(Context)
-                                         )
-                      ).
+-spec maybe_reload_acls(kz_term:ne_binary()) -> 'ok'.
+maybe_reload_acls(?KZ_OFFNET_DB) ->
+    reload_acls(),
+    reload_gateways();
+maybe_reload_acls(_) -> 'ok'.
 
 -spec reload_acls() -> 'ok'.
 reload_acls() ->
@@ -574,7 +504,6 @@ reload_gateways() ->
     kz_amqp_worker:cast([], fun(_) -> kapi_switch:publish_reload_gateways() end).
 
 -spec collection_process(cb_context:context()) -> cb_context:context().
--spec collection_process(cb_context:context(), kz_json:objects()) -> cb_context:context().
 collection_process(Context) ->
     RespData = cb_context:resp_data(Context),
 
@@ -582,6 +511,8 @@ collection_process(Context) ->
         'true' -> collection_process(Context, kz_json:get_value(?KEY_SUCCESS, RespData));
         'false' -> cb_context:set_resp_data(Context, kz_json:delete_key(?KEY_SUCCESS, RespData))
     end.
+
+-spec collection_process(cb_context:context(), kz_json:objects()) -> cb_context:context().
 collection_process(Context, []) -> Context;
 collection_process(Context, Successes) ->
     Resources = kz_json:values(Successes),
@@ -596,10 +527,10 @@ collection_process(Context, Successes) ->
     end.
 
 -spec is_global_resource_request(cb_context:context()) -> boolean().
--spec is_global_resource_request(req_nouns(), api_binary()) -> boolean().
 is_global_resource_request(Context) ->
     is_global_resource_request(cb_context:req_nouns(Context), cb_context:account_id(Context)).
 
+-spec is_global_resource_request(req_nouns(), kz_term:api_binary()) -> boolean().
 is_global_resource_request(_ReqNouns, 'undefined') ->
     lager:debug("request is for global resources"),
     'true';

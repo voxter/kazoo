@@ -68,6 +68,9 @@
         "Control-Queue": {
             "type": "string"
         },
+        "Custom-Appliction-Vars": {
+            "type": "object"
+        },
         "Custom-Channel-Vars": {
             "type": "object"
         },
@@ -168,6 +171,9 @@
             ],
             "type": "string"
         },
+        "Origination-Call-ID": {
+            "type": "string"
+        },
         "Outbound-Call-ID": {
             "type": "string"
         },
@@ -179,6 +185,12 @@
         },
         "Presence-ID": {
             "type": "string"
+        },
+        "Requestor-Custom-Channel-Vars": {
+            "type": "object"
+        },
+        "Requestor-Custom-SIP-Headers": {
+            "type": "object"
         },
         "Resource-Type": {
             "enum": [

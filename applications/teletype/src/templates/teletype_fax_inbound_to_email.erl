@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2017, 2600Hz Inc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2014-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(teletype_fax_inbound_to_email).
 
 -export([init/0
@@ -15,7 +13,6 @@
 -include("teletype.hrl").
 
 -define(TEMPLATE_ID, <<"fax_inbound_to_email">>).
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
 -define(TEMPLATE_MACROS
        ,kz_json:from_list(
@@ -31,10 +28,10 @@
 -define(TEMPLATE_NAME, <<"Inbound Fax to Email">>).
 
 -define(TEMPLATE_TO, ?CONFIGURED_EMAILS(?EMAIL_ORIGINAL)).
--define(TEMPLATE_FROM, teletype_util:default_from_address(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_FROM, teletype_util:default_from_address()).
 -define(TEMPLATE_CC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
 -define(TEMPLATE_BCC, ?CONFIGURED_EMAILS(?EMAIL_SPECIFIED, [])).
--define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to(?MOD_CONFIG_CAT)).
+-define(TEMPLATE_REPLY_TO, teletype_util:default_reply_to()).
 
 -spec init() -> 'ok'.
 init() ->
@@ -51,14 +48,14 @@ init() ->
                                           ]),
     teletype_bindings:bind(<<"inbound_fax">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object()) -> 'ok'.
+-spec handle_req(kz_json:object()) -> template_response().
 handle_req(JObj) ->
     handle_req(JObj, kapi_notifications:fax_inbound_v(JObj)).
 
--spec handle_req(kz_json:object(), boolean()) -> 'ok'.
-handle_req(JObj, 'false') ->
+-spec handle_req(kz_json:object(), boolean()) -> template_response().
+handle_req(_, 'false') ->
     lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
-    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+    teletype_util:notification_failed(?TEMPLATE_ID, <<"validation_failed">>);
 handle_req(JObj, 'true') ->
     lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
@@ -73,7 +70,7 @@ handle_req(JObj, 'true') ->
             process_req(teletype_fax_util:add_data(DataJObj))
     end.
 
--spec process_req(kz_json:object()) -> 'ok'.
+-spec process_req(kz_json:object()) -> template_response().
 process_req(DataJObj) ->
     TemplateData = build_template_data(DataJObj),
     {Macros, EmailAttachements} = teletype_fax_util:add_attachments(DataJObj, TemplateData, 'true'),
@@ -93,17 +90,17 @@ process_req(DataJObj) ->
         case teletype_util:is_preview(DataJObj) of
             'true' -> DataJObj;
             'false' ->
-                kz_json:set_value(<<"to">>, teletype_fax_util:to_email_addresses(DataJObj, ?MOD_CONFIG_CAT), DataJObj)
+                kz_json:set_value(<<"to">>, teletype_fax_util:to_email_addresses(DataJObj, ?TEMPLATE_ID), DataJObj)
         end,
 
-    Emails = teletype_util:find_addresses(EmailsJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
+    Emails = teletype_util:find_addresses(EmailsJObj, TemplateMetaJObj, ?TEMPLATE_ID),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates, EmailAttachements) of
-        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
-        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+        'ok' -> teletype_util:notification_completed(?TEMPLATE_ID);
+        {'error', Reason} -> teletype_util:notification_failed(?TEMPLATE_ID, Reason)
     end.
 
--spec build_template_data(kz_json:object()) -> kz_proplist().
+-spec build_template_data(kz_json:object()) -> kz_term:proplist().
 build_template_data(DataJObj) ->
     Timezone = kz_json:get_value(<<"timezone">>, DataJObj),
     props:filter_undefined(
@@ -114,7 +111,7 @@ build_template_data(DataJObj) ->
        | teletype_util:build_call_data(DataJObj, Timezone)
       ]).
 
--spec build_fax_template_data(kz_json:object()) -> kz_proplist().
+-spec build_fax_template_data(kz_json:object()) -> kz_term:proplist().
 build_fax_template_data(DataJObj) ->
     FaxJObj = kz_json:get_value(<<"fax_doc">>, DataJObj),
     FaxBoxJObj = kz_json:get_value(<<"faxbox">>, DataJObj),
@@ -122,6 +119,6 @@ build_fax_template_data(DataJObj) ->
       [{<<"id">>, kz_json:get_value(<<"fax_id">>, DataJObj)}
       ,{<<"box_id">>, kz_json:get_value(<<"faxbox_id">>, DataJObj, kz_doc:id(FaxBoxJObj))}
       ,{<<"box_name">>, kz_json:get_value(<<"name">>, FaxBoxJObj)}
-      ,{<<"timestamp">>, kz_json:get_value(<<"fax_timestamp">>, DataJObj, kz_time:current_tstamp())}
+      ,{<<"timestamp">>, kz_json:get_value(<<"fax_timestamp">>, DataJObj, kz_time:now_s())}
        | kz_json:to_proplist(kz_json:get_value(<<"rx_result">>, FaxJObj, kz_json:new()))
       ]).

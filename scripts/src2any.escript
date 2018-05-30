@@ -11,8 +11,7 @@
 %% API
 
 main([ScriptName]) ->
-    not lists:suffix(?EXT, ScriptName)
-        andalso usage(),
+    not lists:suffix(?EXT, ScriptName) andalso usage(),
 
     BinScriptName = iolist_to_binary(ScriptName),
     BEAMShouldBeDoingThis_LetsPatchThisAlready = byte_size(BinScriptName) - length(?EXT),

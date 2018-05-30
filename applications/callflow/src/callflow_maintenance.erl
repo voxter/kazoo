@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(callflow_maintenance).
 
 -export([lookup_endpoint/1
@@ -34,20 +32,18 @@
 
 -include("callflow.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec lookup_endpoint(ne_binary()) -> 'no_return'.
+%%------------------------------------------------------------------------------
+-spec lookup_endpoint(kz_term:ne_binary()) -> 'no_return'.
 lookup_endpoint(URI) ->
     case binary:split(URI, <<"@">>) of
         [Username, Realm] -> lookup_endpoint(Username, Realm);
         _Else -> io:format("invalid SIP URI~n", [])
     end.
 
--spec lookup_endpoint(ne_binary(), ne_binary()) -> 'no_return'.
+-spec lookup_endpoint(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 lookup_endpoint(Username, Realm) ->
     _ = case kapps_util:get_account_by_realm(Realm) of
             {'ok', AccountDb} ->
@@ -61,22 +57,18 @@ lookup_endpoint(Username, Realm) ->
         end,
     'no_return'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec flush() -> 'ok'.
 flush() ->
     kz_cache:flush_local(?CACHE_NAME).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec call_count() -> 'ok'.
 call_count() ->
     io:format("Total: ~p~n", [length(cf_exe_sup:workers())]).
@@ -95,24 +87,20 @@ do_show_calls([Srv|Srvs], Total) ->
     end,
     do_show_calls(Srvs, Total + 1).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec blocking_refresh() -> 'ok'.
 blocking_refresh() ->
     lists:foreach(fun(AccountDb) ->
                           refresh(AccountDb)
                   end, kapps_util:get_all_accounts()).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec refresh() -> 'started'.
 refresh() ->
     _ = kz_util:spawn(fun blocking_refresh/0),
@@ -126,23 +114,21 @@ refresh(<<Account/binary>>) ->
 refresh(Account) ->
     refresh(kz_term:to_binary(Account)).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec migrate_recorded_names() -> 'no_return'.
 migrate_recorded_names() ->
     migrate_recorded_names(kapps_util:get_all_accounts()).
 
--spec migrate_recorded_names(ne_binaries()) -> 'no_return'.
+-spec migrate_recorded_names(kz_term:ne_binaries()) -> 'no_return'.
 migrate_recorded_names([]) -> 'no_return';
 migrate_recorded_names([Account|Accounts]) ->
     _ = (catch migrate_recorded_name(Account)),
     migrate_recorded_names(Accounts).
 
--spec migrate_recorded_name(ne_binary()) -> any().
+-spec migrate_recorded_name(kz_term:ne_binary()) -> any().
 migrate_recorded_name(Db) ->
     lager:info("migrating all name recordings from vmboxes w/ owner_id in ~s", [Db]),
 
@@ -155,8 +141,7 @@ migrate_recorded_name(Db) ->
             ]
     end.
 
--spec do_recorded_name_migration(ne_binary(), kz_json:object()) -> any().
--spec do_recorded_name_migration(ne_binary(), kz_json:object(), api_binary()) -> any().
+-spec do_recorded_name_migration(kz_term:ne_binary(), kz_json:object()) -> any().
 do_recorded_name_migration(Db, VMBox) ->
     VMBoxId = kz_doc:id(VMBox),
     case kz_json:get_value(?RECORDED_NAME_KEY, VMBox) of
@@ -167,6 +152,7 @@ do_recorded_name_migration(Db, VMBox) ->
             {'ok', _} = kz_datamgr:save_doc(Db, kz_json:delete_key(?RECORDED_NAME_KEY, VMBox))
     end.
 
+-spec do_recorded_name_migration(kz_term:ne_binary(), kz_json:object(), kz_term:api_binary()) -> any().
 do_recorded_name_migration(_Db, _MediaId, 'undefined') ->
     lager:info("no owner id on vm box");
 do_recorded_name_migration(Db, MediaId, OwnerId) ->
@@ -183,17 +169,16 @@ do_recorded_name_migration(Db, MediaId, OwnerId) ->
             kz_datamgr:del_doc(Db, MediaId)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function will migrate all the menus mailbox documents to
+%%------------------------------------------------------------------------------
+%% @doc This function will migrate all the menus mailbox documents to
 %% the latest version.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec migrate_menus() -> ['done' | 'error',...].
--spec migrate_menus(ne_binary()) -> 'done' | 'error'.
 migrate_menus() ->
     [migrate_menus(Account) || Account <- kapps_util:get_all_accounts('raw')].
+
+-spec migrate_menus(kz_term:ne_binary()) -> 'done' | 'error'.
 migrate_menus(Account) ->
     Db = kz_util:format_account_id(Account, 'encoded'),
     lager:info("migrating all menus in ~s", [Db]),
@@ -227,11 +212,10 @@ do_menu_migration(Menu, Db) ->
             lager:info("menu ~s in ~s has no greeting or prompt", [MenuId, Db])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec create_media_doc(binary(), binary(), binary(), binary()) -> binary().
 create_media_doc(Name, SourceType, SourceId, Db) ->
     Props = [{<<"name">>, Name}
@@ -240,17 +224,16 @@ create_media_doc(Name, SourceType, SourceId, Db) ->
             ,{<<"source_id">>, SourceId}
             ,{<<"content_type">>, <<"audio/mpeg">>}
             ,{<<"media_type">>, <<"mp3">>}
-            ,{<<"streamable">>, 'true'}],
+            ,{<<"streamable">>, 'true'}
+            ],
     Doc = kz_doc:update_pvt_parameters(kz_json:from_list(Props), Db, [{'type', <<"media">>}]),
     {'ok', JObj} = kz_datamgr:save_doc(Db, Doc),
     kz_doc:id(JObj).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec update_doc(list() | binary(), kz_json:json_term(), binary(), binary()) ->
                         'ok' |
                         {'error', atom()}.
@@ -266,45 +249,45 @@ update_doc(Key, Value, Id, Db) ->
             lager:info("unable to update ~s in ~s, ~p", [Id, Db, E])
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%        Set call_restriction flag on account level
-%%        Usage: sup callflow_maintenance account_set_classifier_inherit international accountname
-%%        Usage: sup callflow_maintenance account_set_classifier_deny international accountname
-%%        Usage: sup callflow_maintenance all_accounts_set_classifier_inherit international
-%%        Usage: sup callflow_maintenance all_accounts_set_classifier_deny international
+%%------------------------------------------------------------------------------
+%% @doc Set `call_restriction' flag on account level.
+%%
+%% Usage:
+%% ```
+%%    sup callflow_maintenance account_set_classifier_inherit international accountname
+%%    sup callflow_maintenance account_set_classifier_deny international accountname
+%%    sup callflow_maintenance all_accounts_set_classifier_inherit international
+%%    sup callflow_maintenance all_accounts_set_classifier_deny international
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
--spec account_set_classifier_inherit(ne_binary(), ne_binary()) -> 'ok'.
+-spec account_set_classifier_inherit(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 account_set_classifier_inherit(Classifier, Account) ->
     {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
     set_account_classifier_action(<<"inherit">>, Classifier, AccountDb).
 
--spec account_set_classifier_deny(ne_binary(), ne_binary()) -> 'ok'.
+-spec account_set_classifier_deny(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 account_set_classifier_deny(Classifier, Account) ->
     {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
     set_account_classifier_action(<<"deny">>, Classifier, AccountDb).
 
--spec all_accounts_set_classifier_inherit(ne_binary()) -> 'ok'.
+-spec all_accounts_set_classifier_inherit(kz_term:ne_binary()) -> 'ok'.
 all_accounts_set_classifier_inherit(Classifier) ->
     all_accounts_set_classifier(<<"inherit">>, Classifier).
 
--spec all_accounts_set_classifier_deny(ne_binary()) -> 'ok'.
+-spec all_accounts_set_classifier_deny(kz_term:ne_binary()) -> 'ok'.
 all_accounts_set_classifier_deny(Classifier) ->
     all_accounts_set_classifier(<<"deny">>, Classifier).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec set_account_classifier_action(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec set_account_classifier_action(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 set_account_classifier_action(Action, Classifier, AccountDb) ->
     'true' = is_classifier(Classifier),
-    io:format("found account: ~p", [get_account_name_by_db(AccountDb)]),
+    io:format("found account: ~p", [kzd_accounts:fetch_name(AccountDb)]),
     AccountId = kz_util:format_account_id(AccountDb, 'raw'),
 
     kz_datamgr:update_doc(AccountDb, AccountId, [{[<<"call_restriction">>, Classifier, <<"action">>], Action}]),
@@ -318,44 +301,35 @@ all_accounts_set_classifier(Action, Classifier) ->
     'true' = is_classifier(Classifier),
     lists:foreach(fun(AccountDb) ->
                           timer:sleep(2000),
-                          %% Not shure if this interruption is realy needed.
+                          %% Not sure if this interruption is really needed.
                           %%  Keeping it as it was taken as an example from kapps_util:update_all_accounts/1
                           set_account_classifier_action(Action, Classifier, AccountDb)
                   end, kapps_util:get_all_accounts()).
 
--spec get_account_name_by_db(ne_binary()) -> ne_binary() | 'undefined'.
-get_account_name_by_db(AccountDb) ->
-    case kz_account:fetch(AccountDb) of
-        {'error', _Error} ->
-            lager:error("error opening account doc ~p", [AccountDb]),
-            'undefined';
-        {'ok', JObj} -> kz_account:name(JObj)
-    end.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%        Set call_restriction flag on device level
-%%        Usage: sup callflow_maintenance device_classifier_inherit international  username@realm.tld
-%%        Usage: sup callflow_maintenance device_classifier_deny international username@realm.tld
+%%------------------------------------------------------------------------------
+%% @doc Set `call_restriction' flag on device level.
+%%
+%% Usage:
+%% ```
+%% sup callflow_maintenance device_classifier_inherit international  username@realm.tld
+%% sup callflow_maintenance device_classifier_deny international username@realm.tld
+%% '''
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
--spec device_classifier_inherit(ne_binary(), ne_binary()) -> 'ok'.
+-spec device_classifier_inherit(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 device_classifier_inherit(Classifier, Uri) ->
     set_device_classifier_action(<<"inherit">>, Classifier, Uri).
 
--spec device_classifier_deny(ne_binary(), ne_binary()) -> 'ok'.
+-spec device_classifier_deny(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 device_classifier_deny(Classifier, Uri) ->
     set_device_classifier_action(<<"deny">>, Classifier, Uri).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec set_device_classifier_action(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec set_device_classifier_action(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 set_device_classifier_action(Action, Classifier, Uri) ->
     'true' = is_classifier(Classifier),
     [User, Realm] = binary:split(Uri, <<"@">>),
@@ -366,13 +340,11 @@ set_device_classifier_action(Action, Classifier, Uri) ->
     kz_datamgr:update_doc(AccountDb, DeviceId, [{[<<"call_restriction">>, Classifier, <<"action">>], Action}]),
     kz_endpoint:flush(AccountDb, DeviceId).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%           Checks if classifier defined in system_config -> number_manager doc
+%%------------------------------------------------------------------------------
+%% @doc Checks if classifier defined in `system_config -> number_manager' doc.
 %% @end
-%%--------------------------------------------------------------------
--spec is_classifier(ne_binary()) -> boolean().
+%%------------------------------------------------------------------------------
+-spec is_classifier(kz_term:ne_binary()) -> boolean().
 is_classifier(Classifier) ->
     Classifiers = kz_json:get_keys(knm_converters:available_classifiers()),
     case lists:member(Classifier, Classifiers) of
@@ -382,14 +354,16 @@ is_classifier(Classifier) ->
             'false'
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%        Lists call restrictions on all levels of an account
-%%        Usage: sup callflow_maintenance list_account_restrictions accountname
+%%------------------------------------------------------------------------------
+%% @doc Lists call restrictions on all levels of an account.
+%%
+%% Usage:
+%% ```
+%% sup callflow_maintenance list_account_restrictions accountname
+%% '''
 %% @end
-%%--------------------------------------------------------------------
--spec list_account_restrictions(ne_binary()) -> 'ok'.
+%%------------------------------------------------------------------------------
+-spec list_account_restrictions(kz_term:ne_binary()) -> 'ok'.
 list_account_restrictions(Account) ->
     {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
     DbNameEncoded = kz_util:format_account_id(AccountDb,'encoded'),
@@ -399,7 +373,7 @@ list_account_restrictions(Account) ->
     print_devices_level_call_restrictions(DbNameEncoded),
     print_trunkstore_call_restrictions(DbNameEncoded).
 
--spec print_call_restrictions(ne_binary(), ne_binary()) -> 'ok'.
+-spec print_call_restrictions(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 print_call_restrictions(DbName, DocId) ->
     case kz_datamgr:open_doc(DbName, DocId) of
         {'ok', JObj} ->
@@ -411,7 +385,7 @@ print_call_restrictions(DbName, DocId) ->
             io:format("An error occurred: ~p\n", [E])
     end.
 
--spec print_users_level_call_restrictions(ne_binary()) -> 'ok'.
+-spec print_users_level_call_restrictions(kz_term:ne_binary()) -> 'ok'.
 print_users_level_call_restrictions(DbName) ->
     case kz_datamgr:get_results(DbName, <<"users/crossbar_listing">>) of
         {'ok', JObj} ->
@@ -425,7 +399,7 @@ print_users_level_call_restrictions(DbName) ->
             io:format("An error occurred: ~p", [E])
     end.
 
--spec print_devices_level_call_restrictions(ne_binary()) -> 'ok'.
+-spec print_devices_level_call_restrictions(kz_term:ne_binary()) -> 'ok'.
 print_devices_level_call_restrictions(DbName) ->
     case kz_datamgr:get_results(DbName, <<"devices/crossbar_listing">>) of
         {'ok', JObj} ->
@@ -439,7 +413,7 @@ print_devices_level_call_restrictions(DbName) ->
             io:format("An error occurred: ~p", [E])
     end.
 
--spec print_trunkstore_call_restrictions(ne_binary()) -> 'ok'.
+-spec print_trunkstore_call_restrictions(kz_term:ne_binary()) -> 'ok'.
 print_trunkstore_call_restrictions(DbName) ->
     case kz_datamgr:get_results(DbName, <<"trunkstore/lookup_user_flags">>) of
         {'ok', JObj} ->
@@ -454,18 +428,16 @@ print_trunkstore_call_restrictions(DbName) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Update certain patterns matching feature codes (see KAZOO-3122)
+%%------------------------------------------------------------------------------
+%% @doc Update certain patterns matching feature codes (see KAZOO-3122).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 -spec update_feature_codes() -> 'ok'.
 update_feature_codes() ->
     lists:foreach(fun update_feature_codes/1, kapps_util:get_all_accounts()).
 
--spec update_feature_codes(ne_binary()) -> 'ok'.
+-spec update_feature_codes(kz_term:ne_binary()) -> 'ok'.
 update_feature_codes(Account)
   when not is_binary(Account) ->
     update_feature_codes(kz_term:to_binary(Account));

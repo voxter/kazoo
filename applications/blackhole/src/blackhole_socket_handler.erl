@@ -1,70 +1,79 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(blackhole_socket_handler).
 
--export([init/3
-        ,websocket_init/3
-        ,websocket_handle/3
-        ,websocket_info/3
-        ,websocket_terminate/3
+-export([init/2
+        ,websocket_init/1
+        ,websocket_handle/2
+        ,websocket_info/2
+        ,terminate/3
         ]).
 
 -include("blackhole.hrl").
 
--spec init({any(), 'http'}, any(), any()) -> tuple().
-init({_Any, 'http'}, _Req0, _HandlerOpts) ->
-    {'upgrade', 'protocol', 'cowboy_websocket'}.
+-define(IDLE_TIMEOUT, ?MILLISECONDS_IN_HOUR).
 
--spec websocket_init(any(), cowboy_req:req(), any()) -> {'ok', cowboy_req:req(), any()}.
-websocket_init(_Type, Req, _Opts) ->
-    {Peer, _}  = cowboy_req:peer(Req),
-    {RemIp, _} = Peer,
+-type blackhole_init() :: {inet:ip_address(), kz_term:ne_binary()}.
 
-    {'ok', State} = blackhole_socket_callback:open(self(), session_id(Req), RemIp),
-    {'ok', Req, State}.
+-spec init(cowboy_req:req(), cowboy_websocket:opts()) ->
+                  {'ok' , cowboy_req:req(), cowboy_websocket:opts()} |
+                  {'cowboy_websocket', cowboy_req:req(), blackhole_init(), cowboy_websocket:opts()}.
+init(Req, HandlerOpts) ->
+    lager:info("handling socket init"),
+    case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req) of
+        'undefined' ->
+            {RemoteIP, _} = cowboy_req:peer(Req),
+            lager:info("no sub protocols defined by remote client ~p", [RemoteIP]),
+            {'cowboy_websocket', Req, {RemoteIP, session_id(Req)}, #{idle_timeout => ?IDLE_TIMEOUT}};
+        _SubProtocols ->
+            lager:warning("sub-protocols are not supported at the moment: ~p", [_SubProtocols]),
+            {'ok', cowboy_req:reply(400, Req), HandlerOpts}
+    end.
 
--spec websocket_handle(any(), cowboy_req:req(), A) -> {'ok', cowboy_req:req(), A}.
-websocket_handle({'text', Data}, Req, State) ->
+-spec terminate(any(), any(), any()) -> 'ok'.
+terminate(_Reason, _Req, State) ->
+    lager:info("bh socket going down: ~p", [_Reason]),
+    _ = blackhole_socket_callback:close(State),
+    'ok'.
+
+-spec websocket_init(blackhole_init()) -> {'ok', bh_context:context()}.
+websocket_init({RemoteIP, SessionsId}) ->
+    lager:info("init from ~p(~p)", [RemoteIP, SessionsId]),
+    {'ok', _State} = blackhole_socket_callback:open(self(), SessionsId, RemoteIP).
+
+-spec websocket_handle(any(), bh_context:context()) ->
+                              {'ok', bh_context:context(), 'hibernate'}.
+websocket_handle({'text', Data}, State) ->
     Obj    = kz_json:decode(Data),
     Action = kz_json:get_value(<<"action">>, Obj, <<"noop">>),
     Msg    = kz_json:delete_key(<<"action">>, Obj),
 
     case blackhole_socket_callback:recv({Action, Msg}, State) of
-        {'ok', NewState} -> {'ok', Req, NewState};
-        'error' -> {'ok', Req, State}
+        {'ok', NewState} -> {'ok', NewState, 'hibernate'};
+        'error' -> {'ok', State, 'hibernate'}
     end;
-
-websocket_handle(_Other, Req, State) ->
+websocket_handle(_Other, State) ->
     lager:debug("not handling message : ~p", [_Other]),
-    {'ok', Req, State}.
+    {'ok', State, 'hibernate'}.
 
--spec websocket_info(any(), cowboy_req:req(), A) -> {'ok', cowboy_req:req(), A}.
-websocket_info({'$gen_cast', _}, Req, State) ->
-    {'ok', Req, State};
-
-websocket_info({'send_data', Data}, Req, State) ->
-    {'reply', {'text', kz_json:encode(Data)}, Req, State};
-
-websocket_info(Info, Req, State) ->
+-spec websocket_info(any(), bh_context:context()) -> {'ok', bh_context:context()}.
+websocket_info({'$gen_cast', _}, State) ->
+    {'ok', State};
+websocket_info({'send_data', Data}, State) ->
+    {'reply', {'text', kz_json:encode(Data)}, State};
+websocket_info(Info, State) ->
     lager:info("unhandled websocket info: ~p", [Info]),
-    {'ok', Req, State}.
-
--spec websocket_terminate(any(), cowboy_req:req(), bh_context:context()) -> bh_context:context().
-websocket_terminate(_Reason, _Req, State) ->
-    blackhole_socket_callback:close(State).
+    {'ok', State}.
 
 -spec session_id(cowboy_req:req()) -> binary().
 session_id(Req) ->
-    {Peer, _}  = cowboy_req:peer(Req),
-    {Ip, Port} = Peer,
+    {IP, Port} = cowboy_req:peer(Req),
 
-    BinIp   = kz_term:to_binary(inet_parse:ntoa(Ip)),
-    BinPort = kz_term:to_binary(integer_to_list(Port)),
+    BinIP   = kz_term:to_binary(inet_parse:ntoa(IP)),
+    BinPort = kz_term:to_binary(Port),
 
-    <<BinIp/binary, ":", BinPort/binary>>.
+    <<BinIP/binary, ":", BinPort/binary>>.

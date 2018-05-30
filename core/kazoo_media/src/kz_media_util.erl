@@ -1,14 +1,14 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_media_util).
 
 -export([recording_url/2]).
--export([base_url/2, base_url/3]).
+-export([base_url/2, base_url/3
+        ,proxy_host/0
+        ]).
 -export([convert_stream_type/1
         ,normalize_media/3, normalize_media/4
         ,normalize_media_file/3, normalize_media_file/4
@@ -48,15 +48,14 @@
 
 -define(USE_ACCOUNT_OVERRIDES, kapps_config:get_is_true(?CONFIG_CAT, <<"support_account_overrides">>, 'true')).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Normalize audio file to the system default or specified sample rate.
-%% Acceptes media file content binary as input.
+%%------------------------------------------------------------------------------
+%% @doc Normalize audio file to the system default or specified sample rate.
+%% Accepts media file content binary as input.
 %%
 %% By default it returns result as binary, if you want file path to the
-%%  normalized file only, pass the {'output', 'file'} as option.
+%%  normalized file only, pass the `{output, file}' as option.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -type normalized_media() :: {'ok', binary()} |
                             {'ok', file:filename_all()} |
                             {'error', file:posix()}.
@@ -68,15 +67,15 @@
                                 {'to_args', binary()}.
 -type normalization_options() :: [normalization_option()].
 
--spec normalize_media(ne_binary(), ne_binary(), binary()) ->
-                             normalized_media().
--spec normalize_media(ne_binary(), ne_binary(), binary(), normalization_options()) ->
+-spec normalize_media(kz_term:ne_binary(), kz_term:ne_binary(), binary()) ->
                              normalized_media().
 normalize_media(FromFormat, FromFormat, FileContents) ->
     {'ok', FileContents};
 normalize_media(FromFormat, ToFormat, FileContents) ->
     normalize_media(FromFormat, ToFormat, FileContents, default_normalization_options(ToFormat)).
 
+-spec normalize_media(kz_term:ne_binary(), kz_term:ne_binary(), binary(), normalization_options()) ->
+                             normalized_media().
 normalize_media(FromFormat, ToFormat, FileContents, Options) ->
     FileName = tmp_file(FromFormat),
     case file:write_file(FileName, FileContents) of
@@ -87,23 +86,22 @@ normalize_media(FromFormat, ToFormat, FileContents, Options) ->
         {'error', _}=Error -> Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Normalize audio file to the system default or specified sample rate.
+%%------------------------------------------------------------------------------
+%% @doc Normalize audio file to the system default or specified sample rate.
 %% Accept a path to the media file as input.
 %%
 %% By default it returns result as binary, if you want file path to the
 %%  normalized file only, pass the {'output', 'file'} as option.
 %% @end
-%%--------------------------------------------------------------------
--spec normalize_media_file(ne_binary(), ne_binary(), file:filename_all()) ->
+%%------------------------------------------------------------------------------
+-spec normalize_media_file(kz_term:ne_binary(), kz_term:ne_binary(), file:filename_all()) ->
                                   normalized_media().
 normalize_media_file(FromFormat, FromFormat, FromFile) ->
     {'ok', FromFile};
 normalize_media_file(FromFormat, ToFormat, FromFile) ->
     normalize_media_file(FromFormat, ToFormat, FromFile, default_normalization_options(ToFormat)).
 
--spec default_normalization_options(ne_binary()) -> normalization_options().
+-spec default_normalization_options(kz_term:ne_binary()) -> normalization_options().
 default_normalization_options(ToFormat) ->
     [{'from_args', ?NORMALIZE_SOURCE_ARGS}
     ,{'to_args', ?NORMALIZE_DEST_ARGS}
@@ -112,7 +110,7 @@ default_normalization_options(ToFormat) ->
     ,{'output', 'binary'}
     ].
 
--spec normalize_media_file(ne_binary(), ne_binary(), file:filename_all(), normalization_options()) ->
+-spec normalize_media_file(kz_term:ne_binary(), kz_term:ne_binary(), file:filename_all(), normalization_options()) ->
                                   normalized_media().
 normalize_media_file(FromFormat, ToFormat, FromFile, Options) ->
     FromArgs = props:get_value('from_args', Options, ?NORMALIZE_SOURCE_ARGS),
@@ -141,13 +139,11 @@ return_command_result({'ok', _}, FileName, 'binary') ->
 return_command_result({'ok', _}, FileName, 'file') -> {'ok', FileName};
 return_command_result({'error', _}=Error, _FileName, _) -> Error.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Run normalizer command
+%%------------------------------------------------------------------------------
+%% @doc Run normalizer command
 %% @end
-%%--------------------------------------------------------------------
--spec run_command(ne_binary()) -> normalized_media().
+%%------------------------------------------------------------------------------
+-spec run_command(kz_term:ne_binary()) -> normalized_media().
 run_command(Command) ->
     try os:cmd(binary_to_list(Command)) of
         Result ->
@@ -159,12 +155,11 @@ run_command(Command) ->
             {'error', Reason}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Synthesize a tone, returns as binary or a path to the generated file
+%%------------------------------------------------------------------------------
+%% @doc Synthesize a tone, returns as binary or a path to the generated file
 %% @end
-%%--------------------------------------------------------------------
--spec synthesize_tone(ne_binary(), ne_binary(), ne_binary()) -> normalized_media().
+%%------------------------------------------------------------------------------
+-spec synthesize_tone(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> normalized_media().
 synthesize_tone(SampleRate, Frequency, Length) ->
     FileName = tmp_file(<<"wav">>),
     case synthesize_tone(SampleRate, Frequency, Length, FileName) of
@@ -175,12 +170,11 @@ synthesize_tone(SampleRate, Frequency, Length) ->
         {'error', _}=Error -> Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Synthesize a tone, returns as binary or a path to the generated file
+%%------------------------------------------------------------------------------
+%% @doc Synthesize a tone, returns as binary or a path to the generated file
 %% @end
-%%--------------------------------------------------------------------
--spec synthesize_tone(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> normalized_media().
+%%------------------------------------------------------------------------------
+-spec synthesize_tone(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> normalized_media().
 synthesize_tone(SampleRate, Frequency, Length, FileName) ->
     Command = iolist_to_binary([?NORMALIZE_EXE
                                ,<<" -r ">>, SampleRate
@@ -191,12 +185,11 @@ synthesize_tone(SampleRate, Frequency, Length, FileName) ->
     lager:info("synthesize tone command ~p", [Command]),
     run_command(Command).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Detect sample rate of a media file
+%%------------------------------------------------------------------------------
+%% @doc Detect sample rate of a media file
 %% @end
-%%--------------------------------------------------------------------
--spec detect_file_sample_rate(ne_binary()) -> normalized_media().
+%%------------------------------------------------------------------------------
+-spec detect_file_sample_rate(kz_term:ne_binary()) -> normalized_media().
 detect_file_sample_rate(FileName) ->
     Command = iolist_to_binary([?NORMALIZE_EXE
                                ,<<" --i -r ">>
@@ -217,12 +210,11 @@ detect_file_sample_rate(FileName) ->
             {'error', 'detection_failed'}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Detect media format of a media file
+%%------------------------------------------------------------------------------
+%% @doc Detect media format of a media file
 %% @end
-%%--------------------------------------------------------------------
--spec detect_file_format(ne_binary()) -> normalized_media().
+%%------------------------------------------------------------------------------
+-spec detect_file_format(kz_term:ne_binary()) -> normalized_media().
 detect_file_format(FileName) ->
     Command = iolist_to_binary([?NORMALIZE_EXE
                                ,<<" --i -t ">>
@@ -243,21 +235,20 @@ detect_file_format(FileName) ->
             {'error', 'detection_failed'}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Join multiple Audio file together. It detects file format, sample rate
+%%------------------------------------------------------------------------------
+%% @doc Join multiple Audio file together. It detects file format, sample rate
 %% of each file and will try to convert sample rate if it different from the
 %% requested sample rate or the default value of 16kHz.
 %% @end
-%%--------------------------------------------------------------------
--type join_file() :: {ne_binary(), api_binary(), api_binary()}.
+%%------------------------------------------------------------------------------
+-type join_file() :: {kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary()}.
 -type join_files() :: [join_file()].
 
--spec join_media_files(ne_binaries()) -> normalized_media().
+-spec join_media_files(kz_term:ne_binaries()) -> normalized_media().
 join_media_files(FileNames) ->
     join_media_files(FileNames, []).
 
--spec join_media_files(ne_binaries(), kz_proplist()) -> normalized_media().
+-spec join_media_files(kz_term:ne_binaries(), kz_term:proplist()) -> normalized_media().
 join_media_files(FileNames, Options) ->
     DetectedOpts = [detect_format_options(F) || F <- FileNames],
     SampleRate = props:get_value('sample_rate', Options, <<"16000">>),
@@ -267,14 +258,14 @@ join_media_files(FileNames, Options) ->
         {'error', _}=Error -> Error
     end.
 
--spec maybe_join_media_files(join_files(), kz_proplist(), join_files()) -> normalized_media().
+-spec maybe_join_media_files(join_files(), kz_term:proplist(), join_files()) -> normalized_media().
 maybe_join_media_files([], Options, Acc) -> do_join_media_files(Acc, Options);
 maybe_join_media_files([{_, 'undefined', _}|_], _, _) -> {'error', 'join_media_failed'};
 maybe_join_media_files([{_, _, 'undefined'}|_], _, _) -> {'error', 'join_media_failed'};
 maybe_join_media_files([F|Files], Options, Acc) ->
     maybe_join_media_files(Files, Options, [F|Acc]).
 
--spec do_join_media_files(join_files(), kz_proplist()) -> normalized_media().
+-spec do_join_media_files(join_files(), kz_term:proplist()) -> normalized_media().
 do_join_media_files(Files, Options) ->
     SampleRate = props:get_value('sample_rate', Options, <<"16000">>),
     ToFormat = props:get_value('to_format', Options, ?NORMALIZATION_FORMAT),
@@ -296,14 +287,13 @@ do_join_media_files(Files, Options) ->
     _ = [kz_util:delete_file(F) || {F, _, _} <- Files],
     Result.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc Based on detected format options, normalize the files if
 %% sample rate are different of desire sample rate, otherwise
 %% copy the files to a temporary place to join them together.
 %% @end
-%%--------------------------------------------------------------------
--spec maybe_normalize_copy_files(join_files(), ne_binary(), join_files()) ->
+%%------------------------------------------------------------------------------
+-spec maybe_normalize_copy_files(join_files(), kz_term:ne_binary(), join_files()) ->
                                         {'ok', join_files()} |
                                         {'error', 'normalization_failed'}.
 maybe_normalize_copy_files([], _SampleRate, Acc) -> {'ok', Acc};
@@ -332,13 +322,12 @@ maybe_normalize_copy_files([{File, _Other, Format}|Files], SampleRate, Acc) ->
             {'error', 'normalization_failed'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc Detect file format options(sample_rate, file format) and return
 %% a tuple of detect options
 %% @end
-%%--------------------------------------------------------------------
--spec detect_format_options(ne_binary()) -> join_file().
+%%------------------------------------------------------------------------------
+-spec detect_format_options(kz_term:ne_binary()) -> join_file().
 detect_format_options(File) ->
     FileSampleRate = detect_file_sample_rate(File),
     FileFormat = detect_file_format(File),
@@ -353,16 +342,15 @@ detect_format_options(File) ->
             {File, 'undefined', 'undefined'}
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec tmp_file(ne_binary()) -> file:filename_all().
+%%------------------------------------------------------------------------------
+-spec tmp_file(kz_term:ne_binary()) -> file:filename_all().
 tmp_file(Ext) ->
     filename:join(["/tmp", list_to_binary([kz_binary:rand_hex(16), ".", Ext])]).
 
--spec recording_url(ne_binary(), kz_json:object()) -> ne_binary().
+-spec recording_url(kz_term:ne_binary(), kz_json:object()) -> kz_term:ne_binary().
 recording_url(CallId, Data) ->
     %% TODO: look at the URL for {filename}, if present replace it with
     %%   the filename, otherwise continue to append as we do today.
@@ -379,30 +367,16 @@ max_recording_time_limit() ->
 %%     Port = kz_couch_connections:get_port(),
 %%     base_url(Host, Port).
 
--spec base_url(text(), text()) -> ne_binary().
--spec base_url(text(), text(), atom()) -> ne_binary().
+-spec base_url(kz_term:text(), kz_term:text()) -> kz_term:ne_binary().
 base_url(Host, Port) ->
     base_url(Host, Port, 'proxy_playback').
 
-%% base_url(Host, Port, 'direct_playback') ->
-%%     case ?AUTH_PLAYBACK of
-%%         'false' -> build_url(Host, Port, [], []);
-%%         'true' ->
-%%             {Username, Password} = kz_couch_connections:get_creds(),
-%%             build_url(Host, Port, Username, Password)
-%%     end;
+-spec base_url(kz_term:text(), kz_term:text(), atom()) -> kz_term:ne_binary().
 base_url(Host, Port, 'proxy_playback') ->
     case ?AUTH_PLAYBACK of
         'false' -> build_url(Host, Port, [], []);
         'true' -> build_url(Host, Port, ?AUTH_USERNAME, ?AUTH_PASSWORD)
     end;
-%% base_url(Host, Port, 'direct_store') ->
-%%     case ?USE_AUTH_STORE of
-%%         'false' -> build_url(Host, Port, [], []);
-%%         'true' ->
-%%             {Username, Password} = kz_couch_connections:get_creds(),
-%%             build_url(Host, Port, Username, Password)
-%%     end;
 base_url(Host, Port, 'proxy_store') ->
     case ?USE_AUTH_STORE of
         'false' -> build_url(Host, Port, [], []);
@@ -414,25 +388,25 @@ build_url(H, P, [], []) ->
                  'true' -> <<"https">>;
                  'false' -> <<"http">>
              end,
-    list_to_binary([Scheme, "://", kz_term:to_binary(H), ":", kz_term:to_binary(P), "/"]);
+    list_to_binary([Scheme, "://", kz_term:to_binary(H), ":", kz_term:to_binary(P)]);
 build_url(H, P, User, Pwd) ->
     Scheme = case ?USE_HTTPS of
                  'true' -> <<"https">>;
                  'false' -> <<"http">>
              end,
     list_to_binary([Scheme, "://", User, ":", Pwd
-                   ,"@", kz_term:to_binary(H), ":", kz_term:to_binary(P), "/"
+                   ,"@", kz_term:to_binary(H), ":", kz_term:to_binary(P)
                    ]).
 
--spec convert_stream_type(ne_binary()) -> ne_binary().
+-spec convert_stream_type(kz_term:ne_binary()) -> kz_term:ne_binary().
 convert_stream_type(<<"extant">>) -> <<"continuous">>;
 convert_stream_type(<<"store">>) -> <<"store">>;
 convert_stream_type(_) -> <<"single">>.
 
--spec media_path(api_binary()) -> api_binary().
--spec media_path(api_binary(), api_ne_binary()) -> api_binary().
+-spec media_path(kz_term:api_binary()) -> kz_term:api_binary().
 media_path(Path) -> media_path(Path, 'undefined').
 
+-spec media_path(kz_term:api_binary(), kz_term:api_ne_binary()) -> kz_term:api_binary().
 media_path('undefined', _AccountId) -> 'undefined';
 media_path(<<>>, _AccountId) -> 'undefined';
 media_path(<<"/system_media", _/binary>> = Path, _AccountId) -> Path;
@@ -446,17 +420,16 @@ media_path(Path, AccountId) when is_binary(AccountId) ->
         _Else -> Path
     end.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec prompt_path(ne_binary()) -> ne_binary().
--spec prompt_path(api_binary(), ne_binary()) -> ne_binary().
+%%------------------------------------------------------------------------------
+
+-spec prompt_path(kz_term:ne_binary()) -> kz_term:ne_binary().
 prompt_path(PromptId) ->
     prompt_path(?KZ_MEDIA_DB, PromptId).
 
+-spec prompt_path(kz_term:api_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 prompt_path('undefined', PromptId) ->
     prompt_path(?KZ_MEDIA_DB, PromptId);
 prompt_path(Db, <<"/system_media/", PromptId/binary>>) ->
@@ -464,10 +437,10 @@ prompt_path(Db, <<"/system_media/", PromptId/binary>>) ->
 prompt_path(Db, PromptId) ->
     kz_binary:join([<<>>, Db, PromptId], <<"/">>).
 
--spec prompt_id(ne_binary()) -> ne_binary().
--spec prompt_id(ne_binary(), api_binary()) -> ne_binary().
+-spec prompt_id(kz_term:ne_binary()) -> kz_term:ne_binary().
 prompt_id(PromptId) -> prompt_id(PromptId, 'undefined').
 
+-spec prompt_id(kz_term:ne_binary(), kz_term:api_binary()) -> kz_term:ne_binary().
 prompt_id(<<"/system_media/", PromptId/binary>>, Lang) ->
     prompt_id(PromptId, Lang);
 prompt_id(PromptId, 'undefined') -> PromptId;
@@ -475,21 +448,20 @@ prompt_id(PromptId, <<>>) -> PromptId;
 prompt_id(PromptId, Lang) ->
     filename:join([Lang, PromptId]).
 
--spec get_prompt(ne_binary()) -> api_binary().
--spec get_prompt(ne_binary(), api_ne_binary()) ->
-                        api_ne_binary().
--spec get_prompt(ne_binary(), api_ne_binary(), api_ne_binary()) ->
-                        api_ne_binary().
--spec get_prompt(ne_binary(), api_ne_binary(), api_ne_binary(), boolean()) -> api_ne_binary().
-
+-spec get_prompt(kz_term:ne_binary()) ->
+                        kz_term:api_ne_binary().
 get_prompt(Name) ->
     get_prompt(Name, 'undefined').
 
+-spec get_prompt(kz_term:ne_binary(), kz_term:api_ne_binary()) ->
+                        kz_term:api_ne_binary().
 get_prompt(Name, 'undefined') ->
     get_prompt(Name, default_prompt_language(), 'undefined');
 get_prompt(Name, <<_/binary>> = Lang) ->
     get_prompt(Name, Lang, 'undefined').
 
+-spec get_prompt(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary()) ->
+                        kz_term:api_ne_binary().
 get_prompt(<<"prompt://", _/binary>> = PromptId, _Lang, _AccountId) ->
     lager:debug("prompt is already encoded: ~s", [PromptId]),
     PromptId;
@@ -500,6 +472,8 @@ get_prompt(PromptId, Lang, 'undefined') ->
 get_prompt(PromptId, Lang, <<_/binary>> = AccountId) ->
     get_prompt(PromptId, Lang, AccountId, ?USE_ACCOUNT_OVERRIDES).
 
+-spec get_prompt(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), boolean()) ->
+                        kz_term:api_ne_binary().
 get_prompt(<<"prompt://", _/binary>> = PromptId, _Lang, _AccountId, _UseOverride) ->
     lager:debug("prompt is already encoded: ~s", [PromptId]),
     PromptId;
@@ -510,11 +484,10 @@ get_prompt(PromptId, Lang, _AccountId, 'false') ->
     lager:debug("account overrides not enabled; ignoring account prompt for ~s", [PromptId]),
     kz_binary:join([<<"prompt:/">>, ?KZ_MEDIA_DB, PromptId, Lang], <<"/">>).
 
--spec get_account_prompt(ne_binary(), api_ne_binary(), ne_binary()) ->
-                                api_ne_binary().
--spec get_account_prompt(ne_binary(), api_ne_binary(), ne_binary(), ne_binary()) ->
-                                api_ne_binary().
 %% tries account default, then system
+
+-spec get_account_prompt(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:ne_binary()) ->
+                                kz_term:api_ne_binary().
 get_account_prompt(Name, 'undefined', AccountId) ->
     PromptId = prompt_id(Name),
     lager:debug("getting account prompt for '~s'", [PromptId]),
@@ -556,6 +529,8 @@ get_account_prompt(Name, Lang, AccountId) ->
         {'ok', _} -> prompt_path(AccountId, PromptId)
     end.
 
+-spec get_account_prompt(kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                kz_term:api_ne_binary().
 get_account_prompt(Name, 'undefined', AccountId, OriginalLang) ->
     PromptId = prompt_id(Name),
     lager:debug("getting account prompt for '~s'", [PromptId]),
@@ -588,7 +563,7 @@ get_account_prompt(Name, Lang, AccountId, OriginalLang) ->
         {'ok', _} -> prompt_path(AccountId, PromptId)
     end.
 
--spec lookup_prompt(ne_binary(), ne_binary()) ->
+-spec lookup_prompt(kz_term:ne_binary(), kz_term:ne_binary()) ->
                            {'ok', kz_json:object()} |
                            {'error', 'not_found'}.
 lookup_prompt(Db, Id) ->
@@ -607,7 +582,7 @@ prompt_is_usable(Doc) ->
         'false' -> {'ok', Doc}
     end.
 
--spec get_system_prompt(ne_binary(), api_binary()) -> api_binary().
+-spec get_system_prompt(kz_term:ne_binary(), kz_term:api_binary()) -> kz_term:api_binary().
 get_system_prompt(Name, 'undefined') ->
     PromptId = prompt_id(Name),
     lager:debug("getting system prompt for '~s'", [PromptId]),
@@ -649,21 +624,22 @@ get_system_prompt(Name, Lang) ->
         {'ok', _Prompt} -> prompt_path(PromptId)
     end.
 
--spec default_prompt_language() -> ne_binary().
--spec default_prompt_language(api_binary()) -> ne_binary().
+-spec default_prompt_language() -> kz_term:ne_binary().
 default_prompt_language() ->
     default_prompt_language(<<"en-us">>).
+
+-spec default_prompt_language(kz_term:api_binary()) -> kz_term:ne_binary().
 default_prompt_language(Default) ->
     kz_term:to_lower_binary(
       kapps_config:get_ne_binary(?CONFIG_CAT, ?PROMPT_LANGUAGE_KEY, Default)
      ).
 
--spec prompt_language(api_binary()) -> ne_binary().
+-spec prompt_language(kz_term:api_binary()) -> kz_term:ne_binary().
 prompt_language(?KZ_MEDIA_DB) -> default_prompt_language();
 prompt_language(AccountId) ->
     prompt_language(AccountId, default_prompt_language()).
 
--spec prompt_language(api_binary(), api_binary()) -> ne_binary().
+-spec prompt_language(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:ne_binary().
 prompt_language('undefined', Default) ->
     default_prompt_language(Default);
 prompt_language(<<_/binary>> = AccountId, 'undefined') ->
@@ -672,8 +648,8 @@ prompt_language(<<_/binary>> = AccountId, SystemDefault) ->
     case ?USE_ACCOUNT_OVERRIDES of
         'false' -> default_prompt_language();
         'true' ->
-            {'ok', AccountJObj} = kz_account:fetch(AccountId),
-            Default = kz_account:language(AccountJObj, SystemDefault),
+            {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
+            Default = kzd_accounts:language(AccountJObj, SystemDefault),
             kz_term:to_lower_binary(
               kapps_account_config:get_ne_binary(AccountId
                                                 ,?CONFIG_CAT
@@ -690,7 +666,7 @@ store_path_from_doc(JObj) ->
         [AName | _] -> store_path_from_doc(JObj, AName)
     end.
 
--spec store_path_from_doc(kz_json:object(), ne_binary()) -> media_store_path().
+-spec store_path_from_doc(kz_json:object(), kz_term:ne_binary()) -> media_store_path().
 store_path_from_doc(JObj, AName) ->
     Opts = [{'doc_type', kz_doc:type(JObj)}
            ,{'doc_owner', kz_json:get_value(<<"owner_id">>, JObj)}
@@ -701,3 +677,10 @@ store_path_from_doc(JObj, AName) ->
                      ,att = AName
                      ,opt = props:filter_undefined(Opts)
                      }.
+
+-spec proxy_host() -> kz_term:ne_binary().
+proxy_host() ->
+    case kapps_config:get_ne_binary(?CONFIG_CAT, <<"proxy_hostname">>) of
+        'undefined' -> kz_network_utils:get_hostname();
+        ProxyHostname -> ProxyHostname
+    end.

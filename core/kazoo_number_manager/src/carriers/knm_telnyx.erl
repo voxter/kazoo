@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% A Number Manager module for carrier: telnyx.com
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc A Number Manager module for carrier: telnyx.com
+%%% @author Pierre Fenoll
 %%% @end
-%%% @contributors
-%%%   Pierre Fenoll
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_telnyx).
 -behaviour(knm_gen_carrier).
 
@@ -25,56 +21,50 @@
 
 -define(MOD_CONFIG_CAT, <<(?KNM_CONFIG_CAT)/binary, ".telnyx">>).
 
--define(IS_SANDBOX_PROVISIONING_TRUE,
-        kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')).
--define(IS_PROVISIONING_ENABLED,
-        kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"enable_provisioning">>, 'true')).
-
+-define(IS_SANDBOX_PROVISIONING_TRUE
+       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')
+       ).
+-define(IS_PROVISIONING_ENABLED
+       ,kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"enable_provisioning">>, 'true')
+       ).
 
 %%% API
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec info() -> map().
 info() ->
     #{?CARRIER_INFO_MAX_PREFIX => 3
      }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
 
-%% @public
 -spec is_number_billable(knm_number:knm_number()) -> boolean().
 is_number_billable(_Number) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check with carrier if these numbers are registered with it.
+%%------------------------------------------------------------------------------
+%% @doc Check with carrier if these numbers are registered with it.
 %% @end
-%%--------------------------------------------------------------------
--spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
-                                      {error, any()}.
+%%------------------------------------------------------------------------------
+-spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
+                                              {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the system for a quantity of available numbers in a rate center
+%%------------------------------------------------------------------------------
+%% @doc Query the system for a quantity of available numbers in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_search:options()) ->
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_search:options()) ->
                           {'ok', knm_number:knm_numbers()}.
 find_numbers(<<"+1", Prefix:3/binary, _/binary>>, Quantity, Options)
   when ?IS_US_TOLLFREE(Prefix) ->
@@ -94,12 +84,10 @@ find_numbers(<<"+",_/binary>>=_InternationalNum, Quantity, Options) ->
     Results = numbers('region', Quantity, Country, 'undefined'),
     {'ok', international_numbers(Results, Options)}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
 acquire_number(Number) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -128,12 +116,10 @@ acquire_number(Number) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) ->
     Debug = ?IS_SANDBOX_PROVISIONING_TRUE,
@@ -146,7 +132,6 @@ disconnect_number(Number) ->
             knm_errors:unspecified('provisioning_disabled', Number)
     end.
 
-%% @public
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'true'.
 
@@ -164,7 +149,7 @@ set_connection_id(Num) ->
     'ok'.
 
 -type kind() :: 'npa' | 'tollfree' | 'region'.
--spec numbers(kind(), pos_integer(), ne_binary(), api_ne_binary()) ->
+-spec numbers(kind(), pos_integer(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
                      kz_json:objects().
 numbers(SearchKind, Quantity, Prefix, NXX) ->
     Descriptor = kz_json:from_list(search_prefix(SearchKind, Prefix, NXX)),

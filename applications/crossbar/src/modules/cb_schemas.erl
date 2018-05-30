@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_schemas).
 
 -export([init/0
@@ -20,10 +18,14 @@
 
 -define(VALIDATION_PATH_TOKEN, <<"validation">>).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.schemas">>, ?MODULE, 'allowed_methods'),
@@ -52,59 +54,59 @@ authenticate_nouns([{<<"schemas">>,_}]) ->
     'true';
 authenticate_nouns(_) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
+
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(_SchemaName) ->
     [?HTTP_GET].
+
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_SchemaName, ?VALIDATION_PATH_TOKEN) ->
     [?HTTP_PUT].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() ->  'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(_SchemaName) -> 'true'.
+
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_SchemaName, ?VALIDATION_PATH_TOKEN) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     lager:debug("load summary of schemas from ~s", [?KZ_SCHEMA_DB]),
     summary(cb_context:set_account_db(Context, ?KZ_SCHEMA_DB)).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, Id) ->
     read(Id, cb_context:set_account_db(Context, ?KZ_SCHEMA_DB)).
 
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context, Id, ?VALIDATION_PATH_TOKEN) ->
     cb_context:validate_request_data(Id, Context, fun on_success/1).
 
@@ -112,27 +114,23 @@ validate(Context, Id, ?VALIDATION_PATH_TOKEN) ->
 on_success(Context) ->
     cb_context:set_resp_data(Context, cb_context:doc(Context)).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load an instance from the database
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
--spec read(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION_ANY).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     Context1 = crossbar_doc:load_docs(Context, normalize_fun(Context)),
@@ -140,7 +138,7 @@ summary(Context) ->
                             ,lists:sort(cb_context:resp_data(Context1))
                             ).
 
--type normalizer_fun() :: fun((kz_json:object(), ne_binaries()) -> ne_binaries()).
+-type normalizer_fun() :: fun((kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries()).
 -spec normalize_fun(cb_context:context()) -> normalizer_fun().
 normalize_fun(Context) ->
     case kz_term:to_boolean(cb_context:req_value(Context, <<"internals">>, 'false')) of
@@ -148,20 +146,18 @@ normalize_fun(Context) ->
         'false' -> fun normalize_doc_results/2
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Normalizes the results of a view
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view.
 %% @end
-%%--------------------------------------------------------------------
--spec normalize_all_results(kz_json:object(), kz_json:objects()) -> ne_binaries().
+%%------------------------------------------------------------------------------
+-spec normalize_all_results(kz_json:object(), kz_json:objects()) -> kz_term:ne_binaries().
 normalize_all_results(JObj, Acc) ->
     case kz_doc:id(JObj) of
         <<"_design/", _/binary>> -> Acc;
         ID -> [ID | Acc]
     end.
 
--spec normalize_doc_results(kz_json:object(), kz_json:objects()) -> ne_binaries().
+-spec normalize_doc_results(kz_json:object(), kz_json:objects()) -> kz_term:ne_binaries().
 normalize_doc_results(JObj, Acc) ->
     case kz_doc:id(JObj) of
         <<"_design/", _/binary>> -> Acc;

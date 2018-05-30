@@ -1,18 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @author James Aimonetti <>
 %%% @doc
-%%%
 %%% @end
 %%% Created : 29 Nov 2012 by James Aimonetti <>
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_eavesdrop).
 
 -include("acdc.hrl").
 
 -export([start/3]).
 
--spec start(kapps_call:call(), ne_binary(), ne_binary()) -> 'ok'.
+-spec start(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 start(MCall, AcctId, AgentCallId) ->
     {CIDNumber, CIDName} = acdc_util:caller_id(MCall),
     Prop = [{<<"Eavesdrop-Mode">>, <<"listen">>}

@@ -1,12 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author James Aimonetti
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(acdc_agent_listener).
 -behaviour(gen_listener).
 
@@ -67,46 +65,46 @@
         ,code_change/3
         ]).
 
--type config() :: {ne_binary(), ne_binary(), ne_binary()}.
+-type config() :: {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()}.
 -export_type([config/0]).
 
 -include("acdc.hrl").
 
 -define(SERVER, ?MODULE).
 
--record(state, {call :: kapps_call:call()
-               ,original_call :: kapps_call:call()
-               ,acdc_queue_id :: api_ne_binary() % the ACDc Queue ID
-               ,msg_queue_id :: api_ne_binary() % the AMQP Queue ID of the ACDc Queue process
-               ,agent_id :: api_ne_binary()
+-record(state, {call :: kapps_call:call() | 'undefined'
+               ,original_call :: kapps_call:call() | 'undefined'
+               ,acdc_queue_id :: kz_term:api_ne_binary() % the ACDc Queue ID
+               ,msg_queue_id :: kz_term:api_ne_binary() % the AMQP Queue ID of the ACDc Queue process
+               ,agent_id :: kz_term:api_ne_binary()
                ,agent_priority :: agent_priority()
-               ,skills :: ne_binaries() % skills this agent has
-               ,acct_db :: api_ne_binary()
-               ,acct_id :: api_ne_binary()
-               ,fsm_pid :: api_pid()
-               ,agent_queues = [] :: ne_binaries()
-               ,last_connect :: kz_now() | undefined % last connection
-               ,last_attempt :: kz_now() | undefined % last attempt to connect
-               ,my_id :: ne_binary()
-               ,my_q :: api_binary() % AMQP queue name
-               ,timer_ref :: api_reference()
-               ,sync_resp :: kz_json:object() % furthest along resp
+               ,skills :: kz_term:ne_binaries() % skills this agent has
+               ,acct_db :: kz_term:api_ne_binary()
+               ,acct_id :: kz_term:api_ne_binary()
+               ,fsm_pid :: kz_term:api_pid()
+               ,agent_queues = [] :: kz_term:ne_binaries()
+               ,last_connect :: kz_time:now() | 'undefined' % last connection
+               ,last_attempt :: kz_time:now() | 'undefined' % last attempt to connect
+               ,my_id :: kz_term:ne_binary()
+               ,my_q :: kz_term:api_binary() % AMQP queue name
+               ,timer_ref :: kz_term:api_reference()
+               ,sync_resp :: kz_term:api_object() % furthest along resp
                ,supervisor :: pid()
                ,record_calls = 'false' :: boolean()
-               ,recording_url :: api_binary() %% where to send recordings after the call
+               ,recording_url :: kz_term:api_binary() %% where to send recordings after the call
                ,is_thief = 'false' :: boolean()
                ,agent :: agent()
-               ,agent_call_ids = [] :: api_binaries() | kz_proplist()
+               ,agent_call_ids = [] :: kz_term:api_binaries() | kz_term:proplist()
                ,cdr_urls = dict:new() :: dict:dict() %% {CallId, Url}
-               ,agent_presence_id :: api_binary()
+               ,agent_presence_id :: kz_term:api_binary()
                }).
 -type state() :: #state{}.
 
 -type agent() :: kapps_call:call() | kz_json:object().
 
-%%%===================================================================
+%%%=============================================================================
 %%% Defines for different functionality
-%%%===================================================================
+%%%=============================================================================
 
 %% On init, an aget process sends a sync_req and waits SYNC_TIMER_TIMEOUT ms
 %% The agent process checks its list of received
@@ -170,22 +168,23 @@
                      }
                     ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link(pid(), kz_json:object()) -> startlink_ret().
--spec start_link(pid(), kz_json:object(), ne_binary(), ne_binary(), ne_binaries()) -> startlink_ret().
--spec start_link(pid(), kapps_call:call(), ne_binary()) -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+
+-spec start_link(pid(), kz_json:object()) -> kz_types:startlink_ret().
 start_link(Supervisor, AgentJObj) ->
     AgentId = kz_doc:id(AgentJObj),
     AcctId = account_id(AgentJObj),
     Queues = kz_json:get_value(<<"queues">>, AgentJObj, []),
     start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues).
 
+-spec start_link(pid(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binaries()) -> kz_types:startlink_ret().
 start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues) ->
     lager:debug("start bindings for ~s(~s) in ready", [AcctId, AgentId]),
     gen_listener:start_link(?SERVER
@@ -195,6 +194,7 @@ start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues) ->
                            ,[Supervisor, AgentJObj, Queues]
                            ).
 
+-spec start_link(pid(), kapps_call:call(), kz_term:ne_binary()) -> kz_types:startlink_ret().
 start_link(Supervisor, ThiefCall, QueueId) ->
     AgentId = kapps_call:owner_id(ThiefCall),
     AcctId = kapps_call:account_id(ThiefCall),
@@ -214,24 +214,26 @@ stop(Srv) -> gen_listener:cast(Srv, {'stop_agent', self()}).
 member_connect_resp(Srv, ReqJObj) ->
     gen_listener:cast(Srv, {'member_connect_resp', ReqJObj}).
 
--spec member_connect_retry(pid(), kz_json:object()) -> 'ok'.
-member_connect_retry(Srv, WinJObj) ->
-    gen_listener:cast(Srv, {'member_connect_retry', WinJObj}).
+-spec member_connect_retry(pid(), kz_term:ne_binary() | kz_json:object()) -> 'ok'.
+member_connect_retry(Srv, WinOrCallId) ->
+    gen_listener:cast(Srv, {'member_connect_retry', WinOrCallId}).
 
 -spec agent_timeout(pid()) -> 'ok'.
 agent_timeout(Srv) -> gen_listener:cast(Srv, 'agent_timeout').
 
 -spec member_connect_accepted(pid()) -> 'ok'.
--spec member_connect_accepted(pid(), ne_binary()) -> 'ok'.
--spec member_connect_accepted(pid(), ne_binary(), kapps_call:call()) -> 'ok'.
 member_connect_accepted(Srv) ->
     gen_listener:cast(Srv, {'member_connect_accepted'}).
+
+-spec member_connect_accepted(pid(), kz_term:ne_binary()) -> 'ok'.
 member_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId}).
+
+-spec member_connect_accepted(pid(), kz_term:ne_binary(), kapps_call:call()) -> 'ok'.
 member_connect_accepted(Srv, ACallId, MemberCall) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
 
--spec monitor_connect_accepted(pid(), ne_binary()) -> 'ok'.
+-spec monitor_connect_accepted(pid(), kz_term:ne_binary()) -> 'ok'.
 monitor_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'monitor_connect_accepted', ACallId}).
 
@@ -243,36 +245,36 @@ member_callback_accepted(Srv, ACall) ->
 hangup_call(Srv) ->
     gen_listener:cast(Srv, {'hangup_call'}).
 
--spec monitor_call(pid(), kapps_call:call(), kz_json:object(), api_binary()) ->
-                          'ok'.
-monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
-    gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
-
 -spec bridge_to_member(pid(), kapps_call:call(), kz_json:object()
-                      ,kz_json:objects(), api_binary(), api_binary()
+                      ,kz_json:objects(), kz_term:api_binary(), kz_term:api_binary()
                       ) -> 'ok'.
 bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
 
+-spec monitor_call(pid(), kapps_call:call(), kz_json:object(), kz_term:api_binary()) ->
+                          'ok'.
+monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
+    gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
+
 -spec originate_callback_to_agent(pid(), kapps_call:call(), kz_json:object()
-                                 ,kz_json:objects(), api_binary(), api_binary(), api_binary()
+                                 ,kz_json:objects(), kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()
                                  ) -> 'ok'.
 originate_callback_to_agent(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
     gen_listener:cast(Srv, {'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
 
--spec originate_callback_return(pid(), kapps_call:call()) -> ne_binary().
+-spec originate_callback_return(pid(), kapps_call:call()) -> kz_term:ne_binary().
 originate_callback_return(Srv, Call) ->
     gen_listener:call(Srv, {'originate_callback_return', Call}).
 
--spec channel_hungup(pid(), ne_binary()) -> 'ok'.
+-spec channel_hungup(pid(), kz_term:ne_binary()) -> 'ok'.
 channel_hungup(Srv, CallId) ->
     gen_listener:cast(Srv, {'channel_hungup', CallId}).
 
--spec unbind_from_events(pid(), ne_binary()) -> 'ok'.
+-spec unbind_from_events(pid(), kz_term:ne_binary()) -> 'ok'.
 unbind_from_events(Srv, CallId) ->
     gen_listener:cast(Srv, {'unbind_from_events', CallId}).
 
--spec rebind_events(pid(), ne_binary(), ne_binary()) -> 'ok'.
+-spec rebind_events(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 rebind_events(Srv, OldCallId, NewCallId) ->
     gen_listener:cast(Srv, {'rebind_events', OldCallId, NewCallId}).
 
@@ -280,11 +282,11 @@ rebind_events(Srv, OldCallId, NewCallId) ->
 originate_execute(Srv, JObj) ->
     gen_listener:cast(Srv, {'originate_execute', JObj}).
 
--spec originate_uuid(pid(), ne_binary(), ne_binary()) -> 'ok'.
+-spec originate_uuid(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 originate_uuid(Srv, UUID, CtlQ) ->
     gen_listener:cast(Srv, {'originate_uuid', UUID, CtlQ}).
 
--spec outbound_call(pid(), ne_binary()) -> 'ok'.
+-spec outbound_call(pid(), kz_term:ne_binary()) -> 'ok'.
 outbound_call(Srv, CallId) ->
     gen_listener:cast(Srv, {'outbound_call', CallId}).
 
@@ -299,9 +301,10 @@ send_agent_busy(Srv) ->
 -spec send_sync_req(pid()) -> 'ok'.
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
--spec send_sync_resp(pid(), text(), kz_json:object()) -> 'ok'.
--spec send_sync_resp(pid(), text(), kz_json:object(), kz_proplist()) -> 'ok'.
+-spec send_sync_resp(pid(), kz_term:text(), kz_json:object()) -> 'ok'.
 send_sync_resp(Srv, Status, ReqJObj) -> send_sync_resp(Srv, Status, ReqJObj, []).
+
+-spec send_sync_resp(pid(), kz_term:text(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 send_sync_resp(Srv, Status, ReqJObj, Options) ->
     gen_listener:cast(Srv, {'send_sync_resp', Status, ReqJObj, Options}).
 
@@ -319,18 +322,19 @@ agent_info(Srv, Field) -> gen_listener:call(Srv, {'agent_info', Field}).
 send_status_resume(Srv) ->
     gen_listener:cast(Srv, {'send_status_update', 'resume'}).
 
--spec add_acdc_queue(pid(), ne_binary(), fsm_state_name()) -> 'ok'.
+-spec add_acdc_queue(pid(), kz_term:ne_binary(), fsm_state_name()) -> 'ok'.
 add_acdc_queue(Srv, Q, StateName) ->
     gen_listener:cast(Srv, {'add_acdc_queue', Q, StateName}).
 
--spec rm_acdc_queue(pid(), ne_binary()) -> 'ok'.
+-spec rm_acdc_queue(pid(), kz_term:ne_binary()) -> 'ok'.
 rm_acdc_queue(Srv, Q) ->
     gen_listener:cast(Srv, {'rm_acdc_queue', Q}).
 
 -spec call_status_req(pid()) -> 'ok'.
--spec call_status_req(pid(), ne_binary()) -> 'ok'.
 call_status_req(Srv) ->
     gen_listener:cast(Srv, 'call_status_req').
+
+-spec call_status_req(pid(), kz_term:ne_binary()) -> 'ok'.
 call_status_req(Srv, CallId) ->
     gen_listener:cast(Srv, {'call_status_req', CallId}).
 
@@ -338,7 +342,7 @@ call_status_req(Srv, CallId) ->
 fsm_started(Srv, FSM) ->
     gen_listener:cast(Srv, {'fsm_started', FSM}).
 
--spec add_endpoint_bindings(pid(), ne_binary(), api_ne_binary()) -> 'ok'.
+-spec add_endpoint_bindings(pid(), kz_term:ne_binary(), kz_term:api_ne_binary()) -> 'ok'.
 add_endpoint_bindings(_Srv, _Realm, 'undefined') ->
     lager:debug("ignoring adding endpoint bindings for undefined user @ ~s", [_Realm]);
 add_endpoint_bindings(Srv, Realm, User) ->
@@ -347,66 +351,59 @@ add_endpoint_bindings(Srv, Realm, User) ->
                                            ,{'user', User}
                                            ]).
 
--spec remove_endpoint_bindings(pid(), ne_binary(), ne_binary()) -> 'ok'.
+-spec remove_endpoint_bindings(pid(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 remove_endpoint_bindings(Srv, Realm, User) ->
     lager:debug("removing route bindings to ~p for endpoint ~s@~s", [Srv, User, Realm]),
     gen_listener:rm_binding(Srv, 'route', [{'realm', Realm}
                                           ,{'user', User}
                                           ]).
 
--spec remove_cdr_urls(pid(), ne_binary()) -> 'ok'.
+-spec remove_cdr_urls(pid(), kz_term:ne_binary()) -> 'ok'.
 remove_cdr_urls(Srv, CallId) -> gen_listener:cast(Srv, {'remove_cdr_urls', CallId}).
 
 -spec logout_agent(pid()) -> 'ok'.
 logout_agent(Srv) -> gen_listener:cast(Srv, 'logout_agent').
 
--spec maybe_update_presence_id(pid(), api_ne_binary()) -> 'ok'.
+-spec maybe_update_presence_id(pid(), kz_term:api_ne_binary()) -> 'ok'.
 maybe_update_presence_id(_Srv, 'undefined') -> 'ok';
 maybe_update_presence_id(Srv, Id) ->
     gen_listener:cast(Srv, {'presence_id', Id}).
 
--spec maybe_update_presence_state(pid(), api_ne_binary()) -> 'ok'.
+-spec maybe_update_presence_state(pid(), kz_term:api_ne_binary()) -> 'ok'.
 maybe_update_presence_state(_Srv, 'undefined') -> 'ok';
 maybe_update_presence_state(Srv, State) ->
     presence_update(Srv, State).
 
--spec presence_update(pid(), api_ne_binary()) -> 'ok'.
+-spec presence_update(pid(), kz_term:api_ne_binary()) -> 'ok'.
 presence_update(_, 'undefined') -> 'ok';
 presence_update(Srv, PresenceState) ->
     gen_listener:cast(Srv, {'presence_update', PresenceState}).
 
--spec update_agent_status(pid(), ne_binary()) -> 'ok'.
+-spec update_agent_status(pid(), kz_term:ne_binary()) -> 'ok'.
 update_agent_status(Srv, Status) ->
     gen_listener:cast(Srv, {'update_status', Status}).
 
--spec presence_id(pid()) -> api_binary().
+-spec presence_id(pid()) -> kz_term:api_binary().
 presence_id(Srv) ->
     gen_listener:call(Srv, 'presence_id').
 
--spec queues(pid()) -> ne_binaries().
+-spec queues(pid()) -> kz_term:ne_binaries().
 queues(Srv) ->
     gen_listener:call(Srv, 'queues').
 
--spec id(pid()) -> api_binary().
+-spec id(pid()) -> kz_term:api_binary().
 id(Srv) ->
     gen_listener:call(Srv, 'my_id').
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
--spec init([atom() | agent() | ne_binaries()]) -> {'ok', state()}.
+%%------------------------------------------------------------------------------
+-spec init([atom() | agent() | kz_term:ne_binaries()]) -> {'ok', state()}.
 init([Supervisor, Agent, Queues]) ->
     AgentId = agent_id(Agent),
     kz_util:put_callid(AgentId),
@@ -426,21 +423,11 @@ init([Supervisor, Agent, Queues]) ->
                  ,agent_presence_id=AgentId
                  }}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {'reply', Reply, State} |
-%%                                   {'reply', Reply, State, Timeout} |
-%%                                   {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call({'originate_callback_return', Call}, _, #state{my_q=MyQ}=State) ->
     MemberCallId = do_originate_callback_return(MyQ, Call),
     {'reply', MemberCallId, State};
@@ -463,17 +450,11 @@ handle_call(_Request, _From, #state{}=State) ->
     lager:debug("unhandled call from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'unhandled_call'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {'noreply', State} |
-%%                                  {'noreply', State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'refresh_config', JObj, StateName}, #state{agent_priority=Priority0
                                                        ,skills=Skills0
                                                        ,agent_queues=Queues
@@ -730,18 +711,6 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
                            }
     ,'hibernate'};
 
-handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
-    _ = kapps_call:put_callid(Call),
-
-    lager:debug("monitoring member call ~s", [kapps_call:call_id(Call)]),
-
-    {'noreply', State#state{call=Call
-                           ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
-                           ,msg_queue_id=kz_json:get_value(<<"Server-ID">>, WinJObj)
-                           ,recording_url=RecordingUrl
-                           }
-    ,'hibernate'};
-
 handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}, #state{agent_queues=Qs
                                                                                                      ,acct_id=AcctId
                                                                                                      ,agent_id=AgentId
@@ -919,6 +888,18 @@ handle_cast({'hangup_call'}, #state{my_id=MyId
                            }
     ,'hibernate'};
 
+handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
+    _ = kapps_call:put_callid(Call),
+
+    lager:debug("monitoring member call ~s", [kapps_call:call_id(Call)]),
+
+    {'noreply', State#state{call=Call
+                           ,acdc_queue_id=kz_json:get_value(<<"Queue-ID">>, WinJObj)
+                           ,msg_queue_id=kz_json:get_value(<<"Server-ID">>, WinJObj)
+                           ,recording_url=RecordingUrl
+                           }
+    ,'hibernate'};
+
 handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
     lager:debug("execute the originate for agent: ~p", [JObj]),
     send_originate_execute(JObj, Q),
@@ -1054,30 +1035,19 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State, 'hibernate'}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all messages from the message bus
-%%
-%% @spec handle_info(JObj, State) -> {'reply', Proplist} |
-%%                                   ignore
+%%------------------------------------------------------------------------------
+%% @doc Handling all messages from the message bus
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{fsm_pid='undefined'}) -> 'ignore';
 handle_event(_JObj, #state{fsm_pid=FSM
@@ -1093,17 +1063,14 @@ handle_event(_JObj, #state{fsm_pid=FSM
               ,{'agent_call_ids', AgentCallIds}
               ]}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(Reason, #state{agent_queues=Queues
                         ,acct_id=AcctId
@@ -1115,27 +1082,28 @@ terminate(Reason, #state{agent_queues=Queues
 terminate(_Reason, _State) ->
     lager:debug("agent process going down: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
--spec is_valid_queue(ne_binary(), ne_binaries()) -> boolean().
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_valid_queue(kz_term:ne_binary(), kz_term:ne_binaries()) -> boolean().
 is_valid_queue(Q, Qs) -> lists:member(Q, Qs).
 
--spec send_member_connect_resp(kz_json:object(), ne_binary()
-                              ,ne_binary(), ne_binary()
-                              , kz_now() | 'undefined'
+-spec send_member_connect_resp(kz_json:object(), kz_term:ne_binary()
+                              ,kz_term:ne_binary(), kz_term:ne_binary()
+                              , kz_time:now() | 'undefined'
                               ) -> 'ok'.
 send_member_connect_resp(JObj, MyQ, AgentId, MyId, LastConn) ->
     Queue = kz_json:get_value(<<"Server-ID">>, JObj),
@@ -1150,8 +1118,7 @@ send_member_connect_resp(JObj, MyQ, AgentId, MyId, LastConn) ->
     lager:debug("sending connect_resp to ~s for ~s: ~s", [Queue, call_id(JObj), MyId]),
     kapi_acdc_queue:publish_member_connect_resp(Queue, Resp).
 
--spec send_member_connect_retry(kz_json:object(), ne_binary(), ne_binary()) -> 'ok'.
--spec send_member_connect_retry(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec send_member_connect_retry(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_retry(JObj, MyId, AgentId) ->
     send_member_connect_retry(kz_json:get_value(<<"Server-ID">>, JObj)
                              ,call_id(JObj)
@@ -1159,6 +1126,7 @@ send_member_connect_retry(JObj, MyId, AgentId) ->
                              ,AgentId
                              ).
 
+-spec send_member_connect_retry(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_retry('undefined', _, _, _) ->
     lager:debug("no queue to send the retry to, seems bad");
 send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
@@ -1170,8 +1138,7 @@ send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
              ]),
     kapi_acdc_queue:publish_member_connect_retry(Queue, Resp).
 
--spec send_member_connect_accepted(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
--spec send_member_connect_accepted(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
                                   ,{<<"Account-ID">>, AcctId}
@@ -1181,6 +1148,7 @@ send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
                                   ]),
     kapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
+-spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_connect_accepted(Queue, CallId, NewCallId, AcctId, AgentId, MyId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, NewCallId}
                                   ,{<<"Account-ID">>, AcctId}
@@ -1191,14 +1159,14 @@ send_member_connect_accepted(Queue, CallId, NewCallId, AcctId, AgentId, MyId) ->
                                   ]),
     kapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
--spec send_member_callback_accepted(ne_binary(), ne_binary()) -> 'ok'.
+-spec send_member_callback_accepted(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_member_callback_accepted(Queue, CallId) ->
     Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                   ]),
     kapi_acdc_queue:publish_member_callback_accepted(Queue, Resp).
 
--spec send_originate_execute(kz_json:object(), ne_binary()) -> 'ok'.
+-spec send_originate_execute(kz_json:object(), kz_term:ne_binary()) -> 'ok'.
 send_originate_execute(JObj, Q) ->
     Prop = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
@@ -1206,7 +1174,7 @@ send_originate_execute(JObj, Q) ->
            ],
     kapi_dialplan:publish_originate_execute(kz_json:get_value(<<"Server-ID">>, JObj), Prop).
 
--spec send_sync_request(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec send_sync_request(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_sync_request(AcctId, AgentId, MyId, MyQ) ->
     Prop = [{<<"Account-ID">>, AcctId}
            ,{<<"Agent-ID">>, AgentId}
@@ -1236,12 +1204,12 @@ send_status_update(AcctId, AgentId, 'resume') ->
     kapi_acdc_agent:publish_resume(Update).
 
 
--spec idle_time('undefined' | kz_now()) -> api_integer().
+-spec idle_time('undefined' | kz_time:now()) -> kz_term:api_integer().
 idle_time('undefined') -> 'undefined';
 idle_time(T) -> kz_time:elapsed_s(T).
 
--spec call_id(kapps_call:call() | api_object()) ->
-                     api_binary().
+-spec call_id(kapps_call:call() | kz_term:api_object()) ->
+                     kz_term:api_binary().
 call_id('undefined') -> 'undefined';
 call_id(Call) ->
     case kapps_call:is_call(Call) of
@@ -1256,8 +1224,8 @@ call_id(Call) ->
                         end, 'undefined', Keys)
     end.
 
--spec maybe_connect_to_agent(ne_binary(), kz_json:objects(), kapps_call:call(), api_integer(), ne_binary(), api_binary()) ->
-                                    kz_proplist().
+-spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()) ->
+                                    kz_term:proplist().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     MCallId = kapps_call:call_id(Call),
     kz_util:put_callid(MCallId),
@@ -1317,9 +1285,9 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     kapi_resource:publish_originate_req(Prop),
     lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
--spec maybe_originate_callback(ne_binary(), kz_json:objects(), kapps_call:call(), api_integer(), ne_binary(), api_binary()
+-spec maybe_originate_callback(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()
                               ,kz_json:object()) ->
-                                      kz_proplist().
+                                      kz_term:proplist().
 maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
@@ -1381,7 +1349,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
     kapi_resource:publish_originate_req(Prop),
     lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
--spec outbound_call_id(kapps_call:call() | ne_binary(), ne_binary()) -> ne_binary().
+-spec outbound_call_id(kapps_call:call() | kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
     Hash = kz_term:to_hex_binary(erlang:md5(CallId)),
     Rnd = kz_binary:rand_hex(4),
@@ -1389,12 +1357,12 @@ outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
 outbound_call_id(Call, AgentId) ->
     outbound_call_id(kapps_call:call_id(Call), AgentId).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Complete a callback to the callback number (in CCV)
 %% Returns a target call id that has been hooked for events
 %% @end
-%%--------------------------------------------------------------------
--spec do_originate_callback_return(ne_binary(), kapps_call:call()) -> ne_binary().
+%%------------------------------------------------------------------------------
+-spec do_originate_callback_return(kz_term:ne_binary(), kapps_call:call()) -> kz_term:ne_binary().
 do_originate_callback_return(MyQ, Call) ->
     MsgId = kz_binary:rand_hex(4),
 
@@ -1453,13 +1421,21 @@ do_originate_callback_return(MyQ, Call) ->
     kapi_resource:publish_originate_req(Request),
     TargetCallId.
 
--spec create_call_id() -> ne_binary().
+-spec create_call_id() -> kz_term:ne_binary().
 create_call_id() ->
     <<"callback-", (kz_binary:rand_hex(4))/binary>>.
 
--spec add_queue_binding(ne_binary(), fsm_state_name(), state()) -> 'ok'.
-add_queue_binding(QueueId, StateName, #state{acct_id=AcctId}=State) ->
+-spec add_queue_binding(kz_term:ne_binary(), fsm_state_name(), state()) ->
+                               'ok'.
+add_queue_binding(QueueId, StateName, #state{agent_id=AgentId
+                                            ,acct_id=AcctId
+                                            }=State) ->
     lager:debug("adding queue binding for ~s", [QueueId]),
+    Body = kz_json:from_list([{<<"agent_id">>, AgentId}
+                             ,{<<"queue_id">>, QueueId}
+                             ,{<<"event">>, <<"logged_into_queue">>}
+                             ]),
+    kz_edr:event(?APP_NAME, ?APP_VERSION, 'ok', 'info', Body, AcctId),
     gen_listener:add_binding(self()
                             ,'acdc_queue'
                             ,[{'restrict_to', ['member_connect_req']}
@@ -1468,9 +1444,14 @@ add_queue_binding(QueueId, StateName, #state{acct_id=AcctId}=State) ->
                              ]),
     send_availability_update(QueueId, StateName, State).
 
--spec rm_queue_binding(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec rm_queue_binding(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 rm_queue_binding(AcctId, AgentId, QueueId) ->
     lager:debug("removing queue binding for ~s", [QueueId]),
+    Body = kz_json:from_list([{<<"agent_id">>, AgentId}
+                             ,{<<"queue_id">>, QueueId}
+                             ,{<<"event">>, <<"logged_out_of_queue">>}
+                             ]),
+    kz_edr:event(?APP_NAME, ?APP_VERSION, 'ok', 'info', Body, AcctId),
     gen_listener:rm_binding(self()
                            ,'acdc_queue'
                            ,[{'restrict_to', ['member_connect_req']}
@@ -1479,7 +1460,7 @@ rm_queue_binding(AcctId, AgentId, QueueId) ->
                             ]),
     send_agent_unavailable(AcctId, AgentId, QueueId).
 
--spec send_availability_update(ne_binary(), fsm_state_name(), state()) -> 'ok'.
+-spec send_availability_update(kz_term:ne_binary(), fsm_state_name(), state()) -> 'ok'.
 send_availability_update(QueueId, 'ready', #state{agent_id=AgentId
                                                  ,agent_priority=Priority
                                                  ,skills=Skills
@@ -1491,7 +1472,7 @@ send_availability_update(QueueId, _, #state{agent_id=AgentId
                                            }) ->
     send_agent_busy(AcctId, AgentId, QueueId).
 
--spec send_agent_available(ne_binary(), ne_binary(), ne_binary(), agent_priority(), ne_binaries()) -> 'ok'.
+-spec send_agent_available(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), agent_priority(), kz_term:ne_binaries()) -> 'ok'.
 send_agent_available(AcctId, AgentId, QueueId, Priority, Skills) ->
     Prop = [{<<"Account-ID">>, AcctId}
            ,{<<"Agent-ID">>, AgentId}
@@ -1503,7 +1484,7 @@ send_agent_available(AcctId, AgentId, QueueId, Priority, Skills) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
--spec send_agent_busy(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec send_agent_busy(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_agent_busy(AcctId, AgentId, QueueId) ->
     Prop = [{<<"Account-ID">>, AcctId}
            ,{<<"Agent-ID">>, AgentId}
@@ -1513,7 +1494,7 @@ send_agent_busy(AcctId, AgentId, QueueId) ->
            ],
     kapi_acdc_queue:publish_agent_change(Prop).
 
--spec send_agent_unavailable(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+-spec send_agent_unavailable(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 send_agent_unavailable(AcctId, AgentId, QueueId) ->
     Prop = [{<<"Account-ID">>, AcctId}
            ,{<<"Agent-ID">>, AgentId}
@@ -1534,13 +1515,13 @@ update_my_queues_of_change(AcctId, AgentId, Qs) ->
         ],
     'ok'.
 
--spec is_prio_or_skills_updated(agent_priority(), ne_binaries(), agent_priority(), ne_binaries()) ->
+-spec is_prio_or_skills_updated(agent_priority(), kz_term:ne_binaries(), agent_priority(), kz_term:ne_binaries()) ->
                                        boolean().
 is_prio_or_skills_updated(Priority0, Skills0, Priority, Skills) ->
     Priority0 =/= Priority
         orelse Skills0 =/= Skills.
 
--spec should_record_endpoints(kz_json:objects(), boolean(), api_boolean()) -> boolean().
+-spec should_record_endpoints(kz_json:objects(), boolean(), kz_term:api_boolean()) -> boolean().
 should_record_endpoints(_EPs, 'true', _) -> 'true';
 should_record_endpoints(_EPs, 'false', 'true') -> 'true';
 should_record_endpoints(EPs, _, _) ->
@@ -1548,7 +1529,7 @@ should_record_endpoints(EPs, _, _) ->
                       kz_json:is_true(<<"record_calls">>, EP, 'false')
               end, EPs).
 
--spec maybe_start_recording(kapps_call:call(), ne_binary(), ne_binary(), boolean(), ne_binary()) -> 'ok'.
+-spec maybe_start_recording(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), boolean(), kz_term:ne_binary()) -> 'ok'.
 maybe_start_recording(_Call, _, _, 'false', _) ->
     lager:debug("not recording this call");
 maybe_start_recording(Call, QueueId, AgentId, 'true', Url) ->
@@ -1575,21 +1556,21 @@ maybe_start_recording(Call, QueueId, AgentId, 'true', Url) ->
 recording_format() ->
     kapps_config:get_ne_binary(<<"callflow">>, [<<"call_recording">>, <<"extension">>], <<"mp3">>).
 
--spec agent_id(agent()) -> api_binary().
+-spec agent_id(agent()) -> kz_term:api_binary().
 agent_id(Agent) ->
     case kz_json:is_json_object(Agent) of
         'true' -> kz_doc:id(Agent);
         'false' -> kapps_call:owner_id(Agent)
     end.
 
--spec account_id(agent()) -> api_binary().
+-spec account_id(agent()) -> kz_term:api_binary().
 account_id(Agent) ->
     case kz_json:is_json_object(Agent) of
         'true' -> find_account_id(Agent);
         'false' -> kapps_call:account_id(Agent)
     end.
 
--spec account_db(agent()) -> api_binary().
+-spec account_db(agent()) -> kz_term:api_binary().
 account_db(Agent) ->
     case kz_json:is_json_object(Agent) of
         'true' -> kz_doc:account_db(Agent);
@@ -1623,7 +1604,7 @@ find_account_id(JObj) ->
         AcctId -> AcctId
     end.
 
--spec filter_agent_calls(kz_proplist(), ne_binary()) -> kz_proplist().
+-spec filter_agent_calls(kz_term:proplist(), kz_term:ne_binary()) -> kz_term:proplist().
 filter_agent_calls(ACallIds, ACallId) ->
     %% These calls should be cancelled, but need to wait for CtrlQ
     lists:filter(fun({ACancelId, 'undefined'}) when ACancelId =/= ACallId ->

@@ -1,12 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
-%%%
+%%% @author Peter Defebvre
 %%% @end
-%%% @contributors
-%%%   Peter Defebvre
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_cnam_notifier).
 -behaviour(knm_gen_provider).
 
@@ -15,19 +12,18 @@
 
 -include("knm.hrl").
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is saved, and will
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is saved, and will
 %% produce notifications if the cnam object changes
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec save(knm_number:knm_number()) -> knm_number:knm_number().
--spec save(knm_number:knm_number(), ne_binary()) -> knm_number:knm_number().
 save(Number) ->
     State = knm_phone_number:state(knm_number:phone_number(Number)),
     save(Number, State).
 
+-spec save(knm_number:knm_number(), kz_term:ne_binary()) -> knm_number:knm_number().
 save(Number, ?NUMBER_STATE_RESERVED) ->
     handle(Number);
 save(Number, ?NUMBER_STATE_IN_SERVICE) ->
@@ -37,12 +33,10 @@ save(Number, ?NUMBER_STATE_PORT_IN) ->
 save(Number, _State) ->
     Number.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function is called each time a number is deleted
+%%------------------------------------------------------------------------------
+%% @doc This function is called each time a number is deleted
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(knm_number:knm_number()) -> knm_number:knm_number().
 delete(Number) ->
     knm_services:deactivate_features(Number
@@ -52,16 +46,14 @@ delete(Number) ->
                                      ]
                                     ).
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(knm_number:knm_number()) -> knm_number:knm_number().
 handle(Number) ->
     support_depreciated_cnam(
@@ -72,12 +64,10 @@ handle(Number) ->
        )
      ).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_outbound_cnam(knm_number:knm_number()) -> knm_number:knm_number().
 handle_outbound_cnam(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
@@ -95,12 +85,10 @@ handle_outbound_cnam(Number) ->
             Number1
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_inbound_cnam(knm_number:knm_number()) -> knm_number:knm_number().
 handle_inbound_cnam(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
@@ -120,28 +108,25 @@ handle_inbound_cnam(Number) ->
             end
     end.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec support_depreciated_cnam(knm_number:knm_number()) -> knm_number:knm_number().
 support_depreciated_cnam(Number) ->
     knm_services:deactivate_feature(Number, ?FEATURE_CNAM).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+
 -spec publish_cnam_update(knm_number:knm_number()) -> 'ok'.
--spec publish_cnam_update(knm_number:knm_number(), boolean()) -> 'ok'.
 publish_cnam_update(Number) ->
     DryRun = knm_phone_number:dry_run(knm_number:phone_number(Number)),
     publish_cnam_update(Number, DryRun).
 
+-spec publish_cnam_update(knm_number:knm_number(), boolean()) -> 'ok'.
 publish_cnam_update(_Number, 'true') -> 'ok';
 publish_cnam_update(Number, 'false') ->
     PhoneNumber = knm_number:phone_number(Number),

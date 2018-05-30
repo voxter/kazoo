@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Fax Box API
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2012-2018, 2600Hz
+%%% @doc Fax Box API
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors:
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_faxboxes).
 
 -export([init/0
@@ -54,24 +50,22 @@
                           ,<<"update_url">>
                           ]).
 
--type fax_field_name() :: ne_binary().
--type fax_file_name() :: ne_binary().
+-type fax_field_name() :: kz_term:ne_binary().
+-type fax_file_name() :: kz_term:ne_binary().
 -type fax_file_content() :: binary() | iolist().
--type fax_content_type() :: ne_binary().
+-type fax_content_type() :: kz_term:ne_binary().
 
 -type fax_file() :: {fax_field_name(), fax_file_name(), fax_file_content(), fax_content_type()}.
 -type fax_files() :: [fax_file()].
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
+%%------------------------------------------------------------------------------
+%% @doc Initializes the bindings this module will respond to.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.faxboxes">>, ?MODULE, 'allowed_methods'),
@@ -83,62 +77,61 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.patch.faxboxes">>, ?MODULE, 'patch'),
     crossbar_bindings:bind(<<"*.execute.delete.faxboxes">>, ?MODULE, 'delete').
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Given the path tokens related to this module, what HTTP methods are
+%%------------------------------------------------------------------------------
+%% @doc Given the path tokens related to this module, what HTTP methods are
 %% going to be responded to.
 %% @end
-%%--------------------------------------------------------------------
--spec allowed_methods() -> http_methods().
--spec allowed_methods(path_token()) -> http_methods().
+%%------------------------------------------------------------------------------
 
+-spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(_FaxboxId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Does the path point to a valid resource
-%% So /faxes => []
+%%------------------------------------------------------------------------------
+%% @doc Does the path point to a valid resource.
+%% For example:
+%%
+%% ```
+%%    /faxes => []
 %%    /faxes/foo => [<<"foo">>]
 %%    /faxes/foo/bar => [<<"foo">>, <<"bar">>]
+%% '''
 %% @end
-%%--------------------------------------------------------------------
--spec resource_exists() -> 'true'.
--spec resource_exists(path_token()) -> 'true'.
+%%------------------------------------------------------------------------------
 
+-spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
 resource_exists(?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) -> 'true';
 resource_exists(_BoxId) -> 'true'.
 
 -spec validate_resource(cb_context:context()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
 validate_resource(Context) -> Context.
+
+-spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
 validate_resource(Context, FaxboxId) ->
     case kz_datamgr:open_cache_doc(cb_context:account_db(Context), FaxboxId) of
         {'ok', JObj} -> cb_context:store(Context, <<"faxbox">>, JObj);
         _ -> Context
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check the request (request body, query string params, path tokens, etc)
+%%------------------------------------------------------------------------------
+%% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
 %% /faxes mights load a list of fax objects
 %% /faxes/123 might load the fax object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
-%%--------------------------------------------------------------------
--spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
+%%------------------------------------------------------------------------------
 
+-spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_faxboxes(Context, cb_context:req_verb(Context)).
 
@@ -147,6 +140,7 @@ validate_faxboxes(Context, ?HTTP_PUT) ->
 validate_faxboxes(Context, ?HTTP_GET) ->
     faxbox_listing(Context).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) ->
     ResellerId = cb_context:reseller_id(Context),
     Domain = kapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
@@ -210,12 +204,10 @@ validate_patch(Context) ->
                                            )
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is PUT, execute the actual action, usually a db save.
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is PUT, execute the actual action, usually a db save.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
     Context1 = faxbox_doc_save(maybe_register_cloud_printer(Context)),
@@ -226,13 +218,11 @@ put(Context) ->
         _ -> Context1
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is POST, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _Id) ->
     Context1 = faxbox_doc_save(maybe_register_cloud_printer(Context)),
@@ -243,23 +233,19 @@ post(Context, _Id) ->
         _ -> Context1
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verb is PATCH, execute the actual action, usually a db save
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verb is PATCH, execute the actual action, usually a db save
 %% (after a merge).
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
 patch(Context, Id) ->
     post(Context, Id).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%%------------------------------------------------------------------------------
+%% @doc If the HTTP verib is DELETE, execute the actual action, usually a db delete
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, Id) ->
     faxbox_doc_delete(Context, Id).
@@ -269,17 +255,15 @@ create_faxbox(Context) ->
     OnSuccess = fun(C) -> on_faxbox_successful_validation('undefined', C) end,
     cb_context:validate_request_data(<<"faxbox">>, Context, OnSuccess).
 
--spec delete_faxbox(ne_binary(), cb_context:context()) -> cb_context:context().
+-spec delete_faxbox(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 delete_faxbox(Id, Context) ->
     read(Id, Context).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Load an instance from the database
+%%------------------------------------------------------------------------------
+%% @doc Load an instance from the database
 %% @end
-%%--------------------------------------------------------------------
--spec read(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
     Ctx1 = crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(kzd_fax_box:type())),
     case cb_context:doc(Ctx1) of
@@ -292,7 +276,7 @@ leak_private_fields(JObj) ->
     J = kz_json:set_value(<<"id">>, kz_doc:id(JObj), JObj),
     lists:foldl(fun leak_private_field/2, J, ?LEAKED_FIELDS).
 
--spec leak_private_field(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec leak_private_field(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 leak_private_field(<<"pvt_", K1/binary>> = K, Acc) ->
     case kz_json:get_value(K, Acc) of
         'undefined' -> Acc;
@@ -300,7 +284,7 @@ leak_private_field(<<"pvt_", K1/binary>> = K, Acc) ->
     end;
 leak_private_field(_K, Acc) -> Acc.
 
--spec leak_private_field_value(ne_binary(), ne_binary(), kz_json:json_term(), kz_json:object()) ->
+-spec leak_private_field_value(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:json_term(), kz_json:object()) ->
                                       kz_json:object().
 leak_private_field_value(?CLOUD_CLAIM_URL_FIELD, K1, V, Acc) ->
     case kz_json:get_value(?CLOUD_STATE_FIELD, Acc) of
@@ -318,32 +302,28 @@ remove_private_fields(Context) ->
                        ),
     cb_context:set_req_data(Context, JObj1).
 
--spec remove_private_fields_fold(ne_binary(), kz_json:object()) -> kz_json:object().
+-spec remove_private_fields_fold(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
 remove_private_fields_fold(<<"pvt_", K1/binary>>, Acc) ->
     case kz_json:get_value(K1, Acc) of
         'undefined' -> Acc;
         _Value -> kz_json:delete_key(K1, Acc)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Update an existing instance with the data provided, if it is
+%%------------------------------------------------------------------------------
+%% @doc Update an existing instance with the data provided, if it is
 %% valid
 %% @end
-%%--------------------------------------------------------------------
--spec update_faxbox(ne_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec update_faxbox(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 update_faxbox(Id, Context) ->
     OnSuccess = fun(C) -> on_faxbox_successful_validation(Id, C) end,
     cb_context:validate_request_data(<<"faxbox">>, Context, OnSuccess).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
 %% @end
-%%--------------------------------------------------------------------
--spec on_faxbox_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+%%------------------------------------------------------------------------------
+-spec on_faxbox_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_faxbox_successful_validation('undefined', Context) ->
     cb_context:set_doc(Context
                       ,kz_json:set_values([{<<"pvt_type">>, kzd_fax_box:type()}
@@ -359,20 +339,18 @@ on_faxbox_successful_validation('undefined', Context) ->
 on_faxbox_successful_validation(DocId, Context) ->
     crossbar_doc:load_merge(DocId, Context, ?TYPE_CHECK_OPTION(kzd_fax_box:type())).
 
--spec generate_email_address(cb_context:context()) -> ne_binary().
+-spec generate_email_address(cb_context:context()) -> kz_term:ne_binary().
 generate_email_address(Context) ->
     ResellerId =  cb_context:reseller_id(Context),
     Domain = kapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
     New = kz_binary:rand_hex(4),
     <<New/binary, ".", Domain/binary>>.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Attempt to load a summarized listing of all instances of this
+%%------------------------------------------------------------------------------
+%% @doc Attempt to load a summarized listing of all instances of this
 %% resource.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec faxbox_listing(cb_context:context()) -> cb_context:context().
 faxbox_listing(Context) ->
     ViewOptions = ['include_docs'],
@@ -386,7 +364,7 @@ faxbox_listing(Context) ->
 normalize_view_results(JObj, Acc) ->
     [leak_private_fields(kz_json:get_value(<<"doc">>, JObj)) | Acc].
 
--spec is_faxbox_email_global_unique(ne_binary(), ne_binary()) -> boolean().
+-spec is_faxbox_email_global_unique(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 is_faxbox_email_global_unique(Email, FaxBoxId) ->
     ViewOptions = [{'key', kz_term:to_lower_binary(Email)}],
     case kz_datamgr:get_results(?KZ_FAXES_DB, <<"faxbox/email_address">>, ViewOptions) of
@@ -397,7 +375,6 @@ is_faxbox_email_global_unique(Email, FaxBoxId) ->
     end.
 
 -spec maybe_reregister_cloud_printer(cb_context:context()) -> cb_context:context().
--spec maybe_reregister_cloud_printer(api_binary(), cb_context:context()) -> cb_context:context().
 maybe_reregister_cloud_printer(Context) ->
     CurrentState = kz_json:get_value(<<"pvt_cloud_state">>, cb_context:doc(Context)),
     Ctx = maybe_reregister_cloud_printer(CurrentState, Context),
@@ -411,6 +388,7 @@ maybe_reregister_cloud_printer(Context) ->
         _ -> Ctx1
     end.
 
+-spec maybe_reregister_cloud_printer(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 maybe_reregister_cloud_printer('undefined', Context) ->
     maybe_register_cloud_printer(Context);
 maybe_reregister_cloud_printer(<<"expired">>, Context) ->
@@ -436,14 +414,14 @@ maybe_register_cloud_printer(Context, JObj) ->
         _PrinterId -> Context
     end.
 
--spec register_cloud_printer(cb_context:context(), ne_binary()) -> kz_proplist().
+-spec register_cloud_printer(cb_context:context(), kz_term:ne_binary()) -> kz_term:proplist().
 register_cloud_printer(Context, FaxboxId) ->
     ResellerId =  cb_context:reseller_id(Context),
     Boundary = <<"------", (kz_binary:rand_hex(16))/binary>>,
     Body = register_body(ResellerId, FaxboxId, Boundary),
     ContentType = kz_term:to_list(<<"multipart/form-data; boundary=", Boundary/binary>>),
     Headers = [?GPC_PROXY_HEADER
-              ,{"Content-Type",ContentType}
+              ,{"content-type", ContentType}
               ],
     Url = kz_term:to_list(?GPC_URL_REGISTER),
     case kz_http:post(Url, Headers, Body) of
@@ -464,7 +442,7 @@ register_cloud_printer(Context, FaxboxId) ->
             []
     end.
 
--spec get_cloud_registered_properties(kz_json:object()) -> kz_proplist().
+-spec get_cloud_registered_properties(kz_json:object()) -> kz_term:proplist().
 get_cloud_registered_properties(JObj) ->
     [PrinterDoc] = kz_json:get_value(<<"printers">>, JObj),
     [{<<"pvt_cloud_printer_id">>, kz_doc:id(PrinterDoc)}
@@ -478,7 +456,7 @@ get_cloud_registered_properties(JObj) ->
     ,{<<"pvt_cloud_oauth_scope">>, kz_json:get_value(<<"oauth_scope">>, JObj)}
     ].
 
--spec register_body(ne_binary(), ne_binary(), ne_binary()) -> iolist().
+-spec register_body(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> iolist().
 register_body(ResellerId, FaxboxId, Boundary) ->
     {'ok', DefaultFields} = file:consult(
                               [filename:join(
@@ -510,18 +488,18 @@ register_body(ResellerId, FaxboxId, Boundary) ->
                              ,Files
                              ).
 
--spec format_multipart_formdata(ne_binary(), kz_proplist(), fax_files()) -> iolist().
+-spec format_multipart_formdata(kz_term:ne_binary(), kz_term:proplist(), fax_files()) -> iolist().
 format_multipart_formdata(Boundary, Fields, Files) ->
     EndingParts = [<<"--", Boundary/binary, "--">>, <<"">>],
     FileParts = build_file_parts(Boundary, Files, EndingParts),
     FieldParts = build_field_parts(Boundary, Fields, FileParts),
     lists:foldr(fun join_formdata_fold/2, [], FieldParts).
 
--spec build_field_parts(ne_binary(), kz_proplist(), iolist()) -> iolist().
+-spec build_field_parts(kz_term:ne_binary(), kz_term:proplist(), iolist()) -> iolist().
 build_field_parts(Boundary, Fields, Acc0) ->
     lists:foldr(fun({FieldName, FieldContent}, Acc) ->
                         [<<"--", Boundary/binary>>
-                        ,<<"Content-Disposition: form-data; name=\"",FieldName/binary,"\"">>
+                        ,<<"content-disposition: form-data; name=\"",FieldName/binary,"\"">>
                         ,<<>>
                         ,FieldContent
                          | Acc
@@ -531,12 +509,12 @@ build_field_parts(Boundary, Fields, Acc0) ->
                ,Fields
                ).
 
--spec build_file_parts(ne_binary(), fax_files(), iolist()) -> iolist().
+-spec build_file_parts(kz_term:ne_binary(), fax_files(), iolist()) -> iolist().
 build_file_parts(Boundary, Files, Acc0) ->
     lists:foldr(fun({FieldName, FileName, FileContent, FileContentType}, Acc) ->
                         [<<"--", Boundary/binary>>
-                        ,<<"Content-Disposition: format-data; name=\"",FieldName/binary,"\"; filename=\"",FileName/binary,"\"">>
-                        ,<<"Content-Type: ", FileContentType/binary>>
+                        ,<<"content-disposition: format-data; name=\"",FieldName/binary,"\"; filename=\"",FileName/binary,"\"">>
+                        ,<<"content-type: ", FileContentType/binary>>
                         ,<<>>
                         ,FileContent
                          | Acc
@@ -546,17 +524,17 @@ build_file_parts(Boundary, Files, Acc0) ->
                ,Files
                ).
 
--spec join_formdata_fold(ne_binary(), iolist()) -> iolist().
+-spec join_formdata_fold(kz_term:ne_binary(), iolist()) -> iolist().
 join_formdata_fold(Bin, Acc) ->
     string:join([binary_to_list(Bin), Acc], "\r\n").
 
--spec maybe_oauth_req(kz_json:object(), api_binary(), cb_context:context()) -> cb_context:context().
+-spec maybe_oauth_req(kz_json:object(), kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 maybe_oauth_req(_Doc, 'undefined', Context) ->
     maybe_reregister_cloud_printer(Context);
 maybe_oauth_req(Doc, _, Context) ->
     oauth_req(Doc, kz_json:get_value(<<"pvt_cloud_refresh_token">>, Doc), Context).
 
--spec oauth_req(kz_json:object(), api_binary(), cb_context:context()) -> cb_context:context().
+-spec oauth_req(kz_json:object(), kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 oauth_req(Doc, 'undefined', Context) ->
     cb_context:set_resp_data(Context, kz_doc:public_fields(leak_private_fields(Doc)));
 oauth_req(Doc, OAuthRefresh, Context) ->
@@ -581,7 +559,7 @@ faxbox_doc_save(Context) ->
         _ -> Ctx3
     end.
 
--spec faxbox_doc_delete(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec faxbox_doc_delete(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 faxbox_doc_delete(Context, Id) ->
     Ctx2 = crossbar_doc:delete(Context),
     _ = crossbar_doc:delete(

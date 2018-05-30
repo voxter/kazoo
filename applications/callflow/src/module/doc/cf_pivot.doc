@@ -1,9 +1,0 @@
-#-------------------------------------------------------------------
-# Accept third-party dialplan
-# "data":{
-#   "voice_url":"http://your.pivot.server/path/to/pivot/dialplan"
-#   ,"cdr_url":"http://your.pivot.server/path/to/cdr/receiver"
-#   ,"req_format":"kazoo" // or "twiml"
-#   ,"method":"get" // or "post"
-#   ,"debug":false // or true
-# }

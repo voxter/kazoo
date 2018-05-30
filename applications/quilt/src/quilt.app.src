@@ -1,21 +1,8 @@
-{application, quilt,
- [
-  {description, "Asterisk queue_log translator for Kazoo"},
-  {vsn, "1"},
-  {modules, []},
-  {registered, []},
-  {applications, [ kernel
-                 , stdlib
-                 , crypto
-                 , inets
-
-                 , kazoo
-                 , kazoo_amqp
-                 , kazoo_apps
-                 , kazoo_bindings
-                 , kazoo_data
-
-                 , lager
-                 ]},
-  {mod, {quilt_app, []}}
- ]}.
+{application,quilt,
+             [{applications,[acdc,kazoo,kazoo_amqp,kazoo_apps,kazoo_data,
+                             kazoo_stdlib,kernel,lager,stdlib]},
+              {description,"Asterisk queue_log translator for Kazoo"},
+              {vsn,"1"},
+              {modules,[]},
+              {registered,[]},
+              {mod,{quilt_app,[]}}]}.

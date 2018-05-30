@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 %%% @copyright (C) 2015, Voxter Communications Inc
-%%% @doc
-%%% Asterisk queue_log translator for Kazoo
+%%% @doc Asterisk queue_log translator for Kazoo
+%%%
+%%% @author Lucas Bussey
 %%% @end
-%%% @contributors
-%%%   Lucas Bussey
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -ifndef(QUILT_HRL).
 
 %% Typical includes needed
@@ -20,9 +19,9 @@
 
 -define(QUILT_HRL, 'true').
 
--record(state, {account_id :: ne_binary()
-               ,agent_id :: ne_binary()
-               ,queues=[] :: ne_binaries()
+-record(state, {account_id :: kz_term:ne_binary()
+               ,agent_id :: kz_term:ne_binary()
+               ,queues=[] :: kz_term:ne_binaries()
                ,member_call_id='undefined'
                }).
 

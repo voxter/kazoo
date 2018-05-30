@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2013-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(pusher_listener).
 
 -behaviour(gen_listener).
@@ -29,8 +27,8 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {subs_pid :: api_pid()
-               ,subs_ref :: api_reference()
+-record(state, {subs_pid :: kz_term:api_pid()
+               ,subs_ref :: kz_term:api_reference()
                }).
 -type state() :: #state{}.
 
@@ -51,11 +49,15 @@
 -define(QUEUE_OPTIONS, [{'exclusive', 'false'}]).
 -define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
--spec handle_push(kz_json:object(), kz_proplist()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec handle_push(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_push(JObj, _Props) ->
     Token = kz_json:get_value(<<"Token-ID">>, JObj),
     TokenType = kz_json:get_value(<<"Token-Type">>, JObj),
@@ -70,15 +72,14 @@ handle_push(JObj, _Props) ->
                         ),
     gen_server:cast(Module, {'push', JObj}).
 
--spec handle_reg_success(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_reg_success(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_reg_success(JObj, _Props) ->
     UserAgent = kz_json:get_value(<<"User-Agent">>, JObj),
     UserAgentProperties = pusher_util:user_agent_push_properties(UserAgent),
 
     maybe_process_reg_success(UserAgentProperties, JObj).
 
--spec maybe_process_reg_success(api_object(), kz_json:object()) -> 'ok'.
--spec maybe_process_reg_success(api_binary(), kz_json:object(), kz_json:object(), kz_proplist()) -> 'ok'.
+-spec maybe_process_reg_success(kz_term:api_object(), kz_json:object()) -> 'ok'.
 maybe_process_reg_success('undefined', _JObj) -> 'ok';
 maybe_process_reg_success(UA, JObj) ->
     Contact = kz_json:get_value(<<"Contact">>, JObj),
@@ -90,6 +91,7 @@ maybe_process_reg_success(UA, JObj) ->
     Token = props:get_value(TokenKey, Params),
     maybe_process_reg_success(Token, kz_json:set_value(<<"Token-Proxy">>, ?TOKEN_PROXY_KEY, UA) , JObj, Params).
 
+-spec maybe_process_reg_success(kz_term:api_binary(), kz_json:object(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 maybe_process_reg_success('undefined', _UA, _JObj, _Params) -> 'ok';
 maybe_process_reg_success(Token, UA, JObj, Params) ->
     case kz_cache:fetch_local(?CACHE_NAME, Token) of
@@ -97,8 +99,7 @@ maybe_process_reg_success(Token, UA, JObj, Params) ->
         {'ok', TokenJObj} -> send_reply(Token, TokenJObj)
     end.
 
--spec maybe_update_push_token(kz_json:object(), kz_json:object(), kz_proplist()) -> 'ok'.
--spec maybe_update_push_token(api_binary(), api_binary(), kz_json:object(), kz_json:object(), kz_proplist()) -> 'ok'.
+-spec maybe_update_push_token(kz_json:object(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 maybe_update_push_token(UA, JObj, Params) ->
     AccountId = kz_json:get_first_defined([[<<"Custom-Channel-Vars">>, <<"Account-ID">>]
                                           ,<<"Account-ID">>
@@ -109,6 +110,7 @@ maybe_update_push_token(UA, JObj, Params) ->
 
     maybe_update_push_token(AccountId, AuthorizingId, UA, JObj, Params).
 
+-spec maybe_update_push_token(kz_term:api_binary(), kz_term:api_binary(), kz_json:object(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 maybe_update_push_token('undefined', _AuthorizingId, _UA, _JObj, _Params) -> 'ok';
 maybe_update_push_token(_AccountId, 'undefined', _UA, _JObj, _Params) -> 'ok';
 maybe_update_push_token(AccountId, AuthorizingId, UA, JObj, Params) ->
@@ -125,7 +127,7 @@ maybe_update_push_token(AccountId, AuthorizingId, UA, JObj, Params) ->
         {'error', _} -> lager:debug("failed to open ~s in ~s", [AuthorizingId, AccountId])
     end.
 
--spec build_push(kz_json:object(), kz_json:object(), kz_proplist(), kz_json:object()) ->
+-spec build_push(kz_json:object(), kz_json:object(), kz_term:proplist(), kz_json:object()) ->
                         kz_json:object().
 build_push(UA, JObj, Params, InitialAcc) ->
     kz_json:foldl(
@@ -133,7 +135,7 @@ build_push(UA, JObj, Params, InitialAcc) ->
               build_push_fold(K, V, Acc, JObj, Params)
       end, InitialAcc, UA).
 
--spec build_push_fold(kz_json:path(), kz_json:json_term(), kz_json:object(), kz_json:object(), kz_proplist()) -> kz_json:object().
+-spec build_push_fold(kz_json:path(), kz_json:json_term(), kz_json:object(), kz_json:object(), kz_term:proplist()) -> kz_json:object().
 build_push_fold(K, V, Acc, JObj, Params) ->
     case props:get_value(V, Params) of
         'undefined' ->
@@ -144,7 +146,7 @@ build_push_fold(K, V, Acc, JObj, Params) ->
         V2 -> kz_json:set_value(K, V2, Acc)
     end.
 
--spec send_reply(ne_binary(), kz_json:object()) -> 'ok'.
+-spec send_reply(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 send_reply(Token, JObj) ->
     kz_cache:erase_local(?CACHE_NAME, Token),
     Queue = kz_json:get_value(<<"Server-ID">>, JObj),
@@ -155,10 +157,11 @@ send_reply(Token, JObj) ->
     lager:debug("sending pusher reply to ~s: ~p", [Queue, Payload]),
     kz_amqp_worker:cast(Payload, fun(P) -> kapi_pusher:publish_targeted_push_resp(Queue, P) end).
 
-%%--------------------------------------------------------------------
-%% @doc Starts the server
-%%--------------------------------------------------------------------
--spec start_link() -> startlink_ret().
+%%------------------------------------------------------------------------------
+%% @doc Starts the server.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_listener:start_link(?SERVER, [{'bindings', ?BINDINGS}
                                      ,{'responders', ?RESPONDERS}
@@ -167,56 +170,33 @@ start_link() ->
                                      ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                                      ], []).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
+%%------------------------------------------------------------------------------
+%% @doc Initializes the server.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     kz_util:put_callid(?MODULE),
     lager:debug("pusher_listener started"),
     {'ok', #state{}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'kz_amqp_channel',{'new_channel',_IsNew}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
@@ -233,62 +213,45 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'DOWN', _Ref, 'process', _Pid, _R}, State) ->
     {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Allows listener to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {reply, Options}
+%%------------------------------------------------------------------------------
+%% @doc Allows listener to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
+%%------------------------------------------------------------------------------
+%% @doc This function is called by a `gen_server' when it is about to
+%% terminate. It should be the opposite of `Module:init/1' and do any
+%% necessary cleaning up. When it returns, the `gen_server' terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("pusher listener terminating: ~p", [_Reason]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================

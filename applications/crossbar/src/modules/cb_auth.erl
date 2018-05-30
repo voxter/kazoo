@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Daniel Finke
 %%% @end
-%%% @contributors:
-%%%   Daniel Finke
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cb_auth).
 
 -export([init/0
@@ -41,10 +39,14 @@
 
 -define(PUBLIC_KEY_MIME, [{<<"application">>, <<"x-pem-file">>}]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"*.authenticate.auth">>, ?MODULE, 'authenticate'),
@@ -59,15 +61,13 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.delete.auth">>, ?MODULE, 'delete'),
     ok.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines the verbs that are appropriate for the
-%% given Nouns.  IE: '/accounts/' can only accept GET and PUT
+%%------------------------------------------------------------------------------
+%% @doc This function determines the verbs that are appropriate for the
+%% given Nouns. For example `/accounts/' can only accept `GET' and `PUT'.
 %%
-%% Failure here returns 405
+%% Failure here returns `405 Method Not Allowed'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 allowed_methods() -> [?HTTP_PUT].
 
@@ -86,14 +86,11 @@ allowed_methods(?KEYS_PATH, _KeyId) -> [?HTTP_GET, ?HTTP_PUT];
 allowed_methods(?LINKS_PATH, _LinkId) -> [?HTTP_GET , ?HTTP_PUT , ?HTTP_DELETE];
 allowed_methods(?PROVIDERS_PATH, _ProviderId) -> [?HTTP_GET , ?HTTP_POST , ?HTTP_DELETE].
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the provided list of Nouns are valid.
-%%
-%% Failure here returns 404
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the provided list of Nouns are valid.
+%% Failure here returns `404 Not Found'.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec resource_exists() -> boolean().
 resource_exists() -> 'true'.
 
@@ -112,13 +109,10 @@ resource_exists(?KEYS_PATH, _KeyId) -> 'true';
 resource_exists(?LINKS_PATH, _LinkId) -> 'true';
 resource_exists(?PROVIDERS_PATH, _ProviderId) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add content types accepted and provided by this module
-%%
+%%------------------------------------------------------------------------------
+%% @doc Add content types accepted and provided by this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec content_types_provided(cb_context:context()) -> cb_context:context().
 content_types_provided(Context) -> Context.
 
@@ -132,20 +126,19 @@ content_types_provided(Context, ?KEYS_PATH, _KeyId) ->
                                                    ]);
 content_types_provided(Context, _, _) ->
     Context.
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec authorize(cb_context:context()) -> boolean() | {'halt', cb_context:context()}.
+%%------------------------------------------------------------------------------
+-spec authorize(cb_context:context()) -> boolean() | {'stop', cb_context:context()}.
 authorize(Context) ->
     authorize_nouns(Context, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
 
--spec authorize(cb_context:context(), path_token()) -> boolean() | {'halt', cb_context:context()}.
+-spec authorize(cb_context:context(), path_token()) -> boolean() | {'stop', cb_context:context()}.
 authorize(Context, PathToken) ->
     authorize_nouns(Context, PathToken, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
 
--spec authorize(cb_context:context(), path_token(), path_token()) -> boolean() | {'halt', cb_context:context()}.
+-spec authorize(cb_context:context(), path_token(), path_token()) -> boolean() | {'stop', cb_context:context()}.
 authorize(Context, PathToken, Id) ->
     authorize_nouns(Context, PathToken, Id, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
 
@@ -159,7 +152,7 @@ authorize_nouns(C, ?HTTP_PUT, [{<<"auth">>, _}, {<<"users">>, [UserId]}, {<<"acc
         orelse (cb_context:auth_account_id(C) =:= AccountId
                 andalso cb_context:auth_user_id(C) =:= UserId
                );
-authorize_nouns(C, _, _) -> {'halt', cb_context:add_system_error('forbidden', C)}.
+authorize_nouns(C, _, _) -> {'stop', cb_context:add_system_error('forbidden', C)}.
 
 %% authorize /auth/{nouns}
 -spec authorize_nouns(cb_context:context(), path_token(), req_verb(), req_nouns()) -> boolean().
@@ -171,7 +164,7 @@ authorize_nouns(_, ?LINKS_PATH,            ?HTTP_GET,   [{<<"auth">>, _}]) -> 't
 authorize_nouns(_, ?PROVIDERS_PATH,        ?HTTP_GET,   [{<<"auth">>, _}]) -> 'true';
 authorize_nouns(_, ?TOKENINFO_PATH,        ?HTTP_GET,   [{<<"auth">>, _}]) -> 'true';
 authorize_nouns(_, ?TOKENINFO_PATH,        ?HTTP_POST,  [{<<"auth">>, _}]) -> 'true';
-authorize_nouns(C, _, _, _) -> {'halt', cb_context:add_system_error('forbidden', C)}.
+authorize_nouns(C, _, _, _) -> {'stop', cb_context:add_system_error('forbidden', C)}.
 
 %% authorize /auth/{nouns}/{id}
 -spec authorize_nouns(cb_context:context(), path_token(), path_token(), req_verb(), req_nouns()) -> boolean().
@@ -186,18 +179,17 @@ authorize_nouns(_, ?LINKS_PATH,     _Id,           ?HTTP_DELETE, [{<<"auth">>, _
 authorize_nouns(_, ?PROVIDERS_PATH, _Id,           ?HTTP_GET,    [{<<"auth">>, _}]) -> 'true';
 authorize_nouns(C, ?PROVIDERS_PATH, _Id,           ?HTTP_POST,   [{<<"auth">>, _}]) -> cb_context:is_superduper_admin(C);
 authorize_nouns(C, ?PROVIDERS_PATH, _Id,           ?HTTP_DELETE, [{<<"auth">>, _}]) -> cb_context:is_superduper_admin(C);
-authorize_nouns(C, _, _, _, _) -> {'halt', cb_context:add_system_error('forbidden', C)}.
+authorize_nouns(C, _, _, _, _) -> {'stop', cb_context:add_system_error('forbidden', C)}.
 
 -spec authorize_action(cb_context:context(), kz_json:api_json_term()) -> boolean().
 authorize_action(C, <<"reset_signature_secret">>) -> cb_context:is_superduper_admin(C);
 authorize_action(_, <<"refresh_token">>) -> 'true';
 authorize_action(_, _) -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec authenticate(cb_context:context()) -> boolean().
 authenticate(_) -> 'false'.
 
@@ -213,21 +205,21 @@ authenticate_nouns(?TOKENINFO_PATH, ?HTTP_POST, [{<<"auth">>, _}]) -> 'true';
 authenticate_nouns(_, _, _) -> 'false'.
 
 -spec validate_resource(cb_context:context()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
--spec validate_resource(cb_context:context(), path_token(), ne_binary()) -> cb_context:context().
 validate_resource(Context) -> cb_context:set_account_db(Context, ?KZ_AUTH_DB).
+
+-spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
 validate_resource(Context, _Path) -> cb_context:set_account_db(Context, ?KZ_AUTH_DB).
+
+-spec validate_resource(cb_context:context(), path_token(), kz_term:ne_binary()) -> cb_context:context().
 validate_resource(Context, _Path, _Id) -> cb_context:set_account_db(Context, ?KZ_AUTH_DB).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% This function determines if the parameters and content are correct
+%%------------------------------------------------------------------------------
+%% @doc This function determines if the parameters and content are correct
 %% for this request
 %%
-%% Failure here returns 400
+%% Failure here returns 400.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 validate(Context) ->
     validate_action(Context, cb_context:req_value(Context, <<"action">>), cb_context:req_verb(Context)).
@@ -241,7 +233,7 @@ validate(Context, Path, Id) ->
     validate_path(Context, Path, Id, cb_context:req_verb(Context)).
 
 %% validating /auth
--spec validate_action(cb_context:context(), api_binary(), http_method()) -> cb_context:context().
+-spec validate_action(cb_context:context(), kz_term:api_binary(), http_method()) -> cb_context:context().
 validate_action(Context, <<"reset_signature_secret">>, ?HTTP_PUT) ->
     case cb_context:req_nouns(Context) of
         [{<<"auth">>, _}] -> reset_system_identity_secret(Context);
@@ -325,8 +317,11 @@ validate_path(Context, ?PROVIDERS_PATH, Id, ?HTTP_POST) ->
 validate_path(Context, ?PROVIDERS_PATH, Id, ?HTTP_DELETE) ->
     Options = [{'key', Id}],
     case kz_datamgr:get_result_keys(cb_context:account_db(Context), ?PROVIDERS_APP_VIEW, Options) of
-        [] -> Context;
-        _ -> cb_context:add_system_error(<<"apps exist for provider">>, Context)
+        {'ok', []} -> Context;
+        {'ok', _} -> cb_context:add_system_error(<<"apps exist for provider">>, Context);
+        {'error', _E} ->
+            lager:info("failed to get result keys: ~p", [_E]),
+            cb_context:add_system_error(<<"datastore error">>, Context)
     end;
 
 %% validating /auth/links/{link_id}
@@ -348,7 +343,7 @@ validate_path(Context, ?KEYS_PATH, Id, ?HTTP_PUT) ->
 validate_path(Context, ?KEYS_PATH, Id, ?HTTP_GET) ->
     get_public_key(Context, Id).
 
--spec validate_token_info(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec validate_token_info(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 validate_token_info(Context, Token) ->
     Options = [{'force_profile_update', 'true'}],
     case crossbar_auth:validate_auth_token(Token, Options) of
@@ -423,10 +418,14 @@ delete(Context, ?PROVIDERS_PATH, _Id) ->
     crossbar_doc:delete(Context).
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_authenticate(cb_context:context()) -> cb_context:context().
 maybe_authenticate(Context) ->
     case kz_auth:authenticate(cb_context:doc(Context)) of
@@ -461,7 +460,7 @@ maybe_authorize(Context) ->
 normalize_view(JObj, Acc) ->
     [kz_json:get_value(<<"value">>, JObj)|Acc].
 
--spec account_id(cb_contxt:context()) -> ne_binary().
+-spec account_id(cb_contxt:context()) -> kz_term:ne_binary().
 account_id(Context) ->
     {ok, Master} = kapps_util:get_master_account_id(),
     Source = [cb_context:req_param(Context, <<"account_id">>)
@@ -516,14 +515,14 @@ keys_summary(Context) ->
               ],
     cb_context:setters(Context, Setters).
 
--spec reset_private_key(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec reset_private_key(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 reset_private_key(Context, KeyId) ->
     case kz_auth_keys:reset_private_key(KeyId) of
         {'ok', _} -> cb_context:set_resp_status(Context, 'success');
         {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, KeyId, Context)
     end.
 
--spec get_public_key(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec get_public_key(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 get_public_key(Context, KeyId) ->
     lager:debug("trying to get public key ~s", [KeyId]),
     C1 = crossbar_doc:load(KeyId, Context, ?TYPE_CHECK_OPTION(<<"system_key">>)),
@@ -532,7 +531,7 @@ get_public_key(Context, KeyId) ->
         _ -> C1
     end.
 
--spec load_public_key(cb_context:context(), ne_binary()) -> cb_context:context().
+-spec load_public_key(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 load_public_key(Context, KeyId) ->
     case kz_datamgr:fetch_attachment(?KZ_AUTH_DB, KeyId, <<"private_key.pem">>) of
         {'ok', PemContents} ->
@@ -555,7 +554,7 @@ get_public_from_private_key(PemContents) ->
     PublicKey = kz_auth_keys:get_public_key_from_private_key(PrivateKey),
     kz_auth_keys:to_pem(PublicKey).
 
--spec set_public_key_response(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
+-spec set_public_key_response(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 set_public_key_response(Context, PublicKeyPem, <<"application/json">>) ->
     RespDoc = kz_json:from_list([{<<"public_key_pem">>, PublicKeyPem}]),
     Setters = [{fun cb_context:set_resp_status/2, 'success'}
@@ -566,18 +565,16 @@ set_public_key_response(Context, PublicKeyPem, <<"application/x-pem-file">>=CT) 
     Setters = [{fun cb_context:set_resp_status/2, 'success'}
               ,{fun cb_context:set_resp_data/2, PublicKeyPem}
               ,{fun cb_context:add_resp_headers/2
-               ,[{<<"Content-Type">>, CT}
-                ,{<<"Content-Disposition">>, <<"attachment; filename=public_key.pem">>}
-                ]
+               ,#{<<"content-type">> => CT
+                 ,<<"content-disposition">> => <<"attachment; filename=public_key.pem">>
+                 }
                }
               ],
     cb_context:setters(Context, Setters).
 
-%% @private
-%% @doc
-%% Find Mime type we should return from Accept header or payload if provided by module
+%% @doc Find Mime type we should return from Accept header or payload if provided by module
 %% (temporary, better to make generic function to use across crossbar module)
--spec find_accept_type(cb_context:context()) -> ne_binary().
+-spec find_accept_type(cb_context:context()) -> kz_term:ne_binary().
 find_accept_type(Context) ->
     Acceptable = accept_values(Context),
     find_accept_type(Context, Acceptable).
@@ -600,7 +597,7 @@ accept_values(Context) ->
     Tunneled = cb_context:req_value(Context, <<"accept">>),
     media_values(AcceptValue, Tunneled).
 
--spec media_values(api_binary(), api_binary()) -> media_values().
+-spec media_values(kz_term:api_binary(), kz_term:api_binary()) -> media_values().
 media_values('undefined', 'undefined') ->
     lager:debug("no accept headers, assuming JSON"),
     [?MEDIA_VALUE(<<"application">>, <<"json">>)];

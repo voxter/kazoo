@@ -1,46 +1,75 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
-%%% DB Link for attachments
+%%% @copyright (C) 2016-2018, 2600Hz
+%%% @doc DB Link for attachments.
+%%% @author Luis Azedo
 %%% @end
-%%% @contributors
-%%%   Luis Azedo
 %%%-----------------------------------------------------------------------------
 -module(kz_att_link).
+-behaviour(gen_attachment).
 
 -include("kz_att.hrl").
+
+%% `gen_attachment' behaviour callbacks (API)
+-export([put_attachment/6]).
+-export([fetch_attachment/4]).
 
 -define(REQUIRED_PROPS, [<<"att_dbname">>
                         ,<<"att_docid">>
                         ]).
 
-%% ====================================================================
-%% API functions
-%% ====================================================================
+%%==============================================================================
+%% `gen_attachment' behaviour callbacks (API)
+%%==============================================================================
 
--export([put_attachment/6]).
--export([fetch_attachment/4]).
-
--spec put_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), kz_data:options()) -> any().
-put_attachment(_Params, _DbName, _DocId, _AName, _Contents, Options) ->
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec put_attachment(gen_attachment:settings()
+                    ,gen_attachment:db_name()
+                    ,gen_attachment:doc_id()
+                    ,gen_attachment:att_name()
+                    ,gen_attachment:contents()
+                    ,gen_attachment:options()
+                    ) -> gen_attachment:put_response().
+put_attachment(Params, DbName, DocId, AName, Contents, Options) ->
     Props = props:filter_undefined(
               [{<<"att_dbname">>, props:get_value('att_dbname', Options)}
               ,{<<"att_docid">>, props:get_value('att_docid', Options)}
               ,{<<"att_name">>, props:get_value('att_name', Options)}
               ]),
     case ?REQUIRED_PROPS -- props:get_keys(Props) of
-        [] -> {'ok', [{'attachment', Props}]};
-        Missing -> {'error', <<"missing required : ", (kz_binary:join(Missing, <<",">>))/binary>>}
+        [] ->
+            {'ok', [{'attachment', Props}]};
+        Missing ->
+            Error = <<"missing required : ", (kz_binary:join(Missing, <<", ">>))/binary>>,
+            Routines = kz_att_error:put_routines(Params, DbName, DocId, AName, Contents,
+                                                 Options),
+            kz_att_error:new(Error, Routines)
     end.
 
+-spec fetch_attachment(gen_attachment:handler_props()
+                      ,gen_attachment:db_name()
+                      ,gen_attachment:doc_id()
+                      ,gen_attachment:att_name()
+                      ) -> gen_attachment:fetch_response().
+fetch_attachment(HandlerProps, DbName, DocId, AName) ->
+    Resp =
+        case kz_json:get_value(<<"att_name">>, HandlerProps) of
+            'undefined' -> get_att_name(HandlerProps);
+            AttName -> fetch_attachment(HandlerProps, AttName)
+        end,
+    Routines = kz_att_error:fetch_routines(HandlerProps, DbName, DocId, AName),
+    handle_fetch_attachment_resp(Resp, Routines).
 
--spec fetch_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary()) -> any().
-fetch_attachment(HandlerProps, _DbName, _DocId, _AName) ->
-    case kz_json:get_value(<<"att_name">>, HandlerProps) of
-        'undefined' -> get_att_name(HandlerProps);
-        AttName -> fetch_attachment(HandlerProps, AttName)
-    end.
+%%==============================================================================
+%% Internal functions
+%%==============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 get_att_name(HandlerProps) ->
     DbName = kz_json:get_value(<<"att_dbname">>, HandlerProps),
     DocId = kz_json:get_value(<<"att_docid">>, HandlerProps),
@@ -57,3 +86,21 @@ fetch_attachment(HandlerProps, AName) ->
     DbName = kz_json:get_value(<<"att_dbname">>, HandlerProps),
     DocId = kz_json:get_value(<<"att_docid">>, HandlerProps),
     kz_datamgr:fetch_attachment(DbName, DocId, AName).
+
+-spec handle_fetch_attachment_resp(kz_datamgr:data_error(),
+                                   kz_att_error:update_routines()) -> kz_att_error:error().
+handle_fetch_attachment_resp({'ok', _Body} = Resp, _Routines) ->
+    Resp;
+handle_fetch_attachment_resp({'error', Reason} = _E, Routines) when not is_tuple(Reason) ->
+    lager:debug("Error fetching attachment: ~p", [_E]),
+    kz_att_error:new(Reason, Routines);
+handle_fetch_attachment_resp({'error', {Code, Body}} = _E, Routines) ->
+    lager:debug("Error fetching attachment: ~p", [_E]),
+    NewRoutines = [{fun kz_att_error:set_resp_code/2, Code}
+                  ,{fun kz_att_error:set_resp_body/2, Body}
+                   | Routines
+                  ],
+    kz_att_error:new('request_error', NewRoutines);
+handle_fetch_attachment_resp(_E, Routines) ->
+    lager:debug("Error fetching attachment: ~p", [_E]),
+    kz_att_error:new('request_error', Routines).

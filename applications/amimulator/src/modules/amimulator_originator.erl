@@ -1,3 +1,8 @@
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2018-, 2600Hz
+%%% @doc
+%%% @end
+%%%-----------------------------------------------------------------------------
 -module(amimulator_originator).
 -behaviour(gen_listener).
 
@@ -16,7 +21,7 @@
 -record(state, {}).
 -type state() :: #state{}.
 
--spec start_link() -> startlink_ret().
+-spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?MODULE}
                            ,?MODULE
@@ -29,12 +34,12 @@ init([]) ->
     lager:debug("AMI: Started originator for handling AMI dials ~p", [self()]),
     {'ok', #state{}}.
 
--spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
     {'reply', {'error', 'not_implemented'}, State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+-spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({"originate", Props}, State) ->
     dial(update_props(Props)),
     {'noreply', State};
@@ -414,7 +419,7 @@ eavesdrop_req(Props) ->
 until_callback([JObj | _]) ->
     kapi_dialplan:originate_ready_v(JObj).
 
--spec send_originate_execute(kz_json:object(), ne_binary()) -> 'ok'.
+-spec send_originate_execute(kz_json:object(), kz_term:ne_binary()) -> 'ok'.
 send_originate_execute(JObj, Q) ->
     Prop = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
@@ -422,7 +427,7 @@ send_originate_execute(JObj, Q) ->
            ],
     kapi_dialplan:publish_originate_execute(kz_json:get_value(<<"Server-ID">>, JObj), Prop).
 
--spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("AMI: unhandled info"),
     {'noreply', State}.

@@ -1,31 +1,45 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz
-%%% @doc
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Behaviour for setting up an AMQP listener.
+%%% Add/remove responders for `Event-Cat'/`Event-Name' pairs. Each responder
+%%% corresponds to a module that has defined a `handle/1' function, receiving
+%%% the {@link kz_json:object()} from the AMQP request.
 %%%
-%%% Behaviour for setting up an AMQP listener.
-%%% Add/rm responders for Event-Cat/Event-Name pairs. Each responder
-%%% corresponds to a module that has defined a handle/1 function, receiving
-%%% the kz_json:object() from the AMQP request.
+%%% Options:
+%%% <dl>
+%%%   <dt>`{bindings, [{atom(), kz_term:proplist()}, ...]}'</dt>
+%%%   <dd>The type of bindings, with optional properties to pass along.</dd>
 %%%
-%%% Params :: [
-%%%   {bindings, [ {atom(), kz_proplist()}, ...]} -> the type of bindings, with optional properties to pass along
-%%%   {responders, [ {responder, [ {<<"event-category">>, <<"event-name">>}, ...]} ]
-%%%      responder is the module name to call handle_req/2 on for those category/name combos
-%%%      responder can also be {module, function}, to call module:function/2 instead of handle_req/2
-%%%      Responder can optionally define a function/3 (or handle_req/3) that will be called with the 3rd arg
-%%%      consisting of the delivery options including exchange and routing_key
-%%%   {queue_name, <<"some name">>} -> optional, if you want a named queue
-%%%   {queue_options, [{key, value}]} -> optional, if the queue requires different params
-%%%   {consume_options, [{key, value}]} -> optional, if the consumption requires special params
-%%%   {basic_qos, integer()} -> optional, if QoS is being set on this queue
-%%%   {broker | broker_tag, ne_binary()} -> optional, for binding to specific brokers
-%%%   {declare_exchanges, declare_exchanges()} -> optional, for declaring dynamic exchanges used only in this connection
-%%% ]
+%%%   <dt>`{responders, [{Responder, [{<<"event-category">>, <<"event-name">>}, ...]}]'</dt>
+%%%   <dd>`Responder' is the module name to call `handle_req/2' on for those category/name combos. `Responder' can also be `{module, function}',
+%%%       to call `module:function/2' instead of `handle_req/2'.
+%%%       `Responder' can optionally define a `function/3' (or `handle_req/3') that will be called with the 3rd argument
+%%%       consisting of the delivery options including exchange and routing key.
+%%%   </dd>
+%%%
+%%%   <dt>`{queue_name, <<"some name">>}'</dt>
+%%%   <dd>Optional, if you want a named queue.</dd>
+%%%
+%%%   <dt>`{queue_options, [{key, value}]}'</dt>
+%%%   <dd>Optional, if the queue requires different parameters.</dd>
+%%%
+%%%   <dt>`{consume_options, [{key, value}]}'</dt>
+%%%   <dd>Optional, if the consumption requires special parameters.</dd>
+%%%
+%%%   <dt>`{basic_qos, integer()}'</dt>
+%%%   <dd>Optional, if QoS is being set on this queue.</dd>
+%%%
+%%%   <dt>`{broker | broker_tag, kz_term:ne_binary()}'</dt>
+%%%   <dd>Optional, for binding to specific brokers.</dd>
+%%%
+%%%   <dt>`{declare_exchanges, declare_exchanges()}'</dt>
+%%%   <dd>Optional, for declaring dynamic exchanges used only in this connection.</dd>
+%%% </dl>
+%%%
+%%% @author James Aimonetti
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   James Aimonetti
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(gen_listener).
 -behaviour(gen_server).
 
@@ -87,7 +101,7 @@
         ,execute/2
         ]).
 
--export([federated_event/3]).
+-export([federated_event/4]).
 -export([delayed_cast/3
         ]).
 -export([distribute_event/3]).
@@ -104,30 +118,34 @@
 
 -type module_state() :: any().
 
--type federator_listener() :: {ne_binary(), pid()}.
+-type federator_listener() :: {kz_term:ne_binary(), pid()}.
 -type federator_listeners() :: [federator_listener()].
 
--record(state, {queue :: api_binary()
+-record(state, {queue :: kz_term:api_binary()
                ,is_consuming = 'false' :: boolean()
-               ,responders = [] :: listener_utils:responders() %% { {EvtCat, EvtName}, Module }
+               ,responders = [] :: listener_utils:responders() %% {{EvtCat, EvtName}, Module}
                ,bindings = [] :: bindings() %% {authentication, [{key, value},...]}
-               ,params = [] :: kz_proplist()
+               ,params = [] :: kz_term:proplist()
                ,module :: atom()
                ,module_state :: module_state()
-               ,module_timeout_ref :: api_reference() % when the client sets a timeout, gen_listener calls shouldn't negate it, only calls that pass through to the client
-               ,other_queues = [] :: [{ne_binary(), {kz_proplist(), kz_proplist()}}] %% {QueueName, {proplist(), kz_proplist()}}
+               ,module_timeout_ref :: kz_term:api_reference() % when the client sets a timeout, gen_listener calls shouldn't negate it, only calls that pass through to the client
+               ,other_queues = [] :: [{kz_term:ne_binary(), {kz_term:proplist(), kz_term:proplist()}}] %% {QueueName, {kz_term:proplist(), kz_term:proplist()}}
                ,federators = [] :: federator_listeners()
                ,waiting_federators = [] :: list()
                ,self = self() :: pid()
                ,consumer_key = kz_amqp_channel:consumer_pid()
-               ,consumer_tags = [] :: binaries()
+               ,consumer_tags = [] :: kz_term:binaries()
+               ,handle_event_mfa = 'undefined' :: mfa() | 'undefined'
+               ,auto_ack = 'false' :: boolean()
                }).
 -type state() :: #state{}.
 
+-type deliver() :: {basic_deliver(), amqp_basic()}.
+
 -type callback_datum() :: {'server', pid()} |
-                          {'queue', api_binary()} |
-                          {'other_queues', ne_binaries()}.
--type callback_data() :: kz_proplist() |
+                          {'queue', kz_term:api_binary()} |
+                          {'other_queues', kz_term:ne_binaries()}.
+-type callback_data() :: kz_term:proplist() |
                          [callback_datum()].
 
 -export_type([handle_event_return/0
@@ -137,9 +155,10 @@
              ,callback_data/0
              ]).
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
+
 -callback init(any()) -> {'ok', module_state()} |
                          {'ok', module_state(), timeout() | 'hibernate'} |
                          {'stop', any()} |
@@ -169,24 +188,32 @@
 
 -type handle_event_return() :: 'ignore' |
                                {'ignore', module_state()} |
-                               {'reply', kz_proplist()} |
-                               {'reply', kz_proplist(), module_state()}.
+                               {'reply', kz_term:proplist()} |
+                               {'reply', kz_term:proplist(), module_state()}.
 
 -callback handle_event(kz_json:object(), module_state()) -> handle_event_return().
+-callback handle_event(kz_json:object(), basic_deliver(), module_state()) -> handle_event_return().
+-callback handle_event(kz_json:object(), basic_deliver(), amqp_basic(), module_state()) -> handle_event_return().
 
 -callback terminate('normal' | 'shutdown' | {'shutdown', any()} | any(), module_state()) ->
     any().
 -callback code_change(any() | {'down', any()}, module_state(), any()) ->
     {'ok', module_state()} | {'error', any()}.
 
--spec start_link(atom(), start_params(), list()) -> startlink_ret().
+-optional_callbacks([handle_event/2, handle_event/3, handle_event/4]).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_link(atom(), start_params(), list()) -> kz_types:startlink_ret().
 start_link(Module, Params, InitArgs) when is_atom(Module),
                                           is_list(Params),
                                           is_list(InitArgs)
                                           ->
     gen_server:start_link(?SERVER, [Module, Params, InitArgs], []).
 
--spec start_link(gen_server_name() | atom(), atom() | start_params(), start_params() | list(), gen_server_options() | list()) -> startlink_ret().
+-spec start_link(kz_types:gen_server_name() | atom(), atom() | start_params(), start_params() | list(), kz_types:gen_server_options() | list()) -> kz_types:startlink_ret().
 start_link(Module, Params, InitArgs, Options) when is_atom(Module),
                                                    is_list(Params),
                                                    is_list(InitArgs),
@@ -199,7 +226,7 @@ start_link(Name, Module, Params, InitArgs) when is_atom(Module),
                                                 ->
     gen_server:start_link(Name, ?MODULE, [Module, Params, InitArgs], []).
 
--spec start_link(gen_server_name(), atom(), start_params(), list(), gen_server_options()) -> startlink_ret().
+-spec start_link(kz_types:gen_server_name(), atom(), start_params(), list(), kz_types:gen_server_options()) -> kz_types:startlink_ret().
 start_link(Name, Module, Params, InitArgs, Options) when is_atom(Module),
                                                          is_list(Params),
                                                          is_list(InitArgs),
@@ -207,39 +234,42 @@ start_link(Name, Module, Params, InitArgs, Options) when is_atom(Module),
                                                          ->
     gen_server:start_link(Name, ?MODULE, [Module, Params, InitArgs], Options).
 
--spec queue_name(server_ref()) -> ne_binary().
+-spec queue_name(kz_types:server_ref()) -> kz_term:api_ne_binary().
 queue_name(Srv) -> gen_server:call(Srv, 'queue_name').
 
--spec is_consuming(server_ref()) -> boolean().
+-spec is_consuming(kz_types:server_ref()) -> boolean().
 is_consuming(Srv) -> gen_server:call(Srv, 'is_consuming').
 
--spec responders(server_ref()) -> listener_utils:responders().
+-spec responders(kz_types:server_ref()) -> listener_utils:responders().
 responders(Srv) -> gen_server:call(Srv, 'responders').
 
--spec bindings(server_ref()) -> bindings().
+-spec bindings(kz_types:server_ref()) -> bindings().
 bindings(Srv) -> gen_server:call(Srv, 'bindings').
 
--spec routing_key_used(basic_deliver()) -> ne_binary().
+-spec routing_key_used(basic_deliver()) -> kz_term:ne_binary().
 routing_key_used(#'basic.deliver'{routing_key=RoutingKey}) ->
     kz_term:to_binary(RoutingKey).
 
--spec ack(server_ref(), basic_deliver()) -> 'ok'.
+-spec ack(kz_types:server_ref(), basic_deliver()) -> 'ok'.
 ack(Srv, Delivery) -> gen_server:cast(Srv, {'ack', Delivery}).
 
--spec nack(server_ref(), basic_deliver()) -> 'ok'.
+-spec nack(kz_types:server_ref(), basic_deliver()) -> 'ok'.
 nack(Srv, Delivery) -> gen_server:cast(Srv, {'nack', Delivery}).
 
-%% API functions that mirror gen_server:call,cast,reply
--spec call(server_ref(), any()) -> any().
+%%------------------------------------------------------------------------------
+%% @doc API functions that mirror `gen_server:call,cast,reply'.
+%% @end
+%%------------------------------------------------------------------------------
+-spec call(kz_types:server_ref(), any()) -> any().
 call(Name, Request) -> gen_server:call(Name, {'$client_call', Request}).
 
--spec call(server_ref(), any(), kz_timeout()) -> any().
+-spec call(kz_types:server_ref(), any(), timeout()) -> any().
 call(Name, Request, Timeout) -> gen_server:call(Name, {'$client_call', Request}, Timeout).
 
--spec cast(server_ref(), any()) -> 'ok'.
+-spec cast(kz_types:server_ref(), any()) -> 'ok'.
 cast(Name, Request) -> gen_server:cast(Name, {'$client_cast', Request}).
 
--spec delayed_cast(server_ref(), any(), pos_integer()) -> 'ok'.
+-spec delayed_cast(kz_types:server_ref(), any(), pos_integer()) -> 'ok'.
 delayed_cast(Name, Request, Wait) when is_integer(Wait), Wait > 0 ->
     _P = kz_util:spawn(
            fun() ->
@@ -249,16 +279,16 @@ delayed_cast(Name, Request, Wait) when is_integer(Wait), Wait > 0 ->
            end),
     'ok'.
 
--spec reply(pid_ref(), any()) -> no_return().
+-spec reply(kz_term:pid_ref(), any()) -> no_return().
 reply(From, Msg) -> gen_server:reply(From, Msg).
 
 -type server_name() :: {'global' | 'local', atom()} | pid().
 
 -spec enter_loop(atom(), list(), any()) -> no_return().
--spec enter_loop(atom(), list(), any(), kz_timeout() | server_name()) -> no_return().
--spec enter_loop(atom(), list(), any(), server_name(), kz_timeout()) -> no_return().
 enter_loop(Module, Options, ModuleState) ->
     enter_loop(Module, Options, ModuleState, self(), 'infinity').
+
+-spec enter_loop(atom(), list(), any(), timeout() | server_name()) -> no_return().
 enter_loop(Module, Options, ModuleState, {Scope, _Name}=ServerName)
   when Scope =:= 'local'
        orelse Scope =:= 'global' ->
@@ -266,27 +296,32 @@ enter_loop(Module, Options, ModuleState, {Scope, _Name}=ServerName)
 enter_loop(Module, Option, ModuleState, Timeout) ->
     enter_loop(Module, Option, ModuleState, self(), Timeout).
 
+-spec enter_loop(atom(), list(), any(), server_name(), timeout()) -> no_return().
 enter_loop(Module, Options, ModuleState, ServerName, Timeout) ->
     {'ok', MyState} = init_state([Module, Options, ModuleState]),
     gen_server:enter_loop(?MODULE, [], MyState, ServerName, Timeout).
 
--spec add_responder(server_ref(), responder_callback(), responder_callback_mapping() | responder_callback_mappings()) -> 'ok'.
-add_responder(Srv, Responder, Key) when not is_list(Key) ->
+-spec add_responder(kz_types:server_ref(), responder_callback(), responder_callback_mapping() | responder_callback_mappings()) -> 'ok'.
+add_responder(Srv, Responder, {_,_}=Key) ->
     add_responder(Srv, Responder, [Key]);
 add_responder(Srv, Responder, [{_,_}|_] = Keys) ->
     gen_server:cast(Srv, {'add_responder', Responder, Keys}).
 
--spec rm_responder(server_ref(), responder_callback()) -> 'ok'.
-%% empty list removes all
+%%------------------------------------------------------------------------------
+%% @doc Removes responder from queue.
+%% Empty list removes all.
+%% @end
+%%------------------------------------------------------------------------------
+-spec rm_responder(kz_types:server_ref(), responder_callback()) -> 'ok'.
 rm_responder(Srv, Responder) -> rm_responder(Srv, Responder, []).
 
--spec rm_responder(server_ref(), responder_callback(), responder_callback_mappings()) -> 'ok'.
+-spec rm_responder(kz_types:server_ref(), responder_callback(), responder_callback_mappings()) -> 'ok'.
 rm_responder(Srv, Responder, {_,_}=Key) ->
     rm_responder(Srv, Responder, [Key]);
 rm_responder(Srv, Responder, Keys) ->
     gen_server:cast(Srv, {'rm_responder', Responder, Keys}).
 
--spec add_binding(server_ref(), binding() | ne_binary() | atom()) -> 'ok'.
+-spec add_binding(kz_types:server_ref(), binding() | kz_term:ne_binary() | atom()) -> 'ok'.
 add_binding(Srv, {Binding, Props}) when is_list(Props)
                                         ,(is_atom(Binding)
                                           orelse is_binary(Binding)
@@ -296,12 +331,12 @@ add_binding(Srv, Binding) when is_binary(Binding)
                                orelse is_atom(Binding) ->
     gen_server:cast(Srv, {'add_binding', kz_term:to_binary(Binding), []}).
 
--spec add_binding(server_ref(), ne_binary() | atom(), kz_proplist()) -> 'ok'.
+-spec add_binding(kz_types:server_ref(), kz_term:ne_binary() | atom(), kz_term:proplist()) -> 'ok'.
 add_binding(Srv, Binding, Props) when is_binary(Binding)
                                       orelse is_atom(Binding) ->
     gen_server:cast(Srv, {'add_binding', kz_term:to_binary(Binding), Props}).
 
--spec b_add_binding(server_ref(), binding() | ne_binary() | atom()) -> 'ok'.
+-spec b_add_binding(kz_types:server_ref(), binding() | kz_term:ne_binary() | atom()) -> 'ok'.
 b_add_binding(Srv, {Binding, Props}) when is_list(Props)
                                           ,(is_atom(Binding)
                                             orelse is_binary(Binding)
@@ -311,56 +346,64 @@ b_add_binding(Srv, Binding) when is_binary(Binding)
                                  orelse is_atom(Binding) ->
     gen_server:call(Srv, {'add_binding', kz_term:to_binary(Binding), []}).
 
--spec b_add_binding(server_ref(), ne_binary() | atom(), kz_proplist()) -> 'ok'.
+-spec b_add_binding(kz_types:server_ref(), kz_term:ne_binary() | atom(), kz_term:proplist()) -> 'ok'.
 b_add_binding(Srv, Binding, Props) when is_binary(Binding)
                                         orelse is_atom(Binding) ->
     gen_server:call(Srv, {'add_binding', kz_term:to_binary(Binding), Props}).
 
-%% It is expected that responders have been set up already, prior to binding the new queue
--spec add_queue(server_ref(), binary(), kz_proplist(), binding() | bindings()) ->
-                       {'ok', ne_binary()} |
+%%------------------------------------------------------------------------------
+%% @doc Add responder to a queue.
+%% It is expected that responders have been set up already, prior to
+%% binding the new queue.
+%% @end
+%%------------------------------------------------------------------------------
+-spec add_queue(kz_types:server_ref(), binary(), kz_term:proplist(), binding() | bindings()) ->
+                       {'ok', kz_term:ne_binary()} |
                        {'error', any()}.
 add_queue(Srv, QueueName, QueueProps, {_Type, _Props}=Binding) ->
     add_queue(Srv, QueueName, QueueProps, [Binding]);
 add_queue(Srv, QueueName, QueueProps, [{_,_}|_]=Bindings) ->
     gen_server:call(Srv, {'add_queue', QueueName, QueueProps, Bindings}).
 
--spec rm_queue(server_ref(), ne_binary()) -> 'ok'.
+-spec rm_queue(kz_types:server_ref(), kz_term:ne_binary()) -> 'ok'.
 rm_queue(Srv, ?NE_BINARY = QueueName) ->
     gen_server:cast(Srv, {'rm_queue', QueueName}).
 
--spec other_queues(server_ref()) -> ne_binaries().
+-spec other_queues(kz_types:server_ref()) -> kz_term:ne_binaries().
 other_queues(Srv) -> gen_server:call(Srv, 'other_queues').
 
--spec rm_binding(server_ref(), binding()) -> 'ok'.
+-spec rm_binding(kz_types:server_ref(), binding()) -> 'ok'.
 rm_binding(Srv, {Binding, Props}) ->
     rm_binding(Srv, Binding, Props).
 
--spec rm_binding(server_ref(), ne_binary() | atom(), kz_proplist()) -> 'ok'.
+-spec rm_binding(kz_types:server_ref(), kz_term:ne_binary() | atom(), kz_term:proplist()) -> 'ok'.
 rm_binding(Srv, Binding, Props) ->
     gen_server:cast(Srv, {'rm_binding', kz_term:to_binary(Binding), Props}).
 
--spec federated_event(server_ref(), kz_json:object(), basic_deliver()) -> 'ok'.
-federated_event(Srv, JObj, BasicDeliver) ->
-    gen_server:cast(Srv, {'federated_event', JObj, BasicDeliver}).
+-spec federated_event(kz_types:server_ref(), kz_json:object(), basic_deliver(), amqp_basic()) -> 'ok'.
+federated_event(Srv, JObj, BasicDeliver, BasicData) ->
+    gen_server:cast(Srv, {'federated_event', JObj, BasicDeliver, BasicData}).
 
--spec execute(server_ref(), module(), atom(), [any()]) -> 'ok'.
+-spec execute(kz_types:server_ref(), module(), atom(), [any()]) -> 'ok'.
 execute(Srv, Module, Function, Args) ->
     gen_server:cast(Srv, {'$execute', Module, Function, Args}).
 
--spec execute(server_ref(), atom(), [any()]) -> 'ok'.
+-spec execute(kz_types:server_ref(), atom(), [any()]) -> 'ok'.
 execute(Srv, Function, Args) ->
     gen_server:cast(Srv, {'$execute', Function, Args}).
 
--spec execute(server_ref(), function()) -> 'ok'.
+-spec execute(kz_types:server_ref(), function()) -> 'ok'.
 execute(Srv, Function) when is_function(Function) ->
     gen_server:cast(Srv, {'$execute', Function}).
 
-%%%===================================================================
+%%%=============================================================================
 %%% gen_server callbacks
-%%%===================================================================
+%%%=============================================================================
 
-%% Takes an existing process and turns it into a gen_listener
+%%------------------------------------------------------------------------------
+%% @doc Takes an existing process and turns it into a `gen_listener'.
+%% @end
+%%------------------------------------------------------------------------------
 -spec init_state(list()) -> {'ok', state()} |
                             {'stop', any()} |
                             'ignore'.
@@ -370,7 +413,7 @@ init_state([Module, Params, ModuleState]) ->
     lager:debug("continuing as a gen_listener proc : ~s", [Module]),
     init(Module, Params, ModuleState, 'undefined').
 
--spec init([atom() | kz_proplist(),...]) ->
+-spec init([atom() | kz_term:proplist(),...]) ->
                   {'ok', state()} |
                   {'stop', any()} |
                   'ignore'.
@@ -388,7 +431,7 @@ init([Module, Params, InitArgs]) ->
         'ignore' -> 'ignore'
     end.
 
--spec init(atom(), kz_proplist(), module_state(), api_reference()) ->
+-spec init(atom(), kz_term:proplist(), module_state(), kz_term:api_reference()) ->
                   {'ok', state()}.
 init(Module, Params, ModuleState, TimeoutRef) ->
     _ = channel_requisition(Params),
@@ -399,23 +442,15 @@ init(Module, Params, ModuleState, TimeoutRef) ->
                  ,module_state=ModuleState
                  ,module_timeout_ref=TimeoutRef
                  ,params=Params
+                 ,handle_event_mfa = listener_utils:responder_mfa(Module, 'handle_event')
+                 ,auto_ack = props:is_true('auto_ack', Params, 'false')
                  }}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {'reply', Reply, State} |
-%%                                   {'reply', Reply, State, Timeout} |
-%%                                   {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, Reply, State} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling call messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_call(any(), pid_ref(), state()) -> handle_call_return().
+%%------------------------------------------------------------------------------
+-spec handle_call(any(), kz_term:pid_ref(), state()) -> handle_call_return().
 handle_call({'add_queue', QueueName, QueueProps, Bindings}, _From, State) ->
     {Q, S} = add_other_queue(QueueName, QueueProps, Bindings, State),
     {'reply', {'ok', Q}, S};
@@ -439,16 +474,10 @@ handle_call({'add_binding', _Binding, _Props}=AddBinding, _From, State) ->
 handle_call(Request, From, State) ->
     handle_module_call(Request, From, State).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {'noreply', State} |
-%%                                  {'noreply', State, Timeout} |
-%%                                  {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling cast messages.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> handle_cast_return().
 handle_cast({'ack', Delivery}, State) ->
     _A = (catch amqp_util:basic_ack(Delivery)),
@@ -473,7 +502,8 @@ handle_cast({'rm_responder', Responder, Keys}, #state{responders=Responders}=Sta
     ,State#state{responders=listener_utils:rm_responder(Responders, Responder, Keys)}
     };
 handle_cast({'add_binding', _, _}=AddBinding, #state{is_consuming='false'}=State) ->
-    Time = ?BIND_WAIT + (crypto:rand_uniform(100, 200)), % wait 100 + [100,200) ms before replaying the binding request
+    %% wait 100 + [100,200) ms before replaying the binding request
+    Time = ?BIND_WAIT + 100 + rand:uniform(100),
     lager:debug("not consuming yet, put binding to end of message queue after ~b ms", [Time]),
     delayed_cast(self(), AddBinding, Time),
     {'noreply', State};
@@ -481,16 +511,18 @@ handle_cast({'add_binding', Binding, Props}, State) ->
     {'noreply', handle_add_binding(Binding, Props, State)};
 handle_cast({'rm_binding', Binding, Props}, State) ->
     {'noreply', handle_rm_binding(Binding, Props, State)};
-handle_cast({'kz_amqp_assignment', {'new_channel', 'true'}}, State) ->
+handle_cast({'kz_amqp_assignment', {'new_channel', 'true', Channel}}, State) ->
     lager:debug("channel reconnecting"),
+    _ = kz_amqp_channel:consumer_channel(Channel),
     {'noreply', State};
-handle_cast({'kz_amqp_assignment', {'new_channel', 'false'}}, State) ->
+handle_cast({'kz_amqp_assignment', {'new_channel', 'false', Channel}}, State) ->
+    _ = kz_amqp_channel:consumer_channel(Channel),
     {'noreply', handle_amqp_channel_available(State)};
-handle_cast({'federated_event', JObj, BasicDeliver}, #state{params=Params}=State) ->
+handle_cast({'federated_event', JObj, BasicDeliver, BasicData}, #state{params=Params}=State) ->
     case props:is_true('spawn_handle_event', Params, 'false') of
-        'true'  -> kz_util:spawn(fun distribute_event/3, [JObj, BasicDeliver, State]),
+        'true'  -> kz_util:spawn(fun distribute_event/3, [JObj, {BasicDeliver, BasicData}, State]),
                    {'noreply', State};
-        'false' -> {'noreply', distribute_event(JObj, BasicDeliver, State)}
+        'false' -> {'noreply', distribute_event(JObj, {BasicDeliver, BasicData}, State)}
     end;
 handle_cast({'$execute', Module, Function, Args}
            ,#state{federators=[]}=State) ->
@@ -554,9 +586,11 @@ handle_cast({'resume_consumers'}, #state{is_consuming='false'
                                         ,params=Params
                                         ,queue=Q
                                         ,other_queues=OtherQueues
+                                        ,auto_ack=AutoAck
                                         }=State) ->
-    start_consumer(Q, props:get_value('consume_options', Params)),
-    _ = [start_consumer(Q1, props:get_value('consume_options', P))
+    ConsumeOptions = props:get_value('consume_options', Params, []),
+    start_consumer(Q, maybe_configure_auto_ack(ConsumeOptions, AutoAck)),
+    _ = [start_consumer(Q1, maybe_configure_auto_ack(props:get_value('consume_options', P, []), AutoAck))
          || {Q1, {_, P}} <- OtherQueues
         ],
     {'noreply', State};
@@ -585,32 +619,30 @@ handle_cast({'federator_is_consuming', Broker, 'true'}, State) ->
 handle_cast(Message, State) ->
     handle_module_cast(Message, State).
 
--spec maybe_remove_binding(binding(), binding_module(), kz_proplist(), ne_binary()) -> boolean().
+-spec maybe_remove_binding(binding(), binding_module(), kz_term:proplist(), kz_term:ne_binary()) -> boolean().
 maybe_remove_binding({B, P}, B, P, Q) ->
     lager:debug("removing ~s: ~p", [B, P]),
     remove_binding(B, P, Q),
     'false';
 maybe_remove_binding(_BP, _B, _P, _Q) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {'noreply', State} |
-%%                                   {'noreply', State, Timeout} |
-%%                                   {'stop', Reason, State}
+%%------------------------------------------------------------------------------
+%% @doc Handling all non call/cast messages.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_info(any(), state()) -> handle_info_ret().
-handle_info({#'basic.deliver'{}=BD, #amqp_msg{props=#'P_basic'{content_type=CT}
+%%------------------------------------------------------------------------------
+-spec handle_info(any(), state()) -> kz_types:handle_info_ret().
+handle_info({#'basic.deliver'{}=BD, #amqp_msg{props=#'P_basic'{content_type=CT}=Basic
                                              ,payload=Payload
                                              }}
-           ,#state{params=Params}=State) ->
+           ,#state{params=Params, auto_ack=AutoAck}=State) ->
+    _ = case AutoAck of
+            'true' -> (catch amqp_util:basic_ack(BD));
+            'false' -> 'ok'
+        end,
     case props:is_true('spawn_handle_event', Params, 'false') of
-        'true'  -> kz_util:spawn(fun handle_event/4, [Payload, CT, BD, State]),
+        'true'  -> kz_util:spawn(fun handle_event/4, [Payload, CT, {BD, Basic}, State]),
                    {'noreply', State};
-        'false' -> {'noreply', handle_event(Payload, CT, BD, State)}
+        'false' -> {'noreply', handle_event(Payload, CT, {BD, Basic}, State)}
     end;
 handle_info({#'basic.return'{}=BR, #amqp_msg{props=#'P_basic'{content_type=CT}
                                             ,payload=Payload
@@ -665,35 +697,27 @@ handle_info(?CALLBACK_TIMEOUT_MSG, State) ->
 handle_info(Message, State) ->
     handle_callback_info(Message, State).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles the AMQP messages prior to the spawning a handler.
-%% Allows listeners to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {'reply', Options} | ignore
+%%------------------------------------------------------------------------------
+%% @doc Handles the AMQP messages prior to the spawning a handler.
+%% Allows listeners to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_event(ne_binary(), ne_binary(), basic_deliver(), state()) ->  state().
-handle_event(Payload, <<"application/json">>, BasicDeliver, State) ->
+%%------------------------------------------------------------------------------
+-spec handle_event(kz_term:ne_binary(), kz_term:ne_binary(), deliver(), state()) ->  state().
+handle_event(Payload, <<"application/json">>, Deliver, State) ->
     JObj = kz_json:decode(Payload),
     _ = kz_util:put_callid(JObj),
-    distribute_event(JObj, BasicDeliver, State);
-handle_event(Payload, <<"application/erlang">>, BasicDeliver, State) ->
+    distribute_event(JObj, Deliver, State);
+handle_event(Payload, <<"application/erlang">>, Deliver, State) ->
     JObj = binary_to_term(Payload),
     _ = kz_util:put_callid(JObj),
-    distribute_event(JObj, BasicDeliver, State).
+    distribute_event(JObj, Deliver, State).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles the AMQP messages prior to the spawning a handler.
-%% Allows listeners to pass options to handlers
-%%
-%% @spec handle_event(JObj, State) -> {'reply', Options} | ignore
+%%------------------------------------------------------------------------------
+%% @doc Handles the AMQP messages prior to the spawning a handler.
+%% Allows listeners to pass options to handlers.
 %% @end
-%%--------------------------------------------------------------------
--spec handle_return(ne_binary(), ne_binary(), #'basic.return'{}, state()) ->  handle_cast_return().
+%%------------------------------------------------------------------------------
+-spec handle_return(kz_term:ne_binary(), kz_term:ne_binary(), #'basic.return'{}, state()) ->  handle_cast_return().
 handle_return(Payload, <<"application/json">>, BR, State) ->
     JObj = kz_json:decode(Payload),
     _ = kz_util:put_callid(JObj),
@@ -725,39 +749,38 @@ handle_confirm(Confirm, State) ->
     Msg = {?MODULE, {'confirm', Confirm}},
     handle_module_cast(Msg, State).
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
-%%
-%%
-%% @spec terminate(Reason, State) -> void()
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(Reason, #state{module=Module
                         ,module_state=ModuleState
                         ,federators=Fs
+                        ,consumer_tags=Tags
                         }) ->
+    _ = (catch(lists:foreach(fun amqp_util:basic_cancel/1, Tags))),
     _ = (catch Module:terminate(Reason, ModuleState)),
     _ = (catch kz_amqp_channel:release()),
     _ = [listener_federator:stop(F) || {_Broker, F} <- Fs],
     lager:debug("~s terminated cleanly, going down", [Module]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {'ok', NewState}
+%%------------------------------------------------------------------------------
+%% @doc Convert process state when code is changed.
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVersion, State, _Extra) ->
     {'ok', State}.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec handle_callback_info(any(), state()) -> handle_info_return().
 handle_callback_info(Message, #state{module=Module
                                     ,module_state=ModuleState
@@ -783,7 +806,7 @@ handle_callback_info(Message, #state{module=Module
             {'stop', R, State}
     end.
 
--spec format_status('normal' | 'terminate', [kz_proplist() | state()]) -> any().
+-spec format_status('normal' | 'terminate', [kz_term:proplist() | state()]) -> any().
 format_status(_Opt, [_PDict, #state{module=Module
                                    ,module_state=ModuleState
                                    }=State]) ->
@@ -797,98 +820,133 @@ format_status(_Opt, [_PDict, #state{module=Module
     end.
 
 
--spec distribute_event(kz_json:object(), basic_deliver(), state()) -> state().
-distribute_event(JObj, BasicDeliver, State) ->
-    case callback_handle_event(JObj, BasicDeliver, State) of
+-spec distribute_event(kz_json:object(), deliver(), state()) -> state().
+distribute_event(JObj, Deliver, State) ->
+    case callback_handle_event(JObj, Deliver, State) of
         'ignore' -> State;
         {'ignore', ModuleState} -> State#state{module_state=ModuleState};
-        {CallbackData, ModuleState} -> distribute_event(CallbackData, JObj, BasicDeliver, State#state{module_state=ModuleState});
-        CallbackData -> distribute_event(CallbackData, JObj, BasicDeliver, State)
+        {CallbackData, ModuleState} -> distribute_event(CallbackData, JObj, Deliver, State#state{module_state=ModuleState});
+        CallbackData -> distribute_event(CallbackData, JObj, Deliver, State)
     end.
 
--spec distribute_event(callback_data(), kz_json:object(), basic_deliver(), state()) -> state().
-distribute_event(CallbackData, JObj, BasicDeliver, #state{responders=Responders
-                                                         ,consumer_key=ConsumerKey
-                                                         }=State) ->
+-spec distribute_event(callback_data(), kz_json:object(), deliver(), state()) -> state().
+distribute_event(CallbackData, JObj, Deliver, #state{responders=Responders
+                                                    ,consumer_key=ConsumerKey
+                                                    }=State) ->
     Key = kz_util:get_event_type(JObj),
-    _ = [kz_util:spawn(fun client_handle_event/5, [JObj
+    Channel = kz_amqp_channel:consumer_channel(),
+    _ = [kz_util:spawn(fun client_handle_event/6, [JObj
+                                                  ,Channel
                                                   ,ConsumerKey
                                                   ,Callback
                                                   ,CallbackData
-                                                  ,BasicDeliver
+                                                  ,Deliver
                                                   ])
          || {Evt, Callback} <- Responders,
             maybe_event_matches_key(Key, Evt)
         ],
     State.
 
--spec client_handle_event(kz_json:object(), kz_amqp_channel:consumer_pid(), responder_callback(), callback_data(), basic_deliver()) -> any().
-client_handle_event(JObj, ConsumerKey, Callback, CallbackData, BasicDeliver) ->
+-spec client_handle_event(kz_json:object(), kz_amqp_channel:consumer_channel(), kz_amqp_channel:consumer_pid(), responder_mfa(), callback_data(), deliver()) -> any().
+client_handle_event(JObj, 'undefined', ConsumerKey, Callback, CallbackData, Deliver) ->
     _ = kz_util:put_callid(JObj),
     _ = kz_amqp_channel:consumer_pid(ConsumerKey),
-    client_handle_event(JObj, Callback, CallbackData, BasicDeliver).
+    client_handle_event(JObj, Callback, CallbackData, Deliver);
+client_handle_event(JObj, Channel, ConsumerKey, Callback, CallbackData, Deliver) ->
+    _ = kz_util:put_callid(JObj),
+    _ = kz_amqp_channel:consumer_pid(ConsumerKey),
+    _ = is_process_alive(Channel)
+        andalso kz_amqp_channel:consumer_channel(Channel),
+    client_handle_event(JObj, Callback, CallbackData, Deliver).
 
--spec client_handle_event(kz_json:object(), responder_callback(), callback_data(), basic_deliver()) -> any().
-client_handle_event(JObj, Fun, CallbackData, BasicDeliver)
-  when is_function(Fun, 3) -> Fun(JObj, CallbackData, BasicDeliver);
-client_handle_event(JObj, Fun, CallbackData, _BasicDeliver)
-  when is_function(Fun, 2) -> Fun(JObj, CallbackData);
-client_handle_event(JObj, {Module, Fun}, CallbackData, BasicDeliver) ->
-    case erlang:function_exported(Module, Fun, 3) of
-        'true' -> Module:Fun(JObj, CallbackData, BasicDeliver);
-        'false' -> Module:Fun(JObj, CallbackData)
-    end.
+-spec client_handle_event(kz_json:object(), responder_mfa(), callback_data(), deliver()) -> any().
+client_handle_event(JObj, {Fun, 4}, CallbackData, {BasicDeliver, Basic}) ->
+    Fun(JObj, CallbackData, BasicDeliver, Basic);
+client_handle_event(JObj, {Fun, 3}, CallbackData, {BasicDeliver, _Basic}) ->
+    Fun(JObj, CallbackData, BasicDeliver);
+client_handle_event(JObj, {Fun, 2}, CallbackData, _Deliver) ->
+    Fun(JObj, CallbackData);
+client_handle_event(JObj, {Module, Fun, 4}, CallbackData, {BasicDeliver, Basic}) ->
+    Module:Fun(JObj, CallbackData, BasicDeliver, Basic);
+client_handle_event(JObj, {Module, Fun, 3}, CallbackData, {BasicDeliver, _Basic}) ->
+    Module:Fun(JObj, CallbackData, BasicDeliver);
+client_handle_event(JObj, {Module, Fun, 2}, CallbackData, _Deliver) ->
+    Module:Fun(JObj, CallbackData).
 
--spec callback_handle_event(kz_json:object(), basic_deliver(), state()) ->
+-spec callback_handle_event(kz_json:object(), deliver(), state()) ->
                                    'ignore' |
                                    {'ignore', module_state()} |
                                    callback_data() |
                                    {callback_data(), module_state()}.
-callback_handle_event(JObj
-                     ,BasicDeliver
-                     ,#state{module=Module
-                            ,module_state=ModuleState
+callback_handle_event(_JObj
+                     ,{BasicDeliver, Basic}
+                     ,#state{module_state=ModuleState
                             ,queue=Queue
                             ,other_queues=OtherQueues
                             ,self=Self
+                            ,handle_event_mfa='undefined'
                             }
                      ) ->
-    case callback_handle_event(JObj, BasicDeliver, Module, ModuleState) of
+    [{'server', Self}
+    ,{'queue', Queue}
+    ,{'basic', Basic}
+    ,{'deliver', BasicDeliver}
+    ,{'other_queues', props:get_keys(OtherQueues)}
+    ,{'state', ModuleState}
+    ];
+
+callback_handle_event(JObj
+                     ,{BasicDeliver, Basic}=Deliver
+                     ,#state{module_state=ModuleState
+                            ,queue=Queue
+                            ,other_queues=OtherQueues
+                            ,self=Self
+                            ,handle_event_mfa=MFA
+                            }
+                     ) ->
+    case callback_handle_event(JObj, Deliver, MFA, ModuleState) of
         'ignore' -> 'ignore';
         {'ignore', _NewModuleState} = Reply -> Reply;
         {'reply', Props} when is_list(Props) ->
             [{'server', Self}
             ,{'queue', Queue}
+            ,{'basic', Basic}
+            ,{'deliver', BasicDeliver}
             ,{'other_queues', props:get_keys(OtherQueues)}
              | Props
             ];
         {'reply', Props, NewModuleState} when is_list(Props) ->
             {[{'server', Self}
              ,{'queue', Queue}
+             ,{'basic', Basic}
+             ,{'deliver', BasicDeliver}
              ,{'other_queues', props:get_keys(OtherQueues)}
               | Props
              ]
             ,NewModuleState
             };
         {'EXIT', Why} ->
-            lager:error("CRASH in handle_event: ~p", [Why]),
+            lager:error("CRASH in handle_event ~p", [Why]),
             [{'server', Self}
             ,{'queue', Queue}
+            ,{'basic', Basic}
+            ,{'deliver', BasicDeliver}
             ,{'other_queues', props:get_keys(OtherQueues)}
             ,{'state', ModuleState}
             ]
     end.
 
--spec callback_handle_event(kz_json:object(), basic_deliver(), atom(), module_state()) ->
+-spec callback_handle_event(kz_json:object(), deliver(), mfa(), module_state()) ->
                                    handle_event_return() |
                                    {'EXIT', any()}.
-callback_handle_event(JObj, BasicDeliver, Module, ModuleState) ->
-    case erlang:function_exported(Module, 'handle_event', 3) of
-        'true' ->
-            catch Module:handle_event(JObj, BasicDeliver, ModuleState);
-        'false' ->
-            catch Module:handle_event(JObj, ModuleState)
-    end.
+callback_handle_event(JObj, _, {Module, Fun, 2}, ModuleState) ->
+    catch Module:Fun(JObj, ModuleState);
+callback_handle_event(JObj, {BasicDeliver, _}, {Module, Fun, 3}, ModuleState) ->
+    catch Module:Fun(JObj, BasicDeliver, ModuleState);
+callback_handle_event(JObj, {BasicDeliver, Basic}, {Module, Fun, 4}, ModuleState) ->
+    catch Module:Fun(JObj, BasicDeliver, Basic, ModuleState);
+callback_handle_event(_, _, _, _) ->
+    {'EXIT', 'not_exported'}.
 
 %% allow wildcard (<<"*">>) in the Key to match either (or both) Category and Name
 -spec maybe_event_matches_key(responder_callback_mapping(), responder_callback_mapping()) -> boolean().
@@ -898,17 +956,19 @@ maybe_event_matches_key({_, Name}, {<<"*">>, Name}) -> 'true';
 maybe_event_matches_key({Cat, _}, {Cat, <<"*">>}) -> 'true';
 maybe_event_matches_key(_A, _B) -> 'false'.
 
--spec start_amqp(kz_proplist()) ->
+-spec start_amqp(kz_term:proplist(), boolean()) ->
                         {'ok', binary()} |
                         {'error', _}.
-start_amqp(Props) ->
+start_amqp(Props, AutoAck) ->
     QueueProps = props:get_value('queue_options', Props, []),
     QueueName = props:get_value('queue_name', Props, <<>>),
+    ConsumeOptions = props:get_value('consume_options', Props, []),
+
     case amqp_util:new_queue(QueueName, QueueProps) of
         {'error', _}=E -> E;
         Q ->
             set_qos(props:get_value('basic_qos', Props)),
-            'ok' = start_consumer(Q, props:get_value('consume_options', Props)),
+            'ok' = start_consumer(Q, maybe_configure_auto_ack(ConsumeOptions, AutoAck)),
             lager:debug("queue started: ~s", [Q]),
             {'ok', Q}
     end.
@@ -917,11 +977,11 @@ start_amqp(Props) ->
 set_qos('undefined') -> 'ok';
 set_qos(N) when is_integer(N), N >= 0 -> amqp_util:basic_qos(N).
 
--spec start_consumer(ne_binary(), kz_proplist()) -> 'ok'.
+-spec start_consumer(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 start_consumer(Q, 'undefined') -> amqp_util:basic_consume(Q, []);
 start_consumer(Q, ConsumeProps) -> amqp_util:basic_consume(Q, ConsumeProps).
 
--spec remove_binding(binding_module(), kz_proplist(), api_binary()) -> 'ok'.
+-spec remove_binding(binding_module(), kz_term:proplist(), kz_term:api_binary()) -> 'ok'.
 remove_binding(Binding, Props, Q) ->
     Wapi = list_to_binary([<<"kapi_">>, kz_term:to_binary(Binding)]),
     lager:debug("trying to remove bindings with ~s:unbind_q(~s, ~p)", [Wapi, Q, Props]),
@@ -931,7 +991,7 @@ remove_binding(Binding, Props, Q) ->
             erlang:error({'api_module_undefined', Wapi})
     end.
 
--spec create_binding(ne_binary(), kz_proplist(), ne_binary()) -> any().
+-spec create_binding(kz_term:ne_binary(), kz_term:proplist(), kz_term:ne_binary()) -> any().
 create_binding(Binding, Props, Q) when not is_binary(Binding) ->
     create_binding(kz_term:to_binary(Binding), Props, Q);
 create_binding(Binding, Props, Q) ->
@@ -942,11 +1002,11 @@ create_binding(Binding, Props, Q) ->
             erlang:error({'api_module_undefined', Wapi})
     end.
 
--spec stop_timer(api_reference()) -> non_neg_integer() | 'false'.
+-spec stop_timer(kz_term:api_reference()) -> non_neg_integer() | 'false'.
 stop_timer('undefined') -> 'false';
 stop_timer(Ref) when is_reference(Ref) -> erlang:cancel_timer(Ref).
 
--spec start_timer(kz_timeout()) -> api_reference().
+-spec start_timer(timeout()) -> kz_term:api_reference().
 start_timer(0) ->
     self() ! ?CALLBACK_TIMEOUT_MSG,
     'undefined';
@@ -955,15 +1015,15 @@ start_timer(Timeout) when is_integer(Timeout)
     erlang:send_after(Timeout, self(), ?CALLBACK_TIMEOUT_MSG);
 start_timer(_) -> 'undefined'.
 
--spec add_other_queue(binary(), kz_proplist(), kz_proplist(), state()) -> {ne_binary(), state()}.
-add_other_queue(<<>>, QueueProps, Bindings, #state{other_queues=OtherQueues}=State) ->
-    {'ok', Q} = start_amqp(QueueProps),
+-spec add_other_queue(binary(), kz_term:proplist(), kz_term:proplist(), state()) -> {kz_term:ne_binary(), state()}.
+add_other_queue(<<>>, QueueProps, Bindings, #state{other_queues=OtherQueues, auto_ack=AutoAck}=State) ->
+    {'ok', Q} = start_amqp(QueueProps, AutoAck),
     gen_server:cast(self(), {?MODULE, {'created_queue', Q}}),
 
     _ = [create_binding(Type, BindProps, Q) || {Type, BindProps} <- Bindings],
     {Q, State#state{other_queues=[{Q, {Bindings, QueueProps}}|OtherQueues]}};
-add_other_queue(QueueName, QueueProps, Bindings, #state{other_queues=OtherQueues}=State) ->
-    {'ok', Q} = start_amqp([{'queue_name', QueueName} | QueueProps]),
+add_other_queue(QueueName, QueueProps, Bindings, #state{other_queues=OtherQueues, auto_ack=AutoAck}=State) ->
+    {'ok', Q} = start_amqp([{'queue_name', QueueName} | QueueProps], AutoAck),
     gen_server:cast(self(), {?MODULE, {'created_queue', Q}}),
     _ = [create_binding(Type, BindProps, Q) || {Type, BindProps} <- Bindings],
     case props:get_value(QueueName, OtherQueues) of
@@ -975,7 +1035,7 @@ add_other_queue(QueueName, QueueProps, Bindings, #state{other_queues=OtherQueues
                                          ]}}
     end.
 
--spec handle_module_call(any(), pid_ref(), state()) -> handle_call_return().
+-spec handle_module_call(any(), kz_term:pid_ref(), state()) -> handle_call_return().
 handle_module_call(Request, From, #state{module=Module
                                         ,module_state=ModuleState
                                         ,module_timeout_ref=OldRef
@@ -1039,7 +1099,7 @@ handle_module_cast(Msg, #state{module=Module
             {'stop', R, State}
     end.
 
--spec handle_rm_binding(binding(), kz_proplist(), state()) -> state().
+-spec handle_rm_binding(binding(), kz_term:proplist(), state()) -> state().
 handle_rm_binding(Binding, Props, #state{queue=Q
                                         ,bindings=Bs
                                         }=State) ->
@@ -1049,9 +1109,10 @@ handle_rm_binding(Binding, Props, #state{queue=Q
                                         ,Props
                                         ,Q
                                         )],
+    maybe_remove_federated_binding(Binding, Props, State),
     State#state{bindings=KeepBs}.
 
--spec handle_add_binding(binding_module(), kz_proplist(), state()) ->
+-spec handle_add_binding(binding_module(), kz_term:proplist(), state()) ->
                                 state().
 handle_add_binding(Binding, Props, #state{queue=Q
                                          ,bindings=Bs
@@ -1065,7 +1126,7 @@ handle_add_binding(Binding, Props, #state{queue=Q
             handle_existing_binding(Binding, Props, State, Q, ExistingProps, Bs)
     end.
 
--spec handle_existing_binding(binding_module(), kz_proplist(), state(), ne_binary(), kz_proplist(), bindings()) ->
+-spec handle_existing_binding(binding_module(), kz_term:proplist(), state(), kz_term:ne_binary(), kz_term:proplist(), bindings()) ->
                                      state().
 handle_existing_binding(Binding, Props, State, Q, ExistingProps, Bs) ->
     case lists:all(fun({K,V}) ->
@@ -1092,7 +1153,7 @@ maybe_update_federated_bindings(#state{bindings=[{_Binding, Props}|_]}=State) ->
         'true' -> update_federated_bindings(State)
     end.
 
--spec is_federated_binding(kz_proplist()) -> boolean().
+-spec is_federated_binding(kz_term:proplist()) -> boolean().
 is_federated_binding(Props) ->
     props:get_value('federate', Props) =:= 'true'.
 
@@ -1112,41 +1173,60 @@ update_federated_bindings(#state{bindings=[{Binding, Props}|_]
             State#state{federators=NewListeners ++ Fs, waiting_federators=New ++ State#state.waiting_federators}
     end.
 
--spec broker_connections(federator_listeners(), ne_binaries()) ->
-                                {ne_binaries(), ne_binaries()}.
+-spec maybe_remove_federated_binding(binding(), kz_term:proplist(), state()) -> 'ok'.
+maybe_remove_federated_binding(Binding, Props, State) ->
+    maybe_remove_federated_binding(is_federated_binding(Props), Binding, Props, State).
+
+-spec maybe_remove_federated_binding(boolean(), binding(), kz_term:proplist(), state()) -> 'ok'.
+maybe_remove_federated_binding('true', Binding, Props, #state{federators=Fs}) when Fs =/= [] ->
+    NonFederatedProps = props:delete('federate', Props),
+    remove_federated_binding(Fs, Binding, NonFederatedProps);
+
+maybe_remove_federated_binding(_Flag, _Binging, _Props, _State) ->
+    'ok'.
+
+-spec broker_connections(federator_listeners(), kz_term:ne_binaries()) ->
+                                {kz_term:ne_binaries(), kz_term:ne_binaries()}.
 broker_connections(Listeners, Brokers) ->
     lists:partition(fun(Broker) ->
                             props:get_value(Broker, Listeners) =/= 'undefined'
                     end, Brokers).
 
--spec start_new_listeners(ne_binaries(), binding_module(), kz_proplist(), state()) ->
+-spec start_new_listeners(kz_term:ne_binaries(), binding_module(), kz_term:proplist(), state()) ->
                                  {'ok', federator_listeners()}.
 start_new_listeners(Brokers, Binding, Props, State) ->
     {'ok', [start_new_listener(Broker, Binding, Props, State)
             || Broker <- Brokers
            ]}.
 
--spec start_new_listener(ne_binary(), binding_module(), kz_proplist(), state()) -> federator_listener().
+-spec start_new_listener(kz_term:ne_binary(), binding_module(), kz_term:proplist(), state()) -> federator_listener().
 start_new_listener(Broker, Binding, Props, #state{params=Ps}) ->
     FederateParams = create_federated_params({Binding, Props}, Ps),
     {'ok', Pid} = listener_federator:start_link(self(), Broker, FederateParams),
     lager:debug("started federated listener on broker ~s: ~p", [Broker, Pid]),
     {Broker, Pid}.
 
--spec update_existing_listeners_bindings(federator_listeners(), binding_module(), kz_proplist()) -> 'ok'.
+-spec remove_federated_binding(federator_listeners(), binding_module(), kz_term:proplist()) -> 'ok'.
+remove_federated_binding(Listeners, Binding, Props) ->
+    _ = [?MODULE:rm_binding(Pid, Binding, Props)
+         || {_Broker, Pid} <- Listeners
+        ],
+    'ok'.
+
+-spec update_existing_listeners_bindings(federator_listeners(), binding_module(), kz_term:proplist()) -> 'ok'.
 update_existing_listeners_bindings(Listeners, Binding, Props) ->
     _ = [update_existing_listener_bindings(Listener, Binding, Props)
          || Listener <- Listeners
         ],
     'ok'.
 
--spec update_existing_listener_bindings(federator_listener(), binding_module(), kz_proplist()) -> 'ok'.
+-spec update_existing_listener_bindings(federator_listener(), binding_module(), kz_term:proplist()) -> 'ok'.
 update_existing_listener_bindings({_Broker, Pid}, Binding, Props) ->
     lager:debug("updating listener ~p with ~s", [Pid, Binding]),
     ?MODULE:add_binding(Pid, Binding, Props).
 
--spec create_federated_params({binding_module(), kz_proplist()}, kz_proplist()) ->
-                                     kz_proplist().
+-spec create_federated_params({binding_module(), kz_term:proplist()}, kz_term:proplist()) ->
+                                     kz_term:proplist().
 create_federated_params(FederateBindings, Params) ->
     [{'responders', []}
     ,{'bindings', [FederateBindings]}
@@ -1155,7 +1235,7 @@ create_federated_params(FederateBindings, Params) ->
     ,{'consume_options', props:get_value('consume_options', Params, [])}
     ].
 
--spec federated_queue_name(kz_proplist()) -> api_binary().
+-spec federated_queue_name(kz_term:proplist()) -> kz_term:api_binary().
 federated_queue_name(Params) ->
     QueueName = props:get_value('queue_name', Params, <<>>),
     case kz_term:is_empty(QueueName) of
@@ -1177,8 +1257,8 @@ handle_amqp_channel_available(#state{params=Params}=State) ->
     end.
 
 -spec handle_exchanges_ready(state()) -> state().
-handle_exchanges_ready(#state{params=Params}=State) ->
-    case start_amqp(Params) of
+handle_exchanges_ready(#state{params=Params, auto_ack=AutoAck}=State) ->
+    case start_amqp(Params, AutoAck) of
         {'ok', Q} ->
             handle_amqp_started(State, Q);
         {'error', Reason} ->
@@ -1186,7 +1266,7 @@ handle_exchanges_ready(#state{params=Params}=State) ->
             handle_amqp_errored(State)
     end.
 
--spec handle_amqp_started(state(), ne_binary()) -> state().
+-spec handle_amqp_started(state(), kz_term:ne_binary()) -> state().
 handle_amqp_started(#state{params=Params}=State, Q) ->
     State1 = start_initial_bindings(State#state{queue=Q}, Params),
 
@@ -1227,28 +1307,28 @@ maybe_channel_flow('true') ->
     amqp_util:flow_control();
 maybe_channel_flow(_) -> 'ok'.
 
--spec maybe_declare_exchanges(kz_proplist()) ->
-                                     command_ret().
--spec maybe_declare_exchanges(kz_amqp_assignment(), kz_proplist()) ->
+-spec maybe_declare_exchanges(declare_exchanges()) ->
                                      command_ret().
 maybe_declare_exchanges([]) -> 'ok';
 maybe_declare_exchanges(Exchanges) ->
     maybe_declare_exchanges(kz_amqp_assignments:get_channel(), Exchanges).
 
+-spec maybe_declare_exchanges(kz_amqp_assignment(), declare_exchanges()) ->
+                                     command_ret().
 maybe_declare_exchanges(_Channel, []) -> 'ok';
 maybe_declare_exchanges(Channel, [{Ex, Type, Opts} | Exchanges]) ->
     declare_exchange(Channel, amqp_util:declare_exchange(Ex, Type, Opts), Exchanges);
 maybe_declare_exchanges(Channel, [{Ex, Type} | Exchanges]) ->
     declare_exchange(Channel, amqp_util:declare_exchange(Ex, Type), Exchanges).
 
--spec declare_exchange(kz_amqp_assignment(), kz_amqp_exchange(), kz_proplist()) -> command_ret().
+-spec declare_exchange(kz_amqp_assignment(), kz_amqp_exchange(), declare_exchanges()) -> command_ret().
 declare_exchange(Channel, Exchange, Exchanges) ->
     case kz_amqp_channel:command(Channel, Exchange) of
         {'ok', _} -> maybe_declare_exchanges(Channel, Exchanges);
         E -> E
     end.
 
--spec start_initial_bindings(state(), kz_proplist()) -> state().
+-spec start_initial_bindings(state(), kz_term:proplist()) -> state().
 start_initial_bindings(State, Params) ->
     lists:foldl(fun({Binding, Props}, StateAcc) ->
                         handle_add_binding(Binding, Props, StateAcc)
@@ -1257,7 +1337,7 @@ start_initial_bindings(State, Params) ->
                ,props:get_value('bindings', Params, [])
                ).
 
--spec channel_requisition(kz_proplist()) -> boolean().
+-spec channel_requisition(kz_term:proplist()) -> boolean().
 channel_requisition([]) -> 'false';
 channel_requisition(Params) ->
     case props:get_value('broker_tag', Params) of
@@ -1274,17 +1354,21 @@ channel_requisition(Params) ->
     end.
 
 -spec maybe_add_broker_connection(binary()) -> boolean().
--spec maybe_add_broker_connection(binary(), non_neg_integer()) -> boolean().
 maybe_add_broker_connection(Broker) ->
     Count = kz_amqp_connections:broker_available_connections(Broker),
     maybe_add_broker_connection(Broker, Count).
 
+-spec maybe_add_broker_connection(binary(), non_neg_integer()) -> boolean().
 maybe_add_broker_connection(Broker, Count) when Count =:= 0 ->
-    kz_amqp_connections:add(Broker, kz_binary:rand_hex(6), [<<"hidden">>]),
+    _Connection = kz_amqp_connections:add(Broker, kz_binary:rand_hex(6), [<<"hidden">>]),
     kz_amqp_channel:requisition(self(), Broker);
 maybe_add_broker_connection(Broker, _Count) ->
     kz_amqp_channel:requisition(self(), Broker).
 
--spec start_listener(pid(), kz_proplist()) -> 'ok'.
+-spec start_listener(pid(), kz_term:proplist()) -> 'ok'.
 start_listener(Srv, Params) ->
     gen_server:cast(Srv, {'start_listener', Params}).
+
+maybe_configure_auto_ack(Props, 'false') -> Props;
+maybe_configure_auto_ack(Props, 'true') ->
+    [{'no_ack', 'false'} | props:delete('no_ack', Props)].

@@ -1,11 +1,10 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications Inc
-%%% @doc
-%%% Asterisk queue_log translator for Kazoo
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2015-2018, 2600Hz
+%%% @doc Asterisk queue_log translator for Kazoo
+%%%
+%%% @author Lucas Bussey
 %%% @end
-%%% @contributors
-%%%   Lucas Bussey
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(quilt_agent_fsm).
 
 -behaviour(gen_fsm).
@@ -22,7 +21,7 @@
 %% Public functions
 %%
 
--spec start_link(state()) -> startlink_ret().
+-spec start_link(state()) -> kz_types:startlink_ret().
 start_link(Agent) ->
     gen_fsm:start_link(?MODULE, Agent, []).
 
@@ -35,12 +34,12 @@ init(State) ->
     process_flag('trap_exit', 'true'),
     {'ok', 'started', State}.
 
--spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
+-spec handle_event(any(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event ~p from current state of ~s with state record: ~p", [Event, StateName, State]),
     {'next_state', StateName, State}.
 
--spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
+-spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> kz_types:handle_sync_event_ret(state()).
 handle_sync_event({'queuelogin', JObj}, _From, StateName, #state{queues=Queues}=State)
   when StateName =:= 'started'
        orelse StateName =:= 'loggedout' ->
@@ -117,7 +116,7 @@ handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event ~p from current state of ~s with state record: ~p", [Event, StateName, State]),
     {'reply', 'ok', StateName, State}.
 
--spec handle_info(any(), atom(), state()) -> handle_fsm_ret(state()).
+-spec handle_info(any(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
 handle_info({'$gen_cast', _}, StateName, State) ->
     {'next_state', StateName, State};
 handle_info({'EXIT', _Pid, _Reason}, StateName, State) ->
@@ -141,13 +140,13 @@ code_change(_, StateName, State, _) ->
 %%
 %% Private functions
 %%
--spec agent_queues(ne_binary(), ne_binary()) -> ne_binaries().
+-spec agent_queues(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binaries().
 agent_queues(AccountId, AgentId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     {'ok', User} = kz_datamgr:open_cache_doc(AccountDb, AgentId),
     kz_json:get_list_value(<<"queues">>, User, []).
 
--spec queuelogin(kz_json:object(), ne_binaries()) -> ne_binaries().
+-spec queuelogin(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 queuelogin(JObj, Queues) ->
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
     case lists:member(QueueId, Queues) of
@@ -158,7 +157,7 @@ queuelogin(JObj, Queues) ->
             [QueueId | lists:delete(QueueId, Queues)]
     end.
 
--spec queuelogoff(kz_json:object(), ne_binaries()) -> ne_binaries().
+-spec queuelogoff(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 queuelogoff(JObj, Queues) ->
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
     case lists:member(QueueId, Queues) of
@@ -169,7 +168,7 @@ queuelogoff(JObj, Queues) ->
         'false' -> Queues
     end.
 
--spec agentlogin(kz_json:object(), ne_binaries()) -> ne_binaries().
+-spec agentlogin(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 agentlogin(JObj, Queues) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
@@ -182,7 +181,7 @@ agentlogin(JObj, Queues) ->
                         queuelogin(TempJObj, QueuesAcc)
                 end, Queues, AgentQueues).
 
--spec agentlogoff(kz_json:object(), ne_binaries()) -> ne_binaries().
+-spec agentlogoff(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 agentlogoff(JObj, Queues) ->
     lists:foldl(fun(QueueId, QueuesAcc) ->
                         TempJObj = kz_json:set_values([{<<"Queue-ID">>, QueueId}
@@ -196,7 +195,7 @@ agentlogoff(JObj, Queues) ->
 logoff_transition(_, #state{queues=[]}) -> 'loggedout';
 logoff_transition(StateName, _) -> StateName.
 
--spec sleep_until_call_stat_processed(ne_binary()) -> 'ok'.
+-spec sleep_until_call_stat_processed(kz_term:ne_binary()) -> 'ok'.
 sleep_until_call_stat_processed(CallId) ->
     Stat = acdc_stats:find_call(CallId),
     case kz_json:get_value(<<"Status">>, Stat) of

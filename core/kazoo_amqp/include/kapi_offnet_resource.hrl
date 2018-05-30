@@ -1,7 +1,5 @@
 -ifndef(KAPI_OFFNET_RESOURCE_HRL).
 
--include_lib("kazoo_amqp/src/amqp_util.hrl").
-
 -define(KEY_ACCOUNT_ID, <<"Account-ID">>).
 -define(KEY_ACCOUNT_REALM, <<"Account-Realm">>).
 -define(KEY_APPLICATION_DATA, <<"Application-Data">>).
@@ -11,8 +9,11 @@
 -define(KEY_B_LEG_EVENTS, <<"B-Leg-Events">>).
 -define(KEY_CALL_ID, <<"Call-ID">>).
 -define(KEY_CCVS, <<"Custom-Channel-Vars">>).
+-define(KEY_CAVS, <<"Custom-Appliction-Vars">>).
+-define(KEY_REQUESTOR_CCVS, <<"Requestor-Custom-Channel-Vars">>).
 -define(KEY_CONTROL_QUEUE, <<"Control-Queue">>).
 -define(KEY_CSHS, <<"Custom-SIP-Headers">>).
+-define(KEY_REQUESTOR_CSHS, <<"Requestor-Custom-SIP-Headers">>).
 -define(KEY_ENABLE_T38 ,<<"Enable-T38-Fax">>).
 -define(KEY_ENABLE_T38_GATEWAY, <<"Enable-T38-Gateway">>).
 -define(KEY_ENABLE_T38_PASSTHROUGH, <<"Enable-T38-Passthrough">>).
@@ -40,6 +41,7 @@
 -define(KEY_OUTBOUND_CALLER_ID_NAME, <<"Outbound-Caller-ID-Name">>).
 -define(KEY_OUTBOUND_CALLER_ID_NUMBER, <<"Outbound-Caller-ID-Number">>).
 -define(KEY_OUTBOUND_CALL_ID, <<"Outbound-Call-ID">>).
+-define(KEY_ORIGINATION_CALL_ID, <<"Origination-Call-ID">>).
 -define(KEY_PRESENCE_ID, <<"Presence-ID">>).
 -define(KEY_RESOURCE_TYPE, <<"Resource-Type">>).
 -define(KEY_RINGBACK, <<"Ringback">>).

@@ -1,17 +1,17 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%% This module looks up the Caller ID Name by matching
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc This module looks up the Caller ID Name by matching
 %%% numbers/patters with the provided lists.
 %%%
-%%% "data":{
-%%%   "lists": ["01fc63f92d9b89a25dd4ff1039e64497"]
-%%% },
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`lists'</dt>
+%%%   <dd>ID of list document to use.</dd>
+%%% </dl>
+%%%
+%%% @author Sponsored by Conversant Ltd, Implemented by SIPLABS, LLC (Ilya Ashchepkov)
 %%% @end
-%%% @contributors
-%%%     Sponsored by Conversant Ltd,
-%%%         implemented by SIPLABS, LLC (Ilya Ashchepkov)
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_lookupcidname).
 
 -behaviour(gen_cf_action).
@@ -20,7 +20,7 @@
 
 -include("callflow.hrl").
 
--type match_number_result() :: {'stop', api_binary()} | 'continue'.
+-type match_number_result() :: {'stop', kz_term:api_binary()} | 'continue'.
 
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
@@ -36,20 +36,21 @@ handle(Data, Call) ->
                  end,
     handle_caller_name(Call, CallerName).
 
--spec handle_caller_name(kapps_call:call(), api_ne_binary()) -> 'ok'.
+-spec handle_caller_name(kapps_call:call(), kz_term:api_ne_binary()) -> 'ok'.
 handle_caller_name(Call, 'undefined') ->
     cf_exe:continue(Call);
 handle_caller_name(Call, CallerName) ->
     lager:info("setting caller name to ~p", [CallerName]),
     cf_exe:continue(kapps_call:set_caller_id_name(CallerName, Call)).
 
--spec match_number_in_lists(ne_binary(), ne_binary(), ne_binaries()) ->
+
+-spec match_number_in_lists(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binaries()) ->
                                    match_number_result().
 match_number_in_lists(AccountDb, Number, Lists) ->
     Prefixes = build_keys(Number),
     match_prefixes_in_lists(AccountDb, Prefixes, Lists).
 
--spec match_prefixes_in_lists(ne_binary(), ne_binaries(), ne_binaries()) ->
+-spec match_prefixes_in_lists(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binaries()) ->
                                      match_number_result().
 match_prefixes_in_lists(AccountDb, Prefixes, [ListId | Rest]) ->
     case match_prefixes_in_list(AccountDb, Prefixes, ListId) of
@@ -60,7 +61,7 @@ match_prefixes_in_lists(_AccountDb, _Number, []) ->
     lager:debug("no matching prefix"),
     'continue'.
 
--spec match_prefixes_in_list(ne_binary(), ne_binaries(), ne_binary()) ->
+-spec match_prefixes_in_list(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary()) ->
                                     match_number_result().
 match_prefixes_in_list(AccountDb, Prefixes, ListId) ->
     Keys = [[ListId, Prefix] || Prefix <- Prefixes],
@@ -89,25 +90,25 @@ match_prefixes_in_list(AccountDb, Prefixes, ListId) ->
 compare_prefixes(JObj1, JObj2) ->
     byte_size(get_prefix(JObj1)) >= byte_size(get_prefix(JObj2)).
 
--spec get_prefix(kz_json:object()) -> ne_binary().
+-spec get_prefix(kz_json:object()) -> kz_term:ne_binary().
 get_prefix(JObj) ->
     Doc = kz_json:get_value(<<"doc">>, JObj),
     kz_json:get_ne_binary_value(<<"number">>, Doc, kz_json:get_ne_binary_value(<<"prefix">>, Doc)).
 
 %% TODO: this function from hon_util, may be place it somewhere in library?
--spec build_keys(ne_binary()) -> binaries().
+-spec build_keys(kz_term:ne_binary()) -> kz_term:binaries().
 build_keys(<<"+", E164/binary>>) ->
     build_keys(E164);
 build_keys(<<D:1/binary, Rest/binary>>) ->
     build_keys(Rest, D, [D]).
 
--spec build_keys(binary(), binary(), ne_binaries()) -> ne_binaries().
+-spec build_keys(binary(), binary(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 build_keys(<<D:1/binary, Rest/binary>>, Prefix, Acc) ->
     build_keys(Rest, <<Prefix/binary, D/binary>>, [<<Prefix/binary, D/binary>> | Acc]);
 build_keys(<<>>, _, Acc) -> Acc.
 
--spec match_regexp_in_list(ne_binary(), ne_binary(), ne_binary()) ->
-                                  'continue' | {'stop', api_binary()}.
+-spec match_regexp_in_list(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                  'continue' | {'stop', kz_term:api_binary()}.
 match_regexp_in_list(AccountDb, Number, ListId) when is_binary(ListId) ->
     ViewOptions = [{'keys', [ListId]}
                   ,'include_docs'
@@ -120,8 +121,8 @@ match_regexp_in_list(AccountDb, Number, ListId) when is_binary(ListId) ->
             'continue'
     end.
 
--spec match_regexp_in_lists(ne_binary(), ne_binary(), ne_binary() | ne_binaries()) ->
-                                   api_ne_binary().
+-spec match_regexp_in_lists(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()) ->
+                                   kz_term:api_ne_binary().
 match_regexp_in_lists(AccountDb, Number, [ListId | Rest]) ->
     case match_regexp_in_list(AccountDb, Number, ListId) of
         'continue' -> match_regexp_in_lists(AccountDb, Number, Rest);
@@ -130,9 +131,9 @@ match_regexp_in_lists(AccountDb, Number, [ListId | Rest]) ->
 match_regexp_in_lists(_, _, []) ->
     'undefined'.
 
--spec match_regexp(kz_json:objects(), ne_binary()) ->
+-spec match_regexp(kz_json:objects(), kz_term:ne_binary()) ->
                           'continue' |
-                          {'stop', api_binary()}.
+                          {'stop', kz_term:api_binary()}.
 match_regexp([Entry | Entries], Number) ->
     Regex = kz_json:get_ne_binary_value(<<"value">>, Entry),
     Doc = kz_json:get_value(<<"doc">>, Entry),

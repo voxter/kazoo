@@ -1,18 +1,30 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
-%%% @doc
-%%% Collect DTMF into an optional key for later retrieval
-%%% "data":{
-%%%   "max_digits":4
-%%%   ,"timeout":5000 // milliseconds, how long to wait for first DTMF
-%%%   ,"terminator":"#" // what DTMF stops collection (and aren't included)
-%%%   ,"terminators":["#","*"] // what DTMFs stop collection (and aren't included)
-%%%   ,"interdigit_timeout":2000 // milliseconds, how long to wait for the next DTMF
-%%%   ,"collection_name":"your_name_here" // name the collection for later processing
-%%% }
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
+%%% @doc Collect DTMF into an optional key for later retrieval.
+%%%
+%%% <h4>Data options:</h4>
+%%% <dl>
+%%%   <dt>`max_digits'</dt>
+%%%   <dd>Maximum digits to collect. Default is to collect one digit.</dd>
+%%%
+%%%   <dt>`max_digits'</dt>
+%%%   <dd>How long to wait for first DTMF, in milliseconds</dd>
+%%%
+%%%   <dt>`terminator'</dt>
+%%%   <dd>What DTMF stops collection (and aren't included). Possible values are [0-9*#]. Default is `#'.</dd>
+%%%
+%%%   <dt>`terminators'</dt>
+%%%   <dd>What DTMFs stops collection (and aren't included). Possible values are [0-9*#]. Default is `#'.</dd>
+%%%
+%%%   <dt>`interdigit_timeout'</dt>
+%%%   <dd>How long to wait for the next DTMF, in milliseconds</dd>
+%%%
+%%%   <dt>`collection_name'</dt>
+%%%   <dd>The name of the collection to store collected numbers for later processing</dd>
+%%% </dl>
+%%%
 %%% @end
-%%% @contributors
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(cf_collect_dtmf).
 
 -behaviour(gen_cf_action).
@@ -25,12 +37,10 @@
 
 -export([handle/2]).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Entry point for this module
+%%------------------------------------------------------------------------------
+%% @doc Entry point for this module
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     kapps_call_command:answer(Call),
@@ -83,7 +93,7 @@ collect_more_digits(Data, Call, AlreadyCollected, MaxDigits) ->
             lager:debug("failed to collect DTMF: ~p", [_E])
     end.
 
--spec truncate_after_terminator(binary(), ne_binaries()) -> binary().
+-spec truncate_after_terminator(binary(), kz_term:ne_binaries()) -> binary().
 truncate_after_terminator(AlreadyCollected, Terminators) ->
     hd(binary:split(AlreadyCollected, Terminators)).
 
@@ -97,7 +107,7 @@ truncate_after_terminator_test_() ->
     ].
 -endif.
 
--spec collection_name(kz_json:object()) -> ne_binary().
+-spec collection_name(kz_json:object()) -> kz_term:ne_binary().
 collection_name(Data) ->
     case kz_json:get_value(<<"collection_name">>, Data) of
         <<_/binary>> = Name -> Name;
@@ -125,7 +135,7 @@ interdigit(Data) ->
         N when N > 0 -> N
     end.
 
--spec terminators(kz_json:object()) -> ne_binaries().
+-spec terminators(kz_json:object()) -> kz_term:ne_binaries().
 terminators(Data) ->
     case kz_json:get_first_defined([<<"terminator">>, <<"terminators">>], Data) of
         'undefined' -> [<<"#">>];

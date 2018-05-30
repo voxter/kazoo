@@ -1,13 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2017, 2600Hz INC
-%%% @doc
-%%%
-%%% Handle client requests for phone_number documents
-%%%
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2011-2018, 2600Hz
+%%% @doc Handle client requests for phone_number documents
+%%% @author Karl Anderson
 %%% @end
-%%% @contributors
-%%%   Karl Anderson
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(knm_bandwidth).
 -behaviour(knm_gen_carrier).
 
@@ -71,44 +67,38 @@
 
 %%% API
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec info() -> map().
 info() ->
     #{?CARRIER_INFO_MAX_PREFIX => 3
      }.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Is this carrier handling numbers local to the system?
-%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%%------------------------------------------------------------------------------
+%% @doc Is this carrier handling numbers local to the system?
+%%
+%% <div class="notice">A non-local (foreign) carrier module makes HTTP requests.</div>
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Check with carrier if these numbers are registered with it.
+%%------------------------------------------------------------------------------
+%% @doc Check with carrier if these numbers are registered with it.
 %% @end
-%%--------------------------------------------------------------------
--spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
-                                      {error, any()}.
+%%------------------------------------------------------------------------------
+-spec check_numbers(kz_term:ne_binaries()) -> {ok, kz_json:object()} |
+                                              {error, any()}.
 check_numbers(_Numbers) -> {error, not_implemented}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Query the Bandwidth.com system for a quanity of available numbers
+%%------------------------------------------------------------------------------
+%% @doc Query the Bandwidth.com system for a quantity of available numbers
 %% in a rate center
 %% @end
-%%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
+%%------------------------------------------------------------------------------
+-spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_carriers:options()) ->
                           {'ok', knm_number:knm_numbers()} |
                           {'error', any()}.
 find_numbers(<<"+", Rest/binary>>, Quanity, Options) ->
@@ -133,7 +123,7 @@ find_numbers(Search, Quanity, Options) ->
         {'ok', Xml} -> process_numbers_search_resp(Xml, Options)
     end.
 
--spec process_numbers_search_resp(xml_el(), knm_search:options()) ->
+-spec process_numbers_search_resp(kz_types:xml_el(), knm_search:options()) ->
                                          {'ok', list()}.
 process_numbers_search_resp(Xml, Options) ->
     TelephoneNumbers = "/numberSearchResponse/telephoneNumbers/telephoneNumber",
@@ -144,18 +134,16 @@ process_numbers_search_resp(Xml, Options) ->
            ]
     }.
 
--spec found_number_to_KNM(xml_el() | xml_els(), ne_binary()) -> tuple().
+-spec found_number_to_KNM(kz_types:xml_el() | kz_types:xml_els(), kz_term:ne_binary()) -> tuple().
 found_number_to_KNM(Found, QID) ->
     JObj = number_search_response_to_json(Found),
     Num = kz_json:get_value(<<"e164">>, JObj),
     {QID, {Num, ?MODULE, ?NUMBER_STATE_DISCOVERY, JObj}}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Acquire a given number from the carrier
+%%------------------------------------------------------------------------------
+%% @doc Acquire a given number from the carrier
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) ->
                             knm_number:knm_number().
 acquire_number(Number) ->
@@ -184,7 +172,7 @@ acquire_and_provision_number(Number) ->
                 Endpoints ->
                     [{'endPoints', [{'host', [kz_term:to_list(E)]} || E <- Endpoints]}]
             end,
-    OrderName = lists:flatten([?BW_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:current_tstamp())]),
+    OrderName = lists:flatten([?BW_ORDER_NAME_PREFIX, "-", integer_to_list(kz_time:now_s())]),
     AcquireFor = case kz_term:is_empty(AssignedTo) of
                      'true' -> "no_assigned_account";
                      'false' -> binary_to_list(AssignedTo)
@@ -205,43 +193,37 @@ acquire_and_provision_number(Number) ->
             knm_number:set_phone_number(Number, PN)
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Release a number from the routing table
+%%------------------------------------------------------------------------------
+%% @doc Release a number from the routing table
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
 disconnect_number(Number) -> Number.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(_Number) -> 'true'.
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec should_lookup_cnam() -> 'true'.
 should_lookup_cnam() -> 'true'.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Make a REST request to Bandwidth.com Numbers API to preform the
+%%------------------------------------------------------------------------------
+%% @doc Make a REST request to Bandwidth.com Numbers API to preform the
 %% given verb (purchase, search, provision, ect).
 %% @end
-%%--------------------------------------------------------------------
--spec make_numbers_request(atom(), kz_proplist()) ->
+%%------------------------------------------------------------------------------
+-spec make_numbers_request(atom(), kz_term:proplist()) ->
                                   {'ok', any()} |
                                   {'error', any()}.
 
@@ -317,10 +299,10 @@ make_numbers_request(Verb, Props) ->
     end.
 -endif.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Convert a number order response to json
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @doc Convert a number order response to json.
+%% @end
+%%------------------------------------------------------------------------------
 -spec number_order_response_to_json(any()) -> kz_json:object().
 number_order_response_to_json([]) ->
     kz_json:new();
@@ -341,13 +323,11 @@ number_order_response_to_json(Xml) ->
        }
       ]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert a number search response XML entity to json
+%%------------------------------------------------------------------------------
+%% @doc Convert a number search response XML entity to json
 %% @end
-%%--------------------------------------------------------------------
--spec number_search_response_to_json(xml_el() | xml_els()) -> kz_json:object().
+%%------------------------------------------------------------------------------
+-spec number_search_response_to_json(kz_types:xml_el() | kz_types:xml_els()) -> kz_json:object().
 number_search_response_to_json([]) ->
     kz_json:new();
 number_search_response_to_json([Xml]) ->
@@ -363,19 +343,17 @@ number_search_response_to_json(Xml) ->
       ,{<<"rate_center">>, rate_center_to_json(xmerl_xpath:string("rateCenter", Xml))}
       ]).
 
--spec get_cleaned(kz_deeplist(), xml_el()) -> api_binary().
+-spec get_cleaned(kz_term:deeplist(), kz_types:xml_el()) -> kz_term:api_binary().
 get_cleaned(Path, Xml) ->
     case kz_xml:get_value(Path, Xml) of
         'undefined' -> 'undefined';
         V -> kz_binary:strip(V, [$\s, $\n])
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert a rate center XML entity to json
+%%------------------------------------------------------------------------------
+%% @doc Convert a rate center XML entity to json
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec rate_center_to_json(list()) -> kz_json:object().
 rate_center_to_json([]) ->
     kz_json:new();
@@ -388,16 +366,14 @@ rate_center_to_json(Xml) ->
       ,{<<"state">>, get_cleaned("state/text()", Xml)}
       ]).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Determine if the request was successful, and if not extract any
+%%------------------------------------------------------------------------------
+%% @doc Determine if the request was successful, and if not extract any
 %% error text
 %% @end
-%%--------------------------------------------------------------------
--spec verify_response(xml_el()) ->
-                             {'ok', xml_el()} |
-                             {'error', api_binary() | ne_binaries()}.
+%%------------------------------------------------------------------------------
+-spec verify_response(kz_types:xml_el()) ->
+                             {'ok', kz_types:xml_el()} |
+                             {'error', kz_term:api_binary() | kz_term:ne_binaries()}.
 verify_response(Xml) ->
     case get_cleaned("/*/status/text()", Xml) of
         <<"success">> ->

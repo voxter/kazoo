@@ -1,11 +1,9 @@
-%%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%%-----------------------------------------------------------------------------
+%%% @copyright (C) 2010-2018, 2600Hz
 %%% @doc
-%%%
+%%% @author Hesaam Farhang
 %%% @end
-%%% @contributors
-%%%   Hesaam Farhang
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 -module(kz_template).
 
 -include("kazoo_template.hrl").
@@ -21,7 +19,7 @@
          | Options
         ]).
 
--type template() :: nonempty_string() | ne_binary().
+-type template() :: nonempty_string() | kz_term:ne_binary().
 
 -type template_result() :: {'ok', iolist() | atom()} |
                            {'error', any()}.
@@ -40,20 +38,20 @@
 -type errors() :: list(error_info()).
 -type warnings() :: list(error_info()).
 
-%%--------------------------------------------------------------------
-%% @public
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec render(atom(), kz_proplist()) -> template_result().
--spec render(template(), atom(), kz_proplist()) -> template_result().
--spec render(template(), atom(), kz_proplist(), kz_proplist()) -> template_result().
+%%------------------------------------------------------------------------------
+
+-spec render(atom(), kz_term:proplist()) -> template_result().
 render(Module, TemplateData) ->
     render_template(Module, TemplateData).
 
+-spec render(template(), atom(), kz_term:proplist()) -> template_result().
 render(Template, Module, TemplateData) ->
     render(Template, Module, TemplateData, []).
 
+-spec render(template(), atom(), kz_term:proplist(), kz_term:proplist()) -> template_result().
 render(Template, Module, TemplateData, CompileOpts) ->
     case compile(Template, Module, CompileOpts) of
         {'ok', Module} -> render_template(Module, TemplateData);
@@ -62,10 +60,10 @@ render(Template, Module, TemplateData, CompileOpts) ->
 
 
 -spec compile(template(), atom()) -> template_result().
--spec compile(template(), atom(), kz_proplist()) -> template_result().
 compile(Template, Module) ->
     compile(Template, Module, []).
 
+-spec compile(template(), atom(), kz_term:proplist()) -> template_result().
 compile(Template, Module, CompileOpts) when is_binary(Template) ->
     try erlydtl:compile_template(Template, Module, ?COMPILE_OPTS(CompileOpts)) of
         Result ->
@@ -85,21 +83,20 @@ compile(Path, Module, CompileOpts) ->
             {'error', 'failed_to_compile'}
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
--spec render_template(atom(), kz_proplist()) -> template_result().
+%%------------------------------------------------------------------------------
+-spec render_template(atom(), kz_term:proplist()) -> template_result().
 render_template(Module, TemplateData) ->
-    ?LOG_DEBUG("rendering using ~s", [Module]),
+    lager:debug("rendering using ~s", [Module]),
     try Module:render(props:filter_empty(TemplateData)) of
         {'ok', _IOList}=OK ->
-            ?LOG_DEBUG("rendered template successfully"),
+            lager:debug("rendered template successfully"),
             OK;
         {'error', _E}=E ->
             ?LOG_DEBUG("failed to render template: ~p", [_E]),
@@ -117,22 +114,21 @@ render_template(Module, TemplateData) ->
             {'error', R}
     end.
 
-%%%===================================================================
+%%%=============================================================================
 %%% Log functions
-%%%===================================================================
+%%%=============================================================================
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec handle_compile_result(template(), atom(), template_result()) ->
                                    template_result().
 handle_compile_result(_Template, Module, {'ok', Module} = OK) ->
-    ?LOG_DEBUG("built renderer for ~p", [Module]),
+    lager:debug("built renderer for ~p", [Module]),
     OK;
 handle_compile_result(_Template, Module, {'ok', Module, []}) ->
-    ?LOG_DEBUG("built renderer for ~p", [Module]),
+    lager:debug("built renderer for ~p", [Module]),
     {'ok', Module};
 handle_compile_result(Template, Module, {'ok', Module, Warnings}) ->
     ?LOG_DEBUG("compiling template renderer for ~p produced warnings: ~p"
@@ -140,7 +136,7 @@ handle_compile_result(Template, Module, {'ok', Module, Warnings}) ->
     log_warnings(Warnings, Template),
     {'ok', Module};
 handle_compile_result(_Template, Module, 'ok') ->
-    ?LOG_DEBUG("build renderer for ~p from template file", [Module]),
+    lager:debug("build renderer for ~p from template file", [Module]),
     {'ok', Module};
 handle_compile_result(_Template, _Module, 'error') ->
     ?LOG_DEBUG("failed to compile template for ~p", [_Module]),
@@ -151,11 +147,10 @@ handle_compile_result(Template, _Module, {'error', Errors, Warnings}) ->
     log_warnings(Warnings, Template),
     {'error', 'failed_to_compile'}.
 
-%%--------------------------------------------------------------------
-%% @private
+%%------------------------------------------------------------------------------
 %% @doc
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec log_errors(errors(), template()) -> 'ok'.
 log_errors(Es, Template) ->
     _ = [log_infos("error", Module, Errors, Template) || {Module, Errors} <- Es],
