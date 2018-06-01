@@ -97,10 +97,31 @@ sbrr_multiple_candidates_test_() ->
 %% @public
 %% @doc
 %% Test a skills-based round robin queue with a series of adds/removes
-%% of calls and agents. Verifies the state as it mutates.
+%% of calls and agents. Agents are fully logged out in this test.
 %% @end
 %%--------------------------------------------------------------------
 sbrr_multi_phase_test_() ->
+    sbrr_multi_phase_tests(true).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Test a skills-based round robin queue with a series of adds/removes
+%% of calls and agents. Agents are only marked busy in this test (not
+%% fully logged out).
+%% @end
+%%--------------------------------------------------------------------
+sbrr_multi_phase_keep_agents_busy_test_() ->
+    sbrr_multi_phase_tests(false).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Test a skills-based round robin queue with a series of adds/removes
+%% of calls and agents. Verifies the state as it mutates.
+%% @end
+%%--------------------------------------------------------------------
+sbrr_multi_phase_tests(FullLogoutAgents) ->
     S = create_state(),
 
     %% Add agents 1-3
@@ -154,7 +175,7 @@ sbrr_multi_phase_test_() ->
                                                        ,call_id_map := CallIdMap1
                                                        ,rr_queue := RRQueue1
                                                        ,skill_map := SkillMap1
-                                                       }}} = remove_agent(<<"2">>, S2),
+                                                       }}} = remove_agent(<<"2">>, S2, FullLogoutAgents),
 
     %% Re-add agent 1 (shift to back of rr_queue)
     ExpectAgentIdMap2 = #{<<"1">> => <<"4">>
@@ -200,7 +221,7 @@ sbrr_multi_phase_test_() ->
                                                        ,call_id_map := CallIdMap5
                                                        ,rr_queue := RRQueue5
                                                        ,skill_map := SkillMap5
-                                                       }}} = remove_agent(<<"3">>, S6),
+                                                       }}} = remove_agent(<<"3">>, S6, FullLogoutAgents),
 
     %% Add agents 2, 4 (different skills this time)
     Agents1 = [{<<"2">>, [<<"EN">>, <<"SP">>, <<"RF">>]}
@@ -214,19 +235,36 @@ sbrr_multi_phase_test_() ->
                         ,<<"5">> => <<"1">>
                         ,<<"6">> => <<"4">>
                         },
-    ExpectSkillMap6 = #{[] => sets:from_list([<<"4">>, <<"2">>, <<"1">>])
-                       ,[<<"DE">>] => sets:from_list([<<"4">>])
-                       ,[<<"DE">>, <<"EN">>] => sets:from_list([<<"4">>])
-                       ,[<<"DE">>, <<"EN">>, <<"RF">>] => sets:from_list([<<"4">>])
-                       ,[<<"DE">>, <<"RF">>] => sets:from_list([<<"4">>])
-                       ,[<<"EN">>] => sets:from_list([<<"4">>, <<"2">>, <<"1">>])
-                       ,[<<"EN">>, <<"RF">>] => sets:from_list([<<"4">>, <<"2">>])
-                       ,[<<"EN">>, <<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
-                       ,[<<"EN">>, <<"SP">>] => sets:from_list([<<"2">>])
-                       ,[<<"RF">>] => sets:from_list([<<"4">>,<<"2">>])
-                       ,[<<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
-                       ,[<<"SP">>] => sets:from_list([<<"2">>])
-                       },
+    ExpectSkillMap6 = case FullLogoutAgents of
+                          'true' ->
+                              #{[] => sets:from_list([<<"4">>, <<"2">>, <<"1">>])
+                               ,[<<"DE">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"EN">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"EN">>, <<"RF">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"RF">>] => sets:from_list([<<"4">>])
+                               ,[<<"EN">>] => sets:from_list([<<"4">>, <<"2">>, <<"1">>])
+                               ,[<<"EN">>, <<"RF">>] => sets:from_list([<<"4">>, <<"2">>])
+                               ,[<<"EN">>, <<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"EN">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"RF">>] => sets:from_list([<<"4">>,<<"2">>])
+                               ,[<<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"SP">>] => sets:from_list([<<"2">>])
+                               };
+                          'false' ->
+                              #{[] => sets:from_list([<<"4">>, <<"3">>, <<"2">>, <<"1">>])
+                               ,[<<"DE">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"EN">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"EN">>, <<"RF">>] => sets:from_list([<<"4">>])
+                               ,[<<"DE">>, <<"RF">>] => sets:from_list([<<"4">>])
+                               ,[<<"EN">>] => sets:from_list([<<"4">>, <<"3">>, <<"2">>, <<"1">>])
+                               ,[<<"EN">>, <<"RF">>] => sets:from_list([<<"4">>, <<"2">>])
+                               ,[<<"EN">>, <<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"EN">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"RF">>] => sets:from_list([<<"4">>, <<"2">>])
+                               ,[<<"RF">>, <<"SP">>] => sets:from_list([<<"2">>])
+                               ,[<<"SP">>] => sets:from_list([<<"2">>])
+                               }
+                      end,
     S8 = #state{strategy_state=#strategy_state{agents=#{agent_id_map := AgentIdMap6
                                                        ,call_id_map := CallIdMap6
                                                        ,rr_queue := RRQueue6
@@ -266,11 +304,17 @@ sbrr_multi_phase_test_() ->
     ,?_assertEqual([<<"1">>, <<"3">>], pqueue4:to_list(RRQueue1))
     ,?_assertEqual(ExpectAgentIdMap1, AgentIdMap1)
     ,?_assertEqual(ExpectCallIdMap1, CallIdMap1)
-    ,?_assertEqual(ExpectSkillMap1, SkillMap1)
+    ,case FullLogoutAgents of
+         'true' -> ?_assertEqual(ExpectSkillMap1, SkillMap1);
+         'false' -> ?_assertEqual(ExpectSkillMap, SkillMap1)
+     end
     ,?_assertEqual([<<"3">>, <<"1">>], pqueue4:to_list(RRQueue2))
     ,?_assertEqual(ExpectAgentIdMap2, AgentIdMap2)
     ,?_assertEqual(ExpectCallIdMap2, CallIdMap2)
-    ,?_assertEqual(ExpectSkillMap2, SkillMap2)
+    ,case FullLogoutAgents of
+         'true' -> ?_assertEqual(ExpectSkillMap2, SkillMap2);
+         'false' -> ?_assertEqual(ExpectSkillMap, SkillMap2)
+     end
     ,?_assertEqual(ExpectAgentIdMap3, AgentIdMap3)
     ,?_assertEqual(ExpectCallIdMap3, CallIdMap3)
     ,?_assertEqual(ExpectAgentIdMap4, AgentIdMap4)
@@ -278,7 +322,10 @@ sbrr_multi_phase_test_() ->
     ,?_assertEqual([<<"1">>], pqueue4:to_list(RRQueue5))
     ,?_assertEqual(ExpectAgentIdMap5, AgentIdMap5)
     ,?_assertEqual(ExpectCallIdMap5, CallIdMap5)
-    ,?_assertEqual(ExpectSkillMap5, SkillMap5)
+    ,case FullLogoutAgents of
+         'true' -> ?_assertEqual(ExpectSkillMap5, SkillMap5);
+         'false' -> ?_assertEqual(ExpectSkillMap, SkillMap5)
+     end
     ,?_assertEqual([<<"1">>, <<"2">>, <<"4">>], pqueue4:to_list(RRQueue6))
     ,?_assertEqual(ExpectAgentIdMap6, AgentIdMap6)
     ,?_assertEqual(ExpectCallIdMap6, CallIdMap6)
@@ -395,8 +442,12 @@ add_agent({AgentId, Skills}, State) ->
 %% Remove an agent from an sbrr queue state.
 %% @end
 %%--------------------------------------------------------------------
-remove_agent(AgentId, State) ->
-    SS = acdc_queue_manager:update_strategy_with_agent(State, AgentId, 0, [], 'remove', 'busy'),
+remove_agent(AgentId, State, FullLogout) ->
+    Flag = case FullLogout of
+               'true' -> 'undefined';
+               'false' -> 'busy'
+           end,
+    SS = acdc_queue_manager:update_strategy_with_agent(State, AgentId, 0, [], 'remove', Flag),
     State#state{strategy_state=SS}.
 
 %%--------------------------------------------------------------------
@@ -411,8 +462,8 @@ add_call({CallId, Skills}, #state{current_member_calls=Calls}=State) ->
     Skills1 = lists:sort(Skills),
     Call = kapps_call:set_call_id(CallId, kapps_call:kvs_store(?ACDC_REQUIRED_SKILLS_KEY, Skills1, kapps_call:new())),
     Calls1 = Calls ++ [{0, Call}],
-    State1 = #state{strategy_state=#strategy_state{agents=SBRRSS}=SS} = State#state{current_member_calls=Calls1},
-    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), Calls1),
+    State1 = #state{strategy_state=SS} = State#state{current_member_calls=Calls1},
+    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SS, Calls1),
     State1#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.
 
 %%--------------------------------------------------------------------
@@ -425,6 +476,6 @@ remove_call(CallId, #state{current_member_calls=Calls}=State) ->
     Calls1 = lists:filter(fun({_, Call1}) ->
                                   kapps_call:call_id(Call1) =/= CallId
                           end, Calls),
-    State1 = #state{strategy_state=#strategy_state{agents=SBRRSS}=SS} = State#state{current_member_calls=Calls1},
-    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), Calls1),
+    State1 = #state{strategy_state=SS} = State#state{current_member_calls=Calls1},
+    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SS, Calls1),
     State1#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.

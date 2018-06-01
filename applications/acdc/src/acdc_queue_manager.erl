@@ -49,7 +49,7 @@
         ]).
 
 -ifdef(TEST).
--export([reseed_sbrrss_maps/3
+-export([reseed_sbrrss_maps/2
         ,ss_size/3
         ,update_strategy_with_agent/6
         ]).
@@ -1090,7 +1090,7 @@ update_sbrrss_with_agent(AgentId, Priority, Skills, 'add', Flag, #strategy_state
           end,
     SS2 = set_flag(AgentId, Flag, SS1),
     %% Reseed the map assigning calls to agents since agents changed.
-    SBRRSS1 = reseed_sbrrss_maps(SS2#strategy_state.agents, ss_size('sbrr', SS2, 'free'), Calls),
+    SBRRSS1 = reseed_sbrrss_maps(SS2, Calls),
     SS2#strategy_state{agents=SBRRSS1};
 update_sbrrss_with_agent(AgentId, _Priority, _Skills, 'remove', Flag, SS, Calls) ->
     %% In sbrr, the set_flag needs to happen first, as the ss_size controls the
@@ -1100,7 +1100,8 @@ update_sbrrss_with_agent(AgentId, _Priority, _Skills, 'remove', Flag, SS, Calls)
         'false' -> SS1;
         'true' ->
             lager:info("removing agent ~s from strategy sbrr", [AgentId]),
-            remove_agent('sbrr', AgentId, SS1, Calls)
+            FullLogout = Flag =:= 'undefined',
+            remove_agent('sbrr', AgentId, SS1, Calls, FullLogout)
     end.
 
 -spec remove_agent(queue_strategy(), ne_binary(), strategy_state()) -> strategy_state().
@@ -1132,12 +1133,12 @@ remove_agent('mi', AgentId, #strategy_state{agents=AgentL
                              }
     end.
 
--spec remove_agent('sbrr', ne_binary(), strategy_state(), list()) -> strategy_state().
+-spec remove_agent('sbrr', ne_binary(), strategy_state(), list(), boolean()) -> strategy_state().
 remove_agent('sbrr', AgentId, #strategy_state{agents=#{rr_queue := RRQueue
                                                       ,skill_map := SkillMap
                                                       }=SBRRSS
                                              ,details=Details
-                                             }=SS, Calls) ->
+                                             }=SS, Calls, FullLogout) ->
     case dict:find(AgentId, Details) of
         {'ok', {Count, _}} when Count > 1 ->
             SS#strategy_state{details=decr_agent(AgentId, Details)};
@@ -1147,13 +1148,19 @@ remove_agent('sbrr', AgentId, #strategy_state{agents=#{rr_queue := RRQueue
                                                   end
                                                  ,RRQueue
                                                  ),
+            %% Cannot remove agent from skill map unless they are logging out.
+            %% This is because agent_available_req depends on skill match.
+            SkillMap1 = case FullLogout of
+                            'true' -> remove_agent_from_skill_map(AgentId, SkillMap);
+                            'false' -> SkillMap
+                        end,
             SS1 = SS#strategy_state{agents=SBRRSS#{rr_queue := RRQueue1
-                                                  ,skill_map := remove_agent_from_skill_map(AgentId, SkillMap)
+                                                  ,skill_map := SkillMap1
                                                   }
                                    ,details=decr_agent(AgentId, Details)
                                    },
             %% Reseed the map assigning calls to agents since agents changed.
-            SBRRSS1 = reseed_sbrrss_maps(SS1#strategy_state.agents, ss_size('sbrr', SS1, 'free'), Calls),
+            SBRRSS1 = reseed_sbrrss_maps(SS1, Calls),
             SS1#strategy_state{agents=SBRRSS1}
     end.
 
@@ -1238,10 +1245,10 @@ skill_combinations([Skill|Skills], Combos) ->
 %%--------------------------------------------------------------------
 -spec maybe_reseed_sbrrss_maps(mgr_state()) -> mgr_state().
 maybe_reseed_sbrrss_maps(#state{strategy='sbrr'
-                               ,strategy_state=#strategy_state{agents=SBRRSS}=SS
+                               ,strategy_state=SS
                                ,current_member_calls=Calls
                                }=State) ->
-    SBRRSS1 = reseed_sbrrss_maps(SBRRSS, ss_size('sbrr', SS, 'free'), Calls),
+    SBRRSS1 = reseed_sbrrss_maps(SS, Calls),
     State#state{strategy_state=SS#strategy_state{agents=SBRRSS1}};
 maybe_reseed_sbrrss_maps(State) -> State.
 
@@ -1256,9 +1263,14 @@ maybe_reseed_sbrrss_maps(State) -> State.
 %% available agents have been assigned.
 %% @end
 %%--------------------------------------------------------------------
--spec reseed_sbrrss_maps(sbrr_strategy_state(), non_neg_integer(), list()) -> sbrr_strategy_state().
-reseed_sbrrss_maps(SBRRSS, MaxAssignments, Calls) ->
-    do_reseed_sbrrss_maps(clear_sbrrss_maps(SBRRSS), sets:new(), MaxAssignments, Calls).
+-spec reseed_sbrrss_maps(strategy_state(), list()) -> sbrr_strategy_state().
+reseed_sbrrss_maps(#strategy_state{agents=SBRRSS
+                                  ,ringing_agents=RingingAgents
+                                  ,busy_agents=BusyAgents
+                                  }=SS, Calls) ->
+    AssignedAgentIds = sets:from_list(RingingAgents ++ BusyAgents),
+    MaxAssignments = ss_size('sbrr', SS, 'free'),
+    do_reseed_sbrrss_maps(clear_sbrrss_maps(SBRRSS), AssignedAgentIds, MaxAssignments, Calls).
 
 -spec do_reseed_sbrrss_maps(sbrr_strategy_state(), sets:set(), non_neg_integer(), list()) -> sbrr_strategy_state().
 do_reseed_sbrrss_maps(SBRRSS, _, 0, _) ->
