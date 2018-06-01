@@ -1194,12 +1194,14 @@ set_flag(AgentId, Flag, #strategy_state{details=Details
 
 -spec update_skill_map_with_agent(ne_binary(), ne_binaries(), sbrr_skill_map()) -> sbrr_skill_map().
 update_skill_map_with_agent(AgentId, Skills, SkillMap) ->
+    %% Remove old skills for agent in case Skills has less than before
+    SkillMap1 = remove_agent_from_skill_map(AgentId, SkillMap),
     Combos = skill_combinations(Skills),
     lists:foldl(fun(Combo, MapAcc) ->
                         AgentIds = maps:get(Combo, MapAcc, sets:new()),
                         MapAcc#{Combo => sets:add_element(AgentId, AgentIds)}
                 end
-               ,SkillMap
+               ,SkillMap1
                ,Combos
                ).
 
