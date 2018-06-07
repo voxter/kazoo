@@ -339,11 +339,22 @@ split_by_prevassignedto(PNs) ->
                           true ->
                               lager:debug("prev_assigned_to is empty for ~s, ignoring", [number(PN)]),
                               undefined;
-                          false -> kz_util:format_account_db(PrevAssignedTo)
+                          false -> existing_db_key(kz_util:format_account_db(PrevAssignedTo))
                       end,
                 M#{Key => [PN | maps:get(Key, M, [])]}
         end,
     lists:foldl(F, #{}, PNs).
+
+-spec existing_db_key(binary()) -> api_binary().
+-ifdef(TEST).
+existing_db_key(Db) -> Db.
+-else.
+existing_db_key(Db) ->
+    case kz_datamgr:db_exists(Db) of
+        'false' -> 'undefined';
+        _ -> Db
+    end.
+-endif.
 
 -ifdef(TEST).
 fetch(Num, Options) ->
@@ -1729,7 +1740,7 @@ assign(T0) ->
 -spec unassign_from_prev(knm_numbers:collection()) -> knm_numbers:collection().
 unassign_from_prev(T0) ->
     ?LOG_DEBUG("unassign_from_prev"),
-    try_delete_from(fun split_by_prevassignedto/1, T0).
+    try_delete_from(fun split_by_prevassignedto/1, T0, true).
 
 try_delete_number_doc(T0) ->
     ?LOG_DEBUG("try_delete_number_doc"),
@@ -1739,7 +1750,12 @@ try_delete_account_doc(T0) ->
     ?LOG_DEBUG("try_delete_account_doc"),
     try_delete_from(fun split_by_assignedto/1, T0).
 
+-spec try_delete_from(fun(), knm_numbers:collection()) -> knm_numbers:collection().
 try_delete_from(SplitBy, T0) ->
+    try_delete_from(SplitBy, T0, false).
+
+-spec try_delete_from(fun(), knm_numbers:collection(), boolean()) -> knm_numbers:collection().
+try_delete_from(SplitBy, T0, IgnoreDbNotFound) ->
     F = fun (undefined, PNs, T) ->
                 ?LOG_DEBUG("skipping: no db for ~s", [[[number(PN),$\s] || PN <- PNs]]),
                 knm_numbers:add_oks(PNs, T);
@@ -1748,6 +1764,9 @@ try_delete_from(SplitBy, T0) ->
                 Nums = [kz_doc:id(to_json(PN)) || PN <- PNs],
                 case delete_docs(Db, Nums) of
                     {ok, JObjs} -> handle_bulk_change(Db, JObjs, PNs, T);
+                    {error, not_found} when IgnoreDbNotFound ->
+                        lager:debug("db ~s does not exist, ignoring", [Db]),
+                        knm_numbers:add_oks(PNs, T);
                     {error, E} ->
                         lager:error("failed to delete from ~s (~p): ~p", [Db, E, Nums]),
                         database_error(Nums, E, T)
