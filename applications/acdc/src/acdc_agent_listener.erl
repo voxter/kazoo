@@ -843,12 +843,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), call_id(NewCall), AcctId, AgentId, MyId),
     [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
-    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
-    kapps_call_command:send_display(CIDName
-                                   ,CIDNumber
-                                   ,ACallId
-                                   ,props:get_value(ACallId, ACallIds)
-                                   ),
+
     {'noreply', State#state{call=NewCall
                            ,original_call=Call
                            ,agent_call_ids=ACallIds1
