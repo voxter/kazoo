@@ -13,9 +13,7 @@
 
 -export([handle/2]).
 
--behaviour(gen_cf_action).
-
--include("callflow.hrl").
+-include_lib("callflow/src/callflow.hrl").
 
 %%------------------------------------------------------------------------------
 %% Handle execution of this callflow module

@@ -19,9 +19,7 @@
 
 -export([handle/2]).
 
--behaviour(gen_cf_action).
-
--include("callflow.hrl").
+-include_lib("callflow/src/callflow.hrl").
 
 -define(KVS_KEY, 'acdc_required_skills').
 

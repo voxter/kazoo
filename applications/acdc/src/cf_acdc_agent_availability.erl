@@ -12,7 +12,7 @@
 
 -export([handle/2]).
 
--include("../callflow.hrl").
+-include_lib("callflow/src/callflow.hrl").
 
 -define(AVAILABLE_BRANCH_KEY, <<"available">>).
 -define(UNAVAILABLE_BRANCH_KEY, <<"unavailable">>).
