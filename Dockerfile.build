@@ -22,6 +22,7 @@ RUN yum install -y \
         ncurses-devel \
         openssl \
         openssl-devel \
+        the_silver_searcher \
         unzip \
         wget \
         zip \
