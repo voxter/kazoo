@@ -95,10 +95,10 @@ cavs_from_request(ReqData, QueryString) ->
     CAVs = kz_json:get_json_value(<<"custom_application_vars">>, ReqData, kz_json:new()),
     kapps_call_util:filter_ccvs(kz_json:merge(CAVs, QueryString)).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% @doc Returns true if Account1 is a parent account of Account2
 %% @end
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 -spec is_parent_account(kz_term:ne_binary() | cb_context:context(), kz_term:ne_binary()) -> boolean().
 is_parent_account(<<_/binary>> = Account1, Account2) ->
     {'ok', JObj} = kzd_accounts:fetch(Account2),

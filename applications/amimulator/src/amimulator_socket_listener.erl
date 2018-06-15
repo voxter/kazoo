@@ -19,6 +19,7 @@
                ,account_id
                ,event_mask = 'on' :: list() | 'on' | 'off'
                ,challenge
+               ,server_id :: kz_term:api_ne_binary()
                }).
 -type state() :: #state{}.
 
@@ -90,6 +91,9 @@ handle_cast({'logout'}, #state{accept_socket=AcceptSocket
 handle_cast({'publish', Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
     {'noreply', State};
+handle_cast({'set_server_id', ServerId}, State) ->
+    lager:debug("updated server ID to ~s", [ServerId]),
+    {'noreply', State#state{server_id=ServerId}};
 handle_cast(Event, State) ->
     lager:debug("unhandled cast ~p", [Event]),
     {'noreply', State}.
@@ -100,11 +104,12 @@ handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
                                           ,account_id=AccountId
                                           ,event_mask=EventMask
                                           ,challenge=Challenge
+                                          ,server_id=ServerId
                                           }=State) ->
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
-            case amimulator_commander:handle(Bundle, AccountId, Challenge) of
+            case amimulator_commander:handle(Bundle, AccountId, Challenge, ServerId) of
                 [_|_]=Props ->
                     Result = props:get_value(<<"Ret">>, Props),
                     Challenge2 = props:get_value(<<"Challenge">>, Props),

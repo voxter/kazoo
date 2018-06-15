@@ -37,12 +37,14 @@
                  ,'amimulator_conf'
                  ,'amimulator_presence'
                  ,'amimulator_vm'
+                 ,'amimulator_originate_resp'
                  ]).
 
 -record(state, {account_id :: kz_term:ne_binary()
                ,pids = [] :: kz_term:pids()
                ,prune_timer_ref :: timer:tref() | 'undefined'
                ,extra_props = [] :: kz_term:proplist()
+               ,server_id :: kz_term:api_ne_binary()
                }).
 -type state() :: #state{}.
 
@@ -152,9 +154,14 @@ handle_cast({'init_modules', AccountId}, State) ->
     {'noreply', State};
 handle_cast({'register', Pid}, #state{pids=Pids
                                      ,prune_timer_ref=PruneRef
+                                     ,server_id=ServerId
                                      }=State) ->
     stop_prune_timer(PruneRef),
-    {'noreply', State#state{pids = [Pid | Pids], prune_timer_ref='undefined'}};
+    Pids1 = [Pid | Pids],
+    notify_of_server_id(ServerId, Pids1),
+    {'noreply', State#state{pids=Pids1
+                           ,prune_timer_ref='undefined'
+                           }};
 handle_cast({'unregister', Pid}, #state{account_id=AccountId
                                        ,pids=Pids
                                        ,prune_timer_ref=PruneRef
@@ -163,7 +170,9 @@ handle_cast({'unregister', Pid}, #state{account_id=AccountId
     NewPids = lists:delete(Pid, Pids),
     NewPruneRef = maybe_start_prune_timer(length(NewPids), AccountId),
     {'noreply', State#state{pids=NewPids, prune_timer_ref=NewPruneRef}};
-handle_cast({'gen_listener', {'created_queue', _QueueName}}, #state{account_id=AccountId}=State) ->
+handle_cast({'gen_listener', {'created_queue', QueueName}}, #state{account_id=AccountId
+                                                                  ,pids=Pids
+                                                                  }=State) ->
     amqp_util:bind_q_to_exchange(?QUEUE_NAME(AccountId), <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
 
     %% Send fully booted event to client
@@ -174,7 +183,9 @@ handle_cast({'gen_listener', {'created_queue', _QueueName}}, #state{account_id=A
               ],
     publish_amqp_event({'publish', Payload}, AccountId),
 
-    {'noreply', State};
+    notify_of_server_id(QueueName, Pids),
+
+    {'noreply', State#state{server_id=QueueName}};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
 handle_cast(_Msg, State) ->
@@ -222,11 +233,16 @@ load_bindings(Props) ->
 load_bindings(_, [], Acc) ->
     Acc;
 load_bindings(Props, [Mod|Mods], {Bindings, Responders}=Acc) ->
-    case Mod:bindings(Props) of
+    NewBindings = Mod:bindings(Props),
+    NewResponders = Mod:responders(Props),
+    case NewResponders of
         [] -> load_bindings(Props, Mods, Acc);
-        NewBindings ->
-            NewResponders = Mod:responders(Props),
-            load_bindings(Props, Mods, {NewBindings ++ Bindings, [{{Mod, 'handle_event'}, NewResponders} | Responders]})
+        _ ->
+            load_bindings(Props
+                         ,Mods
+                         ,{NewBindings ++ Bindings
+                          ,[{{Mod, 'handle_event'}, NewResponders} | Responders]
+                          })
     end.
 
 -spec maybe_start_prune_timer(non_neg_integer(), kz_term:ne_binary()) ->
@@ -253,3 +269,16 @@ stop_prune_timer(PruneRef) ->
             lager:debug("could not cancel prune timer ~p (~p)", [PruneRef, E]),
             'ok'
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Notify all processes listening using this event listener of a
+%% new AMQP queue (Server-ID) to include in command props
+%% @end
+%%------------------------------------------------------------------------------
+-spec notify_of_server_id(kz_term:api_ne_binary(), kz_term:pids()) -> 'ok'.
+notify_of_server_id('undefined', _) -> 'ok';
+notify_of_server_id(ServerId, Pids) ->
+    lists:foreach(fun(Pid) ->
+                          gen_server:cast(Pid, {'set_server_id', ServerId})
+                  end
+                 ,Pids).

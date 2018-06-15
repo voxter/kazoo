@@ -11,6 +11,9 @@
         ,format_prop/1
         ,format_binary/1
         ,format_json_events/1
+
+        ,parse_variable/1
+
         ,index_of/2
         ,create_call/1
         ,clear_call/1
@@ -23,9 +26,11 @@
         ,channel_string/1
         ,endpoint_exten/1
         ,queue_number/2
-        ,
 
-         find_id_number/2, queue_for_number/2]).
+        ,update_originate_props/1
+        ,kapps_call_from_ami_originate_props/1
+
+        ,find_id_number/2, queue_for_number/2]).
 
 %% AMI commands broken up by newlines
 -spec parse_payload(binary()) -> list().
@@ -77,6 +82,18 @@ format_json_events([{_K, _V}|_Other]=KVs, _Acc) ->
     [{KVs}];
 format_json_events([Event|Events], Acc) ->
     format_json_events(Events, Acc ++ [{Event}]).
+
+%%------------------------------------------------------------------------------
+%% @doc Parse AMI variable assignments of the format Key=Value into a
+%% pair.
+%% @end
+%%------------------------------------------------------------------------------
+-spec parse_variable(kz_term:ne_binary()) -> {binary(), binary()}.
+parse_variable(VarString) ->
+    case binary:split(VarString, <<"=">>) of
+        [K, V] -> {K, V};
+        [K] -> {K, <<>>}
+    end.
 
 %% Find the index of an element in a list
 
@@ -934,3 +951,85 @@ maybe_queue_in_flow(Flow) ->
                                                 %     Digest = crypto:hash('md5', kz_term:to_binary(Seed)),
                                                 %     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
                                                 %     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
+
+%%------------------------------------------------------------------------------
+%% @doc Add or update props used for origination commands
+%% @end
+%%------------------------------------------------------------------------------
+-spec update_originate_props(kz_term:proplist()) -> kz_term:proplist().
+update_originate_props(Props) ->
+    AccountId = props:get_ne_binary_value(<<"AccountId">>, Props),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    Channel = props:get_binary_value(<<"Channel">>, Props),
+    SourceExten = channel_to_exten(Channel),
+
+    props:set_values([{<<"AccountDb">>, AccountDb}
+                     ,{<<"SourceExten">>, SourceExten}
+                     ]
+                    ,Props).
+
+%%------------------------------------------------------------------------------
+%% @doc Extract an extension (username) from a channel string
+%% @end
+%%------------------------------------------------------------------------------
+-spec channel_to_exten(binary()) -> binary().
+channel_to_exten(Channel) ->
+    binary:replace(hd(binary:split(Channel, <<"@">>)), <<"SIP/">>, <<"">>).
+
+%%------------------------------------------------------------------------------
+%% @doc Create a kapps_call record with data pulled from props sent by
+%% an AMI Action: Originate
+%% @end
+%%------------------------------------------------------------------------------
+-spec kapps_call_from_ami_originate_props(kz_term:proplist()) -> kapps_call:call().
+kapps_call_from_ami_originate_props(Props) ->
+    Routines = [fun(C) -> kapps_call:set_account_id(props:get_ne_binary_value(<<"AccountId">>, Props), C) end
+               ,fun(C) -> maybe_assign_aleg_props(Props, C) end
+               ],
+    kapps_call:exec(Routines, kapps_call:new()).
+
+%%------------------------------------------------------------------------------
+%% @doc Try to set props on the call if the authorizing ID can be
+%% determined from the source extension
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_assign_aleg_props(kz_term:proplist(), kapps_call:call()) -> kapps_call:call().
+maybe_assign_aleg_props(Props, Call) ->
+    AccountDb = props:get_ne_binary_value(<<"AccountDb">>, Props),
+    SourceExten = props:get_binary_value(<<"SourceExten">>, Props),
+    case lookup_authorizing_id(AccountDb, SourceExten) of
+        {'error', E} ->
+            lager:debug("AMI: origination could not find aleg authorizing id (~p)", [E]),
+            Call;
+        {'ok', AuthorizingId} ->
+            assign_aleg_props(AuthorizingId, Props, Call)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Look up authorizing ID in account by username
+%% @end
+%%------------------------------------------------------------------------------
+-spec assign_aleg_props(kz_term:ne_binary(), kz_term:proplist(), kapps_call:call()) -> kapps_call:call().
+assign_aleg_props(AuthorizingId, Props, Call) ->
+    To = props:get_binary_value(<<"SourceExten">>, Props),
+    To1 = <<To/binary, "@blackholeami">>,
+    Routines = [{fun kapps_call:set_authorizing_id/2, AuthorizingId}
+               ,{fun kapps_call:set_authorizing_type/2, <<"user">>}
+               ,{fun kapps_call:set_request/2, To1}
+               ,{fun kapps_call:set_to/2, To1}
+               ,{fun kapps_call:set_resource_type/2, <<"audio">>}
+               ],
+    kapps_call:exec(Routines, Call).
+
+%%------------------------------------------------------------------------------
+%% @doc Look up authorizing ID in account by username
+%% @end
+%%------------------------------------------------------------------------------
+-spec lookup_authorizing_id(kz_term:ne_binary(), binary()) -> {'ok', kz_term:ne_binary()} | {'error', term()}.
+lookup_authorizing_id(AccountDb, Username) ->
+    ViewOptions = [{'key', Username}],
+    case kz_datamgr:get_results(AccountDb, <<"users/list_by_username">>, ViewOptions) of
+        {'ok', []} -> {'error', 'endpoint_not_found'};
+        {'ok', [Result]} -> {'ok', kz_json:get_ne_binary_value(<<"id">>, Result)};
+        E -> E
+    end.
