@@ -2397,7 +2397,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                ,member_call=MemberCall
                                ,agent_call_id=AgentCallId
                                ,member_call_queue_id=QueueId
-                               }) ->
+                               }=State) ->
     kz_util:put_callid(kapps_call:call_id(MemberCall)),
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
     Params = props:filter_undefined(
@@ -2405,7 +2405,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"agent_id">>, AgentId}
                ,{<<"agent_call_id">>, AgentCallId}
                ,{<<"queue_id">>, QueueId}
-               ,{<<"member_call_id">>, kapps_call:call_id(MemberCall)}
+               ,{<<"member_call_id">>, original_call_id(State)}
                ,{<<"caller_id_name">>, CIDName}
                ,{<<"caller_id_number">>, CIDNumber}
                ,{<<"call_state">>, Key}
