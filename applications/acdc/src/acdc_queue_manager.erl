@@ -1095,14 +1095,10 @@ update_sbrrss_with_agent(AgentId, Priority, Skills, 'add', Flag, #strategy_state
 update_sbrrss_with_agent(AgentId, _Priority, _Skills, 'remove', Flag, SS, Calls) ->
     %% In sbrr, the set_flag needs to happen first, as the ss_size controls the
     %% MaxAssignments variable in remove_agent
-    #strategy_state{agents=#{rr_queue := RRQueue}}=SS1 = set_flag(AgentId, Flag, SS),
-    case lists:member(AgentId, pqueue4:to_list(RRQueue)) of
-        'false' -> SS1;
-        'true' ->
-            lager:info("removing agent ~s from strategy sbrr", [AgentId]),
-            FullLogout = Flag =:= 'undefined',
-            remove_agent('sbrr', AgentId, SS1, Calls, FullLogout)
-    end.
+    SS1 = set_flag(AgentId, Flag, SS),
+    lager:info("removing agent ~s from strategy sbrr", [AgentId]),
+    FullLogout = Flag =:= 'undefined',
+    remove_agent('sbrr', AgentId, SS1, Calls, FullLogout).
 
 -spec remove_agent(queue_strategy(), ne_binary(), strategy_state()) -> strategy_state().
 remove_agent('rr', AgentId, #strategy_state{agents=AgentQueue
