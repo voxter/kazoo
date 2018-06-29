@@ -1333,13 +1333,20 @@ handle_waiting_stat(JObj, Props) ->
     case find_call_stat(Id) of
         'undefined' -> gen_listener:cast(props:get_value('server', Props), {'create_call', JObj});
         _Stat ->
+            %% Some fields are reset in case the call exited the queue and returned later
             Updates = props:filter_undefined(
-                        [{#call_stat.caller_id_name, kz_json:get_value(<<"Caller-ID-Name">>, JObj)}
-                        ,{#call_stat.caller_id_number, kz_json:get_value(<<"Caller-ID-Number">>, JObj)}
-                        ,{#call_stat.entered_timestamp, kz_json:get_value(<<"Entered-Timestamp">>, JObj)}
+                        [{#call_stat.entered_timestamp, kz_json:get_value(<<"Entered-Timestamp">>, JObj)}
+                        ,{#call_stat.abandoned_timestamp, 'undefined'}
                         ,{#call_stat.entered_position, kz_json:get_value(<<"Entered-Position">>, JObj)}
+                        ,{#call_stat.exited_position, 'undefined'}
+                        ,{#call_stat.abandoned_reason, 'undefined'}
+                        ,{#call_stat.is_callback, 'false'}
+                        ,{#call_stat.status, kz_json:get_value(<<"Event-Name">>, JObj)}
+                        ,{#call_stat.caller_id_name, kz_json:get_value(<<"Caller-ID-Name">>, JObj)}
+                        ,{#call_stat.caller_id_number, kz_json:get_value(<<"Caller-ID-Number">>, JObj)}
                         ,{#call_stat.caller_priority, kz_json:get_integer_value(<<"Caller-Priority">>, JObj)}
                         ,{#call_stat.required_skills, kz_json:get_list_value(<<"Required-Skills">>, JObj, [])}
+                        ,{#call_stat.is_archived, 'false'}
                         ]),
             update_call_stat(Id, Updates, Props)
     end.
@@ -1369,14 +1376,15 @@ handle_abandoned_stat(JObj, Props) ->
     %% If caller leaves quickly, the waiting entry might not have arrived yet
     case find_call_stat(Id) of
         'undefined' -> gen_listener:cast(props:get_value('server', Props), {'create_call', JObj});
-        _Stat ->
-            Updates = props:filter_undefined(
-                        [{#call_stat.abandoned_reason, kz_json:get_value(<<"Abandon-Reason">>, JObj)}
-                        ,{#call_stat.abandoned_timestamp, kz_json:get_value(<<"Abandon-Timestamp">>, JObj)}
-                        ,{#call_stat.status, <<"abandoned">>}
-                        ]),
-            update_call_stat(Id, Updates, Props)
-    end.
+        _Stat -> 'ok'
+    end,
+
+    Updates = props:filter_undefined(
+                [{#call_stat.abandoned_reason, kz_json:get_value(<<"Abandon-Reason">>, JObj)}
+                ,{#call_stat.abandoned_timestamp, kz_json:get_value(<<"Abandon-Timestamp">>, JObj)}
+                ,{#call_stat.status, <<"abandoned">>}
+                ]),
+    update_call_stat(Id, Updates, Props).
 
 -spec handle_marked_callback_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_marked_callback_stat(JObj, Props) ->

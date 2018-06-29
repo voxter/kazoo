@@ -971,11 +971,11 @@ originate(<<"ChanSpy">>, Props) ->
         {'ok', [JObj|_]} ->
             lager:debug("Successful originate, executing eavesdrop"),
             ServerId = kz_json:get_value(<<"Server-ID">>, JObj),
-            Prop = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
-                   ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-                    | kz_api:default_headers(ServerId, ?APP_NAME, ?APP_VERSION)
-                   ],
-            kapi_dialplan:publish_originate_execute(ServerId, Prop);
+            Req = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+                  ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                   | kz_api:default_headers(ServerId, ?APP_NAME, ?APP_VERSION)
+                  ],
+            kapi_dialplan:publish_originate_execute(ServerId, Req);
         {'error', E} ->
             lager:debug("error originating: ~p", [E]);
         {'timeout', _} ->

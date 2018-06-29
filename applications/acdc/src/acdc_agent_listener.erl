@@ -804,7 +804,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                                                                  ,agent_call_ids=ACallIds
                                                                  }=State) ->
     lager:debug("member's new call bridged to agent!"),
-    maybe_start_recording(NewCall, CallQueueId, AgentId, ShouldRecord, RecordingUrl),
+    maybe_start_recording(NewCall, CallQueueId, AgentId, ShouldRecord, RecordingUrl, kapps_call:call_id(Call)),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -1525,9 +1525,13 @@ should_record_endpoints(EPs, _, _) ->
               end, EPs).
 
 -spec maybe_start_recording(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), boolean(), kz_term:ne_binary()) -> 'ok'.
-maybe_start_recording(_Call, _, _, 'false', _) ->
+maybe_start_recording(Call, QueueId, AgentId, ShouldRecord, Url) ->
+    maybe_start_recording(Call, QueueId, AgentId, ShouldRecord, Url, 'undefined').
+
+-spec maybe_start_recording(kapps_call:call(), kz_term:ne_binary(), kz_term:ne_binary(), boolean(), kz_term:ne_binary(), kz_term:api_binary()) -> 'ok'.
+maybe_start_recording(_Call, _, _, 'false', _, _) ->
     lager:debug("not recording this call");
-maybe_start_recording(Call, QueueId, AgentId, 'true', Url) ->
+maybe_start_recording(Call, QueueId, AgentId, 'true', Url, OriginalCallId) ->
     AccountDb = kapps_call:account_db(Call),
     {'ok', QueueJObj} = kz_datamgr:open_cache_doc(AccountDb, QueueId),
     {'ok', AgentJObj} = kz_datamgr:open_cache_doc(AccountDb, AgentId),
@@ -1539,6 +1543,7 @@ maybe_start_recording(Call, QueueId, AgentId, 'true', Url) ->
           ,{<<"url">>, Url}
           ,{<<"extra_metadata">>, [{<<"queue_name">>, QueueName}
                                   ,{<<"agent_username">>, AgentName}
+                                  ,{<<"original_call_id">>, OriginalCallId}
                                   ]}
           ]),
     lager:debug("starting recording listener for ~s", [Url]),

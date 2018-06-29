@@ -215,7 +215,7 @@ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
     Transferee = kz_call_event:call_id(JObj),
     gen_statem:cast(ServerRef, {'channel_transferee', Transferor, Transferee});
 call_event(ServerRef, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
-    gen_statem:cast(ServerRef, {'playback_stop', JObj});
+    gen_statem:cast(ServerRef, {'playback_stop', kz_call_event:call_id(JObj)});
 call_event(_, _C, _E, _) ->
     lager:info("Unhandled combo: ~s/~s", [_C, _E]).
 
@@ -756,7 +756,7 @@ ready('cast', ?NEW_CHANNEL_TO(CallId, 'undefined'), State) ->
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
 ready('cast', ?NEW_CHANNEL_TO(CallId, MemberCallId), State) ->
     cancel_if_failed_originate(CallId, MemberCallId, 'ready', State);
-ready('cast', {'playback_stop', _JObj}, State) ->
+ready('cast', {'playback_stop', _}, State) ->
     {'next_state', 'ready', State};
 ready('cast', Evt, State) ->
     handle_event(Evt, ready, State);
@@ -854,7 +854,7 @@ ringing('cast', {'agent_timeout', _JObj}, #state{agent_listener=AgentListener
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     {'next_state', 'ringing', State};
-ringing('cast', {'playback_stop', _JObj}, State) ->
+ringing('cast', {'playback_stop', _}, State) ->
     {'next_state', 'ringing', State};
 ringing('cast', {'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
                                                          ,member_call=MemberCall
@@ -1158,20 +1158,20 @@ ringing_callback('cast', ?NEW_CHANNEL_TO(CallId, MemberCallId), #state{member_ca
     {'next_state', 'ringing_callback', State};
 ringing_callback('cast', ?NEW_CHANNEL_TO(CallId, MemberCallId), State) ->
     cancel_if_failed_originate(CallId, MemberCallId, 'ringing_callback', State);
-ringing_callback('cast', {'playback_stop', _}, #state{agent_callback_call='undefined'}=State) ->
-    {'next_state', 'ringing_callback', State};
-ringing_callback('cast', {'playback_stop', _JObj}, #state{member_call=Call
-                                                         ,member_call_id=MemberCallId
-                                                         ,monitoring='true'
-                                                         }=State) ->
+ringing_callback('cast', {'playback_stop', ACallId}, #state{member_call=Call
+                                                           ,member_call_id=MemberCallId
+                                                           ,agent_call_id=ACallId
+                                                           ,monitoring='true'
+                                                           }=State) ->
     {'next_state', 'awaiting_callback', State#state{member_original_call=Call
                                                    ,member_original_call_id=MemberCallId
                                                    }};
-ringing_callback('cast', {'playback_stop', _JObj}, #state{agent_listener=AgentListener
-                                                         ,member_call=Call
-                                                         ,member_call_id=MemberCallId
-                                                         ,agent_callback_call=AgentCallbackCall
-                                                         }=State) ->
+ringing_callback('cast', {'playback_stop', ACallId}, #state{agent_listener=AgentListener
+                                                           ,member_call=Call
+                                                           ,member_call_id=MemberCallId
+                                                           ,agent_call_id=ACallId
+                                                           ,agent_callback_call=AgentCallbackCall
+                                                           }=State) ->
     NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall),
     kz_util:put_callid(NewMemberCallId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
@@ -1181,6 +1181,8 @@ ringing_callback('cast', {'playback_stop', _JObj}, #state{agent_listener=AgentLi
                                                    ,member_original_call=Call
                                                    ,member_original_call_id=MemberCallId
                                                    }};
+ringing_callback('cast', {'playback_stop', _}, State) ->
+    {'next_state', 'ringing_callback', State};
 ringing_callback('cast', {'usurp_control', _}, State) ->
     {'next_state', 'ringing_callback', State};
 ringing_callback('cast', Evt, State) ->
@@ -1348,7 +1350,7 @@ awaiting_callback('cast', {'leg_created', CallId, OtherLegCallId}=Evt, #state{ag
     end;
 awaiting_callback('cast', {'leg_destroyed', _}, State) ->
     {'next_state', 'awaiting_callback', State};
-awaiting_callback('cast', {'playback_stop', _JObj}, State) ->
+awaiting_callback('cast', {'playback_stop', _}, State) ->
     {'next_state', 'awaiting_callback', State};
 awaiting_callback('cast', {'usurp_control', _}, State) ->
     {'next_state', 'awaiting_callback', State};
@@ -1425,7 +1427,7 @@ answered('cast', {'dialplan_error', _App}, #state{agent_listener=AgentListener
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
-answered('cast', {'playback_stop', _JObj}, State) ->
+answered('cast', {'playback_stop', _}, State) ->
     {'next_state', 'answered', State};
 answered('cast', ?DESTROYED_CHANNEL(CallId, Cause), #state{member_call_id=CallId
                                                           ,outbound_call_ids=[]
@@ -1703,7 +1705,7 @@ paused('info', Evt, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec outbound(gen_statem:event_type(), any(), state()) -> kz_types:handle_fsm_ret(state()).
-outbound('cast', {'playback_stop', _JObj}, State) ->
+outbound('cast', {'playback_stop', _}, State) ->
     {'next_state', 'outbound', State};
 outbound('cast', ?DESTROYED_CHANNEL(CallId, Cause), #state{agent_listener=AgentListener
                                                           ,outbound_call_ids=OutboundCallIds
@@ -2348,7 +2350,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                ,member_call=MemberCall
                                ,agent_call_id=AgentCallId
                                ,member_call_queue_id=QueueId
-                               }) ->
+                               }=State) ->
     kz_util:put_callid(kapps_call:call_id(MemberCall)),
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
     Params = props:filter_undefined(
@@ -2356,7 +2358,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"agent_id">>, AgentId}
                ,{<<"agent_call_id">>, AgentCallId}
                ,{<<"queue_id">>, QueueId}
-               ,{<<"member_call_id">>, kapps_call:call_id(MemberCall)}
+               ,{<<"member_call_id">>, original_call_id(State)}
                ,{<<"caller_id_name">>, CIDName}
                ,{<<"caller_id_number">>, CIDNumber}
                ,{<<"call_state">>, Key}
