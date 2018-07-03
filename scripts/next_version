@@ -3,9 +3,9 @@
 . $(dirname $0)/increment_version.bash  --source-only
 
 branch=$(git rev-parse --abbrev-ref HEAD)
-parent=$(git show-branch 2>/dev/null | grep '\*' | grep -v "$branch" | head -n1 | sed 's/.*\[\(.*\)\].*/\1/' | sed 's/[\^~].*//')
+parent=$(git show-branch 2>/dev/null | grep '\*' | head -n1 | sed 's/.*\[\(.*\)\].*/\1/' | sed 's/[\^~].*//')
 if [[ $parent == "master" ]]
-then   
+then
    version=$(cat $(dirname $0)/../VERSION)
 else
    version=$parent
