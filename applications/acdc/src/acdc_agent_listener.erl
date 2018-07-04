@@ -20,7 +20,7 @@
         ,agent_timeout/1
         ,bridge_to_member/6
         ,originate_callback_to_agent/7
-        ,originate_callback_return/2
+        ,originate_callback_return/3
         ,hangup_call/1
         ,monitor_call/4
         ,channel_hungup/2
@@ -260,9 +260,9 @@ bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
 originate_callback_to_agent(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
     gen_listener:cast(Srv, {'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
 
--spec originate_callback_return(pid(), kapps_call:call()) -> ne_binary().
-originate_callback_return(Srv, Call) ->
-    gen_listener:call(Srv, {'originate_callback_return', Call}).
+-spec originate_callback_return(pid(), kapps_call:call(), {api_binary(), api_binary()}) -> ne_binary().
+originate_callback_return(Srv, Call, CID) ->
+    gen_listener:call(Srv, {'originate_callback_return', Call, CID}).
 
 -spec channel_hungup(pid(), ne_binary()) -> 'ok'.
 channel_hungup(Srv, CallId) ->
@@ -441,8 +441,8 @@ init([Supervisor, Agent, Queues]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
-handle_call({'originate_callback_return', Call}, _, #state{my_q=MyQ}=State) ->
-    MemberCallId = do_originate_callback_return(MyQ, Call),
+handle_call({'originate_callback_return', Call, CID}, _, #state{my_q=MyQ}=State) ->
+    MemberCallId = do_originate_callback_return(MyQ, Call, CID),
     {'reply', MemberCallId, State};
 handle_call('last_connect', _, #state{last_connect=LastConnect}=State) ->
     {'reply', LastConnect, State, 'hibernate'};
@@ -1389,8 +1389,8 @@ outbound_call_id(Call, AgentId) ->
 %% Returns a target call id that has been hooked for events
 %% @end
 %%--------------------------------------------------------------------
--spec do_originate_callback_return(ne_binary(), kapps_call:call()) -> ne_binary().
-do_originate_callback_return(MyQ, Call) ->
+-spec do_originate_callback_return(ne_binary(), kapps_call:call(), {api_binary(), api_binary()}) -> ne_binary().
+do_originate_callback_return(MyQ, Call, {CIDNumber, CIDName}) ->
     MsgId = kz_binary:rand_hex(4),
 
     Extension = kapps_call:custom_channel_var(<<"Callback-Number">>, Call),
@@ -1420,6 +1420,12 @@ do_originate_callback_return(MyQ, Call) ->
                    ,{<<"Existing-Call-ID">>, TransferorLeg}
                    ])),
 
+    %% Avoid "anonymous" CID name
+    CIDName1 = case CIDName of
+                   <<>> -> CIDNumber;
+                   _ -> CIDName
+               end,
+
     Request = props:filter_undefined(
                 [{<<"Endpoints">>, [Endpoint]}
                 ,{<<"Outbound-Call-ID">>, TargetCallId}
@@ -1434,10 +1440,10 @@ do_originate_callback_return(MyQ, Call) ->
                 ,{<<"Application-Name">>, <<"bridge">>}
                 ,{<<"Timeout">>, 60}
 
-                ,{<<"Outbound-Caller-ID-Name">>, kapps_call:callee_id_number(Call)}
-                ,{<<"Outbound-Caller-ID-Number">>, kapps_call:callee_id_number(Call)}
-                ,{<<"Caller-ID-Name">>, kapps_call:callee_id_number(Call)}
-                ,{<<"Caller-ID-Number">>, kapps_call:callee_id_number(Call)}
+                ,{<<"Outbound-Caller-ID-Name">>, CIDName1}
+                ,{<<"Outbound-Caller-ID-Number">>, CIDNumber}
+                ,{<<"Caller-ID-Name">>, CIDName1}
+                ,{<<"Caller-ID-Number">>, CIDNumber}
 
                 ,{<<"Existing-Call-ID">>, TransferorLeg}
                 ,{<<"Resource-Type">>, <<"originate">>}
