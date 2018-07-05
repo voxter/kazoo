@@ -16,4 +16,5 @@ fpm -s dir \
     -d "bash-completion" \
     -d "esl-erlang >= 19.3" \
     --after-install scripts/rpm/after-install.sh \
-    $@ _rel/kazoo
+    -C _rel/kazoo \
+    $@ .
