@@ -1189,7 +1189,8 @@ ringing_callback({'playback_stop', ACallId}, #state{agent_listener=AgentListener
                                                    ,agent_call_id=ACallId
                                                    ,agent_callback_call=AgentCallbackCall
                                                    }=State) ->
-    NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall),
+    CID = kapps_call:callee_id(Call),
+    NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall, CID),
     kz_util:put_callid(NewMemberCallId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
 
