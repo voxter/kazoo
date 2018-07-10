@@ -1059,6 +1059,8 @@ ringing_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=Agen
 ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
                                                     ,agent_id=AgentId
                                                     ,agent_listener=AgentListener
+                                                    ,member_call_id=CallId
+                                                    ,member_call_queue_id=QueueId
                                                     ,queue_notifications=Ns
                                                     ,agent_call_id=ACallId
                                                     ,agent_callback_call=ACall
@@ -1073,6 +1075,8 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
     acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
+
+    acdc_stats:call_handled(AccountId, QueueId, CallId, AgentId),
 
     {'next_state', 'ringing_callback', State#state{connect_failures=0}};
 ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
