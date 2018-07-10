@@ -24,7 +24,6 @@
 
 -define(CHILDREN, [?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_call', [acdc_stats:call_table_id(), acdc_stats:call_table_opts()])
                   ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_call_summary', [acdc_stats:call_summary_table_id(), acdc_stats:call_summary_table_opts()])
-                  ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_agent_call', [acdc_stats:agent_call_table_id(), acdc_stats:agent_call_table_opts()])
                   ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_status', [acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts()])
                   ,?WORKER_NAME_ARGS('acdc_stats_etsmgr', 'acdc_stats_agent_cur_status', [acdc_agent_stats:agent_cur_status_table_id(), acdc_agent_stats:agent_cur_status_table_opts()])
                   ,?WORKER('acdc_stats')

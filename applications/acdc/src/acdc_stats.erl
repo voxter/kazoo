@@ -45,10 +45,6 @@
         ,call_summary_key_pos/0
         ,call_summary_table_opts/0
 
-        ,agent_call_table_id/0
-        ,agent_call_key_pos/0
-        ,agent_call_table_opts/0
-
         ,init_db/1
         ,archive_call_data/2
         ]).
@@ -365,16 +361,6 @@ call_summary_table_opts() ->
     ,{'keypos', call_summary_key_pos()}
     ].
 
--spec agent_call_table_id() -> atom().
--spec agent_call_key_pos() -> pos_integer().
--spec agent_call_table_opts() -> kz_proplist().
-agent_call_table_id() -> 'acdc_stats_agent_call'.
-agent_call_key_pos() -> #agent_call_stat.id.
-agent_call_table_opts() ->
-    ['bag', 'protected', 'named_table'
-    ,{'keypos', agent_call_key_pos()}
-    ].
-
 -define(BINDINGS, [{'self', []}
                   ,{?MODULE, []}
                   ]).
@@ -594,19 +580,14 @@ handle_cast({'update_call', Id, Updates}, State) ->
 
     Stat = find_call_stat(Id),
     maybe_add_summary_stat(Stat),
-    maybe_add_agent_call_stat(Stat),
 
     {'noreply', State};
 handle_cast({'add_miss', JObj}, State) ->
     Id = call_stat_id(JObj),
     lager:debug("adding miss to stat ~s", [Id]),
-    #call_stat{misses=Misses}=Stat = find_call_stat(Id),
+    #call_stat{misses=Misses} = find_call_stat(Id),
     Updates = [{#call_stat.misses, [create_miss(JObj) | Misses]}],
     ets:update_element(call_table_id(), Id, Updates),
-
-    add_agent_call_stat_miss(Stat
-                            ,kz_json:get_value(<<"Agent-ID">>, JObj)
-                            ,kz_json:get_value(<<"Miss-Timestamp">>, JObj)),
 
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
@@ -614,14 +595,12 @@ handle_cast({'flush_call', Id}, State) ->
 
     ets:delete(call_table_id(), Id),
     ets:delete(call_summary_table_id(), Id),
-    ets:delete(agent_call_table_id(), Id),
 
     {'noreply', State};
 handle_cast({'remove_call', [{M, P, _}]=MatchSpec}, State) ->
     Stats = ets:select(call_table_id(), MatchSpec),
     lists:foreach(fun(#call_stat{id=Id}) ->
-                          ets:delete(call_summary_table_id(), Id),
-                          ets:delete(agent_call_table_id(), Id)
+                          ets:delete(call_summary_table_id(), Id)
                   end, Stats),
 
     Match = [{M, P, ['true']}],
@@ -835,19 +814,25 @@ agent_call_build_match_spec(JObj) ->
         'undefined' ->
             {'error', kz_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
         AccountId ->
-            AccountMatch = {#agent_call_stat{account_id='$1', _='_'}
+            AccountMatch = {#call_stat{account_id='$1'
+                                      ,queue_id='$2'
+                                      ,agent_id='$3'
+                                      ,misses='$4'
+                                      ,status='$5'
+                                      ,_='_'
+                                      }
                            ,[{'=:=', '$1', {'const', AccountId}}]
                            },
             agent_call_build_match_spec(JObj, AccountMatch)
     end.
 
--spec agent_call_build_match_spec(kz_json:object(), {agent_call_stat(), list()}) ->
+-spec agent_call_build_match_spec(kz_json:object(), {call_stat(), list()}) ->
                                          {'ok', ets:match_spec()} |
                                          {'error', kz_json:object()}.
 agent_call_build_match_spec(JObj, AccountMatch) ->
     case kz_json:foldl(fun agent_call_match_builder_fold/3, AccountMatch, JObj) of
         {'error', _Errs}=Errors -> Errors;
-        {Stat, Constraints} -> {'ok', [{Stat, Constraints, ['$_']}]}
+        {Stat, Constraints} -> {'ok', [{Stat, Constraints, [{{'$2', '$3', '$4', '$5'}}]}]}
     end.
 
 agent_call_match_builder_fold(_, _, {'error', _Err}=E) -> E;
@@ -954,7 +939,7 @@ query_call_summary_fold(#call_summary_stat{queue_id=QueueId
 
 -spec query_agent_calls(ne_binary(), ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
-    case ets:select(agent_call_table_id(), Match) of
+    case ets:select(call_table_id(), Match) of
         [] ->
             lager:debug("no stats found, sorry ~s", [RespQ]),
             Resp = [{<<"Query-Time">>, kz_time:current_tstamp()}
@@ -963,7 +948,7 @@ query_agent_calls(RespQ, MsgId, Match, _Limit) ->
                    ],
             kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp);
         Stats ->
-            QueryResult = lists:foldl(fun query_agent_calls_fold/2, kz_json:new(), Stats),
+            QueryResult = kz_json:from_map(lists:foldl(fun add_agent_call/2, #{}, Stats)),
             Resp = kz_json:to_proplist(kz_json:set_value(<<"Data">>, QueryResult, kz_json:new())) ++
                 kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
                 [{<<"Query-Time">>, kz_time:current_tstamp()}
@@ -972,25 +957,36 @@ query_agent_calls(RespQ, MsgId, Match, _Limit) ->
             kapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp)
     end.
 
--spec query_agent_calls_fold(agent_call_stat(), kz_json:object()) -> kz_json:object().
-query_agent_calls_fold(#agent_call_stat{agent_id=AgentId}=Stat, JObj) ->
-    AgentJObj = kz_json:get_value(AgentId, JObj, []),
-    kz_json:set_value(AgentId, increment_agent_calls(Stat, AgentJObj), JObj).
+-spec add_agent_call(tuple(), map()) -> map().
+add_agent_call({QueueId, AgentId, Misses, Status}, Map) ->
+    Map1 = increment_agent_calls(QueueId, AgentId, Status, Map),
+    lists:foldl(fun({_, MissAgentId, _, _}, MapAcc) ->
+                        increment_agent_misses(QueueId, MissAgentId, MapAcc)
+                end
+               ,Map1
+               ,Misses
+               ).
 
--spec increment_agent_calls(agent_call_stat(), kz_json:object()) -> kz_json:object().
-increment_agent_calls(#agent_call_stat{queue_id=QueueId
-                                      ,status=Status
-                                      }, AgentJObj) ->
-    case Status of
-        <<"handled">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
-        <<"missed">> -> increment_agent_calls(QueueId, AgentJObj, <<"missed_calls">>);
-        _ -> AgentJObj
-    end.
+-spec increment_agent_calls(ne_binary(), ne_binary(), ne_binary(), map()) -> map().
+increment_agent_calls(QueueId, AgentId, Status, Map) when Status =:= <<"handled">>
+                                                          orelse Status =:= <<"processed">> ->
+    increment_agent_call_stat(QueueId, AgentId, <<"answered_calls">>, Map);
+increment_agent_calls(_, _, _, Map) -> Map.
 
--spec increment_agent_calls(ne_binary(), kz_json:object(), ne_binary()) -> kz_json:object().
-increment_agent_calls(QueueId, AgentJObj, Key) ->
-    Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
-    kz_json:set_value([QueueId, Key], Count, AgentJObj).
+-spec increment_agent_misses(ne_binary(), ne_binary(), map()) -> map().
+increment_agent_misses(QueueId, AgentId, Map) ->
+    increment_agent_call_stat(QueueId, AgentId, <<"missed_calls">>, Map).
+
+-spec increment_agent_call_stat(ne_binary(), ne_binary(), ne_binary(), map()) -> map().
+increment_agent_call_stat(QueueId, AgentId, Stat, Map) ->
+    AgentMap = maps:get(AgentId, Map, #{}),
+    Map#{AgentId => increment_agent_call_stat(QueueId, Stat, AgentMap)}.
+
+-spec increment_agent_call_stat(ne_binary(), ne_binary(), map()) -> map().
+increment_agent_call_stat(QueueId, Stat, Map) ->
+    QueueMap = maps:get(QueueId, Map, #{}),
+    QueueMap1 = maps:update_with(Stat, fun(V) -> V + 1 end, 1, QueueMap),
+    Map#{QueueId => QueueMap1}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1454,20 +1450,6 @@ maybe_add_summary_stat(#call_stat{status=Status}=Stat)
     ets:insert(call_summary_table_id(), call_stat_to_summary_stat(Stat));
 maybe_add_summary_stat(_) -> 'false'.
 
--spec maybe_add_agent_call_stat(call_stat()) -> boolean().
-maybe_add_agent_call_stat(#call_stat{status= <<"handled">>}=Stat) ->
-    ets:insert(agent_call_table_id(), call_stat_to_agent_call_stat(Stat));
-maybe_add_agent_call_stat(_) -> 'false'.
-
--spec add_agent_call_stat_miss(call_stat(), ne_binary(), non_neg_integer()) -> 'true'.
-add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
-    AgentStat = call_stat_to_agent_call_stat(Stat),
-    AgentStat1 = AgentStat#agent_call_stat{agent_id=AgentId
-                                          ,status= <<"missed">>
-                                          ,timestamp=Timestamp
-                                          },
-    ets:insert(agent_call_table_id(), AgentStat1).
-
 -spec maybe_insert_agent_cur_status(status_stat(), status_stat()) -> boolean().
 maybe_insert_agent_cur_status(#status_stat{status= <<"logged_out">>, timestamp=Timestamp}
                              ,#status_stat{status= <<"pending_logged_out">>, timestamp=Timestamp1}=Stat
@@ -1502,21 +1484,3 @@ call_stat_to_summary_stat(#call_stat{id=Id
                       ,status=Status
                       ,wait_time=wait_time(EnteredTimestamp, AbandonedTimestamp, HandledTimestamp)
                       }.
-
--spec call_stat_to_agent_call_stat(call_stat()) -> agent_call_stat().
-call_stat_to_agent_call_stat(#call_stat{id=Id
-                                       ,call_id=CallId
-                                       ,account_id=AccountId
-                                       ,queue_id=QueueId
-                                       ,agent_id=AgentId
-                                       ,status=Status
-                                       ,handled_timestamp=HandledTimestamp
-                                       }) ->
-    #agent_call_stat{id=Id
-                    ,account_id=AccountId
-                    ,queue_id=QueueId
-                    ,agent_id=AgentId
-                    ,call_id=CallId
-                    ,status=Status
-                    ,timestamp=HandledTimestamp
-                    }.

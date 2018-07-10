@@ -34,9 +34,9 @@
 
                    ,abandoned_reason :: api_binary() | '_'
                    ,is_callback = 'false' :: boolean() | '_'
-                   ,misses = [] :: agent_misses() | '_'
+                   ,misses = [] :: agent_misses() | '$4' | '_'
 
-                   ,status :: api_binary() | '$1' | '$2' | '$4' | '_'
+                   ,status :: api_binary() | '$1' | '$2' | '$4' | '$5' | '_'
                    ,caller_id_name :: api_binary() | '_'
                    ,caller_id_number :: api_binary() | '_'
                    ,caller_priority :: api_integer() | '_'
@@ -54,16 +54,6 @@
                            ,timestamp :: api_integer() | '_'
                            }).
 -type call_summary_stat() :: #call_summary_stat{}.
-
--record(agent_call_stat, {id :: api_binary() | '_'
-                         ,account_id :: api_binary() | '$1'
-                         ,queue_id :: api_binary() | '_'
-                         ,agent_id :: api_binary() | '_'
-                         ,call_id :: api_binary() | '_'
-                         ,status :: api_binary() | '_'
-                         ,timestamp :: api_integer() | '_'
-                         }).
--type agent_call_stat() :: #agent_call_stat{}.
 
 -define(STATUS_STATUSES, [<<"logged_in">>, <<"logged_out">>, <<"ready">>
                          ,<<"connecting">>, <<"connected">>
