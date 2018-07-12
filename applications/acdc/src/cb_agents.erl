@@ -358,7 +358,7 @@ fetch_stats_summary(Context) ->
                                   ,kz_json:get_value(<<"Error-Reason">>, E)
                                   ,Context
                                   );
-        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, []), Context)
+        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, kz_json:new()), Context)
     end.
 
 -spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().
@@ -497,7 +497,7 @@ format_stats(Context, Resp) ->
                  ,kz_json:new()
                  ,Stats
                  )
-                          ,Context
+     ,Context
      ).
 
 -spec format_stats_fold(kz_json:object(), kz_json:object()) ->
@@ -642,12 +642,12 @@ validate_status_change(Context, S) ->
             lager:debug("status ~s not valid", [S]),
             cb_context:add_validation_error(
               <<"status">>
-                                           ,<<"enum">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, <<"value is not a valid status">>}
-                                              ,{<<"cause">>, S}
-                                              ])
-                                           ,Context
+                  ,<<"enum">>
+                  ,kz_json:from_list(
+                     [{<<"message">>, <<"value is not a valid status">>}
+                     ,{<<"cause">>, S}
+                     ])
+             ,Context
              )
     end.
 
@@ -660,12 +660,12 @@ check_for_status_error(Context, S) ->
             lager:debug("status ~s not found", [S]),
             cb_context:add_validation_error(
               <<"status">>
-                                           ,<<"enum">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, <<"value is not a valid status">>}
-                                              ,{<<"cause">>, S}
-                                              ])
-                                           ,Context
+                  ,<<"enum">>
+                  ,kz_json:from_list(
+                     [{<<"message">>, <<"value is not a valid status">>}
+                     ,{<<"cause">>, S}
+                     ])
+             ,Context
              )
     end.
 
@@ -679,12 +679,12 @@ validate_status_change_params(Context, <<"pause">>) ->
             lager:debug("bad int for pause: ~p", [N]),
             cb_context:add_validation_error(
               <<"timeout">>
-                                           ,<<"minimum">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, <<"value must be at least greater than or equal to 0">>}
-                                              ,{<<"cause">>, N}
-                                              ])
-                                           ,Context
+                  ,<<"minimum">>
+                  ,kz_json:from_list(
+                     [{<<"message">>, <<"value must be at least greater than or equal to 0">>}
+                     ,{<<"cause">>, N}
+                     ])
+             ,Context
              )
     catch
         _E:_R -> cb_context:set_resp_status(Context, 'success')
