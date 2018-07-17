@@ -725,7 +725,10 @@ handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
                          ]),
     {'noreply', State1};
 
-handle_cast({'handle_queue_member_remove', CallId}, #state{current_member_calls=Calls
+handle_cast({'handle_queue_member_remove', CallId}, #state{ignored_member_calls=Dict
+                                                          ,account_id=AccountId
+                                                          ,queue_id=QueueId
+                                                          ,current_member_calls=Calls
                                                           ,announcements_pids=Pids
                                                           }=State) ->
     Call = queue_member(CallId, Calls),
@@ -742,7 +745,9 @@ handle_cast({'handle_queue_member_remove', CallId}, #state{current_member_calls=
                          ,{fun maybe_reseed_sbrrss_maps/1, []}
                          ]
                         ),
-    {'noreply', State2};
+    %% Ensure other nodes have removed the ignore key
+    K = make_ignore_key(AccountId, QueueId, CallId),
+    {'noreply', State2#state{ignored_member_calls=dict:erase(K, Dict)}};
 
 handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
                                                         ,queue_id=QueueId
