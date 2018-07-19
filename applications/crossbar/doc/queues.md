@@ -235,6 +235,50 @@ curl -v -X GET \
 ```
 
 
+#### List waiting members (call IDs) of queue
+
+> GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": [
+        "OCkFHuCXEcS54Ce2cDFkMkeXIe65EqPK"
+    ],
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
+#### Remove a queue member from queue
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members/{CALL_ID}
+
+```shell
+curl -v -X DELETE \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members/{CALL_ID}
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": "member remove sent",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
 #### Clear a queue's roster
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
