@@ -33,21 +33,27 @@
 %%% /queues/QID/eavesdrop
 %%%   PUT: ring a phone/user and eavesdrop on the queue's calls
 %%%
+%%% /queues/QID/members
+%%%   GET: list members of a queue
+%%% /queues/QID/members/{call_id}
+%%%   DELETE: remove a call from a queue
+%%%
 %%% @end
 %%% @contributors:
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(cb_queues).
 
 -export([init/0
-        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
+        ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
         ,content_types_provided/1, content_types_provided/2
-        ,validate/1, validate/2, validate/3
+        ,validate/1, validate/2, validate/3, validate/4
         ,put/1, put/2, put/3
         ,post/2, post/3
         ,patch/2
-        ,delete/2, delete/3
+        ,delete/2, delete/3, delete/4
         ,delete_account/2
         ]).
 -export([maybe_add_queue_to_agent/2, maybe_rm_queue_from_agent/2]).
@@ -64,6 +70,7 @@
 -define(STATS_SUMMARY_PATH_TOKEN, <<"stats_summary">>).
 -define(ROSTER_PATH_TOKEN, <<"roster">>).
 -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
+-define(MEMBERS_PATH_TOKEN, <<"members">>).
 
 -define(STAT_TIMESTAMP_PROCESSED, <<"finished_with_agent">>).
 -define(STAT_TIMESTAMP_HANDLING, <<"connected_with_agent">>).
@@ -125,6 +132,7 @@ init() ->
 -spec allowed_methods() -> http_methods().
 -spec allowed_methods(path_token()) -> http_methods().
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
+-spec allowed_methods(path_token(), path_token(), path_token()) -> http_methods().
 
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
@@ -140,7 +148,12 @@ allowed_methods(_QueueId) ->
 allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
 allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
-    [?HTTP_PUT].
+    [?HTTP_PUT];
+allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN) ->
+    [?HTTP_GET].
+
+allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN, _CallId) ->
+    [?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -154,12 +167,16 @@ allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
 -spec resource_exists() -> 'true'.
 -spec resource_exists(path_token()) -> 'true'.
 -spec resource_exists(path_token(), path_token()) -> 'true'.
+-spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
 
 resource_exists(_) -> 'true'.
 
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
-resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true';
+resource_exists(_, ?MEMBERS_PATH_TOKEN) -> 'true'.
+
+resource_exists(_, ?MEMBERS_PATH_TOKEN, _) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -196,6 +213,8 @@ content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context.
                       cb_context:context().
 -spec validate(cb_context:context(), path_token(), path_token()) ->
                       cb_context:context().
+-spec validate(cb_context:context(), path_token(), path_token(), path_token()) ->
+                      cb_context:context().
 validate(Context) ->
     validate_queues(Context, cb_context:req_verb(Context)).
 
@@ -230,7 +249,12 @@ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_POST) ->
 validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_DELETE) ->
     rm_queue_from_agents(Id, Context);
 validate_queue_operation(Context, Id, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
-    validate_eavesdrop_on_queue(Context, Id).
+    validate_eavesdrop_on_queue(Context, Id);
+validate_queue_operation(Context, Id, ?MEMBERS_PATH_TOKEN, ?HTTP_GET) ->
+    list_members(Context, Id).
+
+validate(Context, _Id, ?MEMBERS_PATH_TOKEN, _CallId) ->
+    cb_context:set_resp_status(Context, 'success').
 
 validate_eavesdrop_on_call(Context) ->
     Data = cb_context:req_data(Context),
@@ -273,12 +297,12 @@ is_valid_mode(Context, Data) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"mode">>
-                                            ,<<"enum">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Value not found in enumerated list of values">>}
-                                               ,{<<"cause">>, Mode}
-                                               ])
-                                            ,Context
+                   ,<<"enum">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Value not found in enumerated list of values">>}
+                      ,{<<"cause">>, Mode}
+                      ])
+              ,Context
               )
             }
     end.
@@ -292,11 +316,11 @@ is_valid_call(Context, Data) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"call_id">>
-                                            ,<<"required">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Field is required but missing">>}]
-                                              )
-                                            ,Context
+                   ,<<"required">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Field is required but missing">>}]
+                     )
+              ,Context
               )
             };
         CallId ->
@@ -313,12 +337,12 @@ is_active_call(Context, CallId) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"call_id">>
-                                            ,<<"not_found">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Call was not found">>}
-                                               ,{<<"cause">>, CallId}
-                                               ])
-                                            ,Context
+                   ,<<"not_found">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Call was not found">>}
+                      ,{<<"cause">>, CallId}
+                      ])
+              ,Context
               )
             };
         {'ok', _} -> 'true'
@@ -332,12 +356,12 @@ is_valid_queue(Context, <<_/binary>> = QueueId) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"queue_id">>
-                                            ,<<"not_found">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Queue was not found">>}
-                                               ,{<<"cause">>, QueueId}
-                                               ])
-                                            ,Context
+                   ,<<"not_found">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Queue was not found">>}
+                      ,{<<"cause">>, QueueId}
+                      ])
+              ,Context
               )
             }
     end;
@@ -348,9 +372,9 @@ is_valid_queue(Context, QueueJObj) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"queue_id">>
-                                            ,<<"type">>
-                                            ,kz_json:from_list([{<<"message">>, <<"Id did not represent a queue">>}])
-                                            ,Context
+                   ,<<"type">>
+                   ,kz_json:from_list([{<<"message">>, <<"Id did not represent a queue">>}])
+              ,Context
               )
             }
     end.
@@ -364,12 +388,12 @@ is_valid_endpoint(Context, DataJObj) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"id">>
-                                            ,<<"not_found">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Id was not found">>}
-                                               ,{<<"cause">>, Id}
-                                               ])
-                                            ,Context
+                   ,<<"not_found">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Id was not found">>}
+                      ,{<<"cause">>, Id}
+                      ])
+              ,Context
               )
             }
     end.
@@ -381,12 +405,12 @@ is_valid_endpoint_type(Context, CallMeJObj) ->
             {'false'
             ,cb_context:add_validation_error(
                <<"id">>
-                                            ,<<"type">>
-                                            ,kz_json:from_list(
-                                               [{<<"message">>, <<"Id did not represent a valid endpoint">>}
-                                               ,{<<"cause">>, Type}
-                                               ])
-                                            ,Context
+                   ,<<"type">>
+                   ,kz_json:from_list(
+                      [{<<"message">>, <<"Id did not represent a valid endpoint">>}
+                      ,{<<"cause">>, Type}
+                      ])
+              ,Context
               )
             }
     end.
@@ -441,8 +465,8 @@ eavesdrop_req(Context, Prop) ->
         {'error', 'timeout'} ->
             cb_context:add_system_error(
               'timeout'
-                                       ,kz_json:from_list([{<<"cause">>, <<"eavesdrop failed to start">>}])
-                                       ,Context
+             ,kz_json:from_list([{<<"cause">>, <<"eavesdrop failed to start">>}])
+             ,Context
              );
         {'error', E} -> crossbar_util:response('error', <<"error">>, 500, E, Context)
     end.
@@ -493,12 +517,22 @@ patch(Context, Id) ->
 %%--------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 -spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
+-spec delete(cb_context:context(), path_token(), path_token(), path_token()) -> cb_context:context().
 delete(Context, _) ->
     activate_account_for_acdc(Context),
     crossbar_doc:delete(Context).
 delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(Context)).
+delete(Context, Id, ?MEMBERS_PATH_TOKEN, CallId) ->
+    Req = [{<<"Account-ID">>, cb_context:account_id(Context)}
+          ,{<<"Call-ID">>, CallId}
+          ,{<<"Queue-ID">>, Id}
+          ,{<<"Reason">>, <<"removed">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    kapi_acdc_queue:publish_member_call_cancel(Req),
+    crossbar_util:response(<<"member remove sent">>, Context).
 
 -spec delete_account(cb_context:context(), path_token()) -> cb_context:context().
 delete_account(Context, AccountId) ->
@@ -732,7 +766,7 @@ format_stats(Context, Resp) ->
                               ]),
     cb_context:set_resp_status(
       cb_context:set_resp_data(Context, Stats)
-                              ,'success'
+     ,'success'
      ).
 
 fetch_ranged_queue_stats(Context, StartRange) ->
@@ -812,6 +846,43 @@ normalize_view_results(JObj, Acc) ->
 
 normalize_agents_results(JObj, Acc) ->
     [kz_doc:id(JObj) | Acc].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fetch the list of members of a queue
+%% @end
+%%--------------------------------------------------------------------
+-spec list_members(cb_context:context(), ne_binary()) -> cb_context:context().
+list_members(Context, Id) ->
+    lager:debug("listing waiting members of queue ~s", [Id]),
+    Req = [{<<"Account-ID">>, cb_context:account_id(Context)}
+          ,{<<"Queue-ID">>, Id}
+          ,{<<"Status">>, <<"waiting">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case kapps_util:amqp_pool_request(Req
+                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
+                                     ,fun kapi_acdc_stats:current_calls_resp_v/1
+                                     )
+    of
+        {'error', E} ->
+            lager:error("failed to recv resp from AMQP: ~p", [E]),
+            cb_context:add_system_error('datastore_unreachable', Context);
+        {'ok', Resp} ->
+            Members = extract_members(kz_json:get_list_value(<<"Waiting">>, Resp, [])),
+            crossbar_util:response(Members, Context)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Extract call IDs from waiting stats resp
+%% @end
+%%--------------------------------------------------------------------
+-spec extract_members(kz_json:objects()) -> ne_binaries().
+extract_members(Stats) ->
+    [kz_json:get_ne_binary_value(<<"call_id">>, Stat) || Stat <- Stats].
 
 %%--------------------------------------------------------------------
 %% @private

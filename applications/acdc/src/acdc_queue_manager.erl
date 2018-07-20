@@ -489,13 +489,25 @@ handle_cast({'update_queue_config', JObj}, #state{enter_when_empty=_EnterWhenEmp
     lager:debug("maybe changing ewe from ~s to ~s", [_EnterWhenEmpty, EWE]),
     {'noreply', State#state{enter_when_empty=EWE}, 'hibernate'};
 
-handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=State) ->
+handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict
+                                                   ,current_member_calls=Calls
+                                                   }=State) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     Reason = kz_json:get_value(<<"Reason">>, JObj),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, Reason),
+
+    %% For cancels triggered outside of cf_acdc_member, inform cf_acdc_member
+    %% proc to continue
+    case queue_member(CallId, Calls) of
+        'undefined' -> 'ok';
+        Call ->
+            Q = kapps_call:controller_queue(Call),
+            publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason)
+    end,
+
     case Reason of
         %% Don't add to ignored_member_calls because an FSM has already dealt with this call
         <<"No agents left in queue">> ->
@@ -620,14 +632,8 @@ handle_cast({'agents_available_req', JObj}, #state{account_id=AccountId
 handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
                                                       ,queue_id=QueueId
                                                       }=State) ->
-    Prop = [{<<"Call-ID">>, kapps_call:call_id(Call)}
-           ,{<<"Account-ID">>, AccountId}
-           ,{<<"Queue-ID">>, QueueId}
-           ,{<<"Failure-Reason">>, <<"no agents">>}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
     Q = kz_json:get_value(<<"Server-ID">>, JObj),
-    catch kapi_acdc_queue:publish_member_call_failure(Q, Prop),
+    publish_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), <<"no agents">>),
     {'noreply', State};
 
 handle_cast({'sync_with_agent', A}, #state{account_id=AccountId}=State) ->
@@ -951,6 +957,16 @@ publish_queue_member_remove(AccountId, QueueId, CallId) ->
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_queue_member_remove(Prop).
+
+-spec publish_member_call_failure(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+           ,{<<"Call-ID">>, CallId}
+           ,{<<"Failure-Reason">>, Reason}
+           ,{<<"Queue-ID">>, QueueId}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    catch kapi_acdc_queue:publish_member_call_failure(Q, Prop).
 
 -spec start_agent_and_worker(pid(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
