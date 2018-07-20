@@ -2104,6 +2104,7 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                ,agent_call_id = 'undefined'
                ,agent_callback_call = 'undefined'
                ,caller_exit_key = <<"#">>
+               ,queue_notifications = 'undefined'
                ,monitoring = 'false'
                }.
 
@@ -2554,10 +2555,14 @@ handle_pause(Timeout, Alias, #state{agent_listener=AgentListener}=State) ->
     {'next_state', 'paused', State1}.
 
 -spec handle_end_wrapup(atom(), state()) -> handle_fsm_ret(state()).
-handle_end_wrapup(NextState, #state{wrapup_ref=Ref}=State) ->
+handle_end_wrapup(NextState, #state{agent_listener=AgentListener
+                                   ,wrapup_ref=Ref
+                                   }=State) ->
     lager:debug("end_wrapup received, cancelling wrapup timers"),
     maybe_stop_timer(Ref),
-    {'next_state', NextState, State#state{wrapup_ref='undefined'}}.
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+    %% Full clear of call here to make up for missing wrapup state timeout event
+    {'next_state', NextState, clear_call(State#state{wrapup_ref='undefined'}, NextState)}.
 
 -spec original_call_id(state()) -> ne_binary().
 original_call_id(#state{member_call_id=MemberCallId
