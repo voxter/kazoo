@@ -314,7 +314,7 @@ slot_presence_id(SlotNumber, Data, Call) ->
 slot_presence_id(SlotNumber, Call) ->
     User = kapps_call:request_user(Call),
     case kapps_call:kvs_fetch('cf_capture_group', <<>>, Call) of
-        CaptureGroup when byte_size(CaptureGroup) > 0 -> User;
+        _ = ?NE_BINARY -> User;
         _Other -> <<User/binary, SlotNumber/binary>>
     end.
 
@@ -338,7 +338,7 @@ maybe_custom_presence_id(Data, Call) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_slot_number(kz_json:object(), kz_term:api_binary()) -> kz_term:ne_binary().
-get_slot_number(_, CaptureGroup) when byte_size(CaptureGroup) > 0 ->
+get_slot_number(_, ?NE_BINARY=CaptureGroup) ->
     CaptureGroup;
 get_slot_number(ParkedCalls, _) ->
     Slots = [kz_term:to_integer(Slot)
@@ -528,8 +528,10 @@ load_parked_calls(JObjs) ->
 load_parked_call(JObj) ->
     Doc = kz_json:get_json_value(<<"doc">>, JObj),
     <<"parking-slot-", SlotNumber/binary>> = kz_doc:id(Doc),
-    Slot = kz_json:get_json_value(<<"slot">>, Doc),
-    {SlotNumber, kz_json:set_value(<<"pvt_fields">>, kz_doc:private_fields(Doc), Slot)}.
+    case kz_json:get_json_value(<<"slot">>, Doc) of
+        'undefined' -> 'undefined';
+        Slot -> {SlotNumber, kz_json:set_value(<<"pvt_fields">>, kz_doc:private_fields(Doc), Slot)}
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc

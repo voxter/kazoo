@@ -709,14 +709,21 @@ get_address_value(Key, Path, [JObj|JObjs]) ->
 -spec check_address_value(binary() | kz_term:binaries() | kz_json:object() | 'undefined') -> kz_term:api_ne_binaries().
 check_address_value('undefined') -> 'undefined';
 check_address_value(<<>>) -> 'undefined';
-check_address_value(<<_/binary>> = Email) -> [Email];
+check_address_value(<<_/binary>> = Email) -> check_address_value([Email]);
 check_address_value(Emails) when is_list(Emails) ->
-    case [E || E <- Emails, not kz_term:is_empty(E)] of
+    case [E || E <- Emails,
+               kz_term:is_ne_binary(E),
+               length(binary:split(E, <<"@">>, ['global'])) == 2
+         ]
+    of
         [] -> 'undefined';
         Es -> Es
     end;
-check_address_value(JObj) ->
-    check_address_value(kz_json:get_value(<<"email_addresses">>, JObj)).
+check_address_value(Emails) ->
+    case kz_json:is_json_object(Emails) of
+        'true' -> check_address_value(kz_json:get_value(<<"email_addresses">>, Emails));
+        'false' -> 'undefined'
+    end.
 
 -spec find_admin_emails(kz_json:object(), kz_term:ne_binary(), kz_json:path()) ->
                                kz_term:api_ne_binaries().
@@ -827,6 +834,7 @@ fix_timestamp(Timestamp, ?NE_BINARY=TZ) when is_integer(Timestamp) ->
     props:filter_undefined(
       [{<<"utc">>, localtime:local_to_utc(DateTime, ClockTimezone)}
       ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, TZ)}
+      ,{<<"timestamp">>, Timestamp}
       ,{<<"timezone">>, TZ}
       ]);
 fix_timestamp(Timestamp, 'undefined') ->
@@ -855,17 +863,37 @@ build_call_data(DataJObj, Timezone) ->
 
 -spec build_caller_id_data(kz_json:object()) -> kz_term:proplist().
 build_caller_id_data(DataJObj) ->
+    Name = knm_util:pretty_print(kz_json:get_ne_binary_value(<<"caller_id_name">>, DataJObj)),
+    Number = knm_util:pretty_print(kz_json:get_ne_binary_value(<<"caller_id_number">>, DataJObj)),
+    NameNumber = build_name_and_number(Name, Number),
     props:filter_undefined(
-      [{<<"name">>, knm_util:pretty_print(kz_json:get_ne_binary_value(<<"caller_id_name">>, DataJObj))}
-      ,{<<"number">>, knm_util:pretty_print(kz_json:get_ne_binary_value(<<"caller_id_number">>, DataJObj))}
+      [{<<"name">>, Name}
+      ,{<<"number">>, Number}
+      ,{<<"name_number">>, NameNumber}
       ]).
 
 -spec build_callee_id_data(kz_json:object()) -> kz_term:proplist().
 build_callee_id_data(DataJObj) ->
+    Name = knm_util:pretty_print(kz_json:get_ne_binary_value(<<"callee_id_name">>, DataJObj)),
+    Number = knm_util:pretty_print(kz_json:get_ne_binary_value(<<"callee_id_number">>, DataJObj)),
+    NameNumber = build_name_and_number(Name, Number),
     props:filter_undefined(
-      [{<<"name">>, knm_util:pretty_print(kz_json:get_ne_binary_value(<<"callee_id_name">>, DataJObj))}
-      ,{<<"number">>, knm_util:pretty_print(kz_json:get_ne_binary_value(<<"callee_id_number">>, DataJObj))}
+      [{<<"name">>, Name}
+      ,{<<"number">>, Number}
+      ,{<<"name_number">>, NameNumber}
       ]).
+
+-spec build_name_and_number(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_ne_binary().
+build_name_and_number(<<"unknown">>, <<"unknown">>) ->
+    'undefined';
+build_name_and_number(<<"unknown">>, Number) ->
+    Number;
+build_name_and_number(Name, <<"unknown">>) ->
+    Name;
+build_name_and_number(Number, Number) ->
+    Number;
+build_name_and_number(Name, Number) ->
+    <<Name/binary, "(", Number/binary, ")">>.
 
 -spec build_date_called_data(kz_json:object(), kz_term:api_ne_binary()) -> kz_term:proplist().
 build_date_called_data(DataJObj, Timezone) ->

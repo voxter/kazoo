@@ -37,6 +37,11 @@ RUN yum install -y \
         emacs \
         python \
         python-pip \
+    # kazoo_convert Tests
+        ghostscript \
+        ImageMagick \
+        libreoffice \
+        libtiff-tools \
     && ln -s /opt/couchdb/bin/couchjs /usr/local/bin \
     && pip install --upgrade pip \
     && pip install jsonschema \

@@ -95,7 +95,9 @@ handle_ringback(Node, UUID, JObj) ->
 -spec maybe_ringback_from_language(atom(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 maybe_ringback_from_language(Node, UUID, JObj) ->
     case kz_json:get_ne_binary_value(<<"Language">>, JObj) of
-        'undefined' -> 'ok';
+        'undefined' ->
+            {'ok', Default} = ecallmgr_util:get_setting(<<"default_ringback">>),
+            ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, kz_term:to_binary(Default)}]);
         <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
         <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
         <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);

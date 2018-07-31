@@ -320,8 +320,9 @@ get_url_encoded_body(ReqBody) ->
 -spec extract_multipart(cb_context:context(), cowboy_multipart_response(), kz_json:object()) ->
                                {cb_context:context(), cowboy_req:req()}.
 extract_multipart(Context, {'done', Req}, _QS) ->
-    {Context, Req};
-extract_multipart(Context, {'ok', Headers, Req}, QS) ->
+    {cb_context:store(Context, <<"multipart_headers">>, 'undefined'), Req};
+extract_multipart(Context0, {'ok', Headers, Req}, QS) ->
+    Context = cb_context:store(Context0, <<"multipart_headers">>, Headers),
     {Ctx, R} = get_req_data(Context, Req, maps:get(<<"content-type">>, Headers, 'undefined'), QS),
     extract_multipart(Ctx
                      ,cowboy_req:read_part(R)
@@ -387,18 +388,21 @@ handle_max_filesize_exceeded(Context, Req1) ->
                                   {cb_context:context(), cowboy_req:req()} |
                                   stop_return().
 handle_file_contents(Context, ContentType, Req, FileContents) ->
+
+    MultiPartHeaders = cb_context:fetch(Context, <<"multipart_headers">>, #{}),
     %% http://tools.ietf.org/html/rfc2045#page-17
-    case cowboy_req:header(<<"content-transfer-encoding">>, Req) of
+    TransferKey = <<"content-transfer-encoding">>,
+    case maps:get(TransferKey, MultiPartHeaders, cowboy_req:header(TransferKey, Req)) of
         <<"base64">> ->
             lager:debug("base64 encoded request coming in"),
-            decode_base64(Context, ContentType, Req);
+            decode_base64(Context, ContentType, Req, FileContents);
         _Else ->
             lager:debug("unexpected transfer encoding: '~s'", [_Else]),
-            ContentLength = cowboy_req:header(<<"content-length">>, Req),
-            Headers = kz_json:from_list([{<<"content_type">>, ContentType}
-                                        ,{<<"content_length">>, ContentLength}
-                                        ]),
-            FileJObj = kz_json:from_list([{<<"headers">>, Headers}
+            ContentLength = maps:get(<<"content-length">>, MultiPartHeaders, cowboy_req:header(<<"content-length">>, Req)),
+            FileHeaders = kz_json:from_list([{<<"content_type">>, ContentType}
+                                            ,{<<"content_length">>, ContentLength}
+                                            ]),
+            FileJObj = kz_json:from_list([{<<"headers">>, FileHeaders}
                                          ,{<<"contents">>, FileContents}
                                          ]),
             lager:debug("request is a file upload of type: ~s", [ContentType]),
@@ -424,9 +428,6 @@ default_filename() ->
                            {cb_context:context(), cowboy_req:req()} |
                            stop_return().
 decode_base64(Context, CT, Req0) ->
-    decode_base64(Context, CT, Req0, []).
-
-decode_base64(Context, CT, Req0, Body) ->
     case cowboy_req:read_body(Req0, #{'length'=>?MAX_UPLOAD_SIZE}) of
         {'error', 'badlength'} ->
             lager:debug("the request body was most likely too big"),
@@ -441,11 +442,18 @@ decode_base64(Context, CT, Req0, Body) ->
         {'more', _, Req1} ->
             handle_max_filesize_exceeded(Context, Req1);
         {'ok', Base64Data, Req1} ->
-            Data = iolist_to_binary(lists:reverse([Base64Data | Body])),
+            decode_base64(Context, CT, Req1, Base64Data)
+    end.
 
-            {EncodedType, FileContents} = kz_attachment:decode_base64(Data),
+-spec decode_base64(cb_context:context(), kz_term:ne_binary(), cowboy_req:req(), binary()) ->
+                           {cb_context:context(), cowboy_req:req()} |
+                           stop_return().
+decode_base64(Context, CT, Req, Base64Data) ->
+    try kz_attachment:decode_base64(Base64Data) of
+        {EncodedType, FileContents} ->
             ContentType = case EncodedType of
                               'undefined' -> CT;
+                              {'error', 'badarg'} -> CT;
                               <<"application/base64">> -> <<"application/octet-stream">>;
                               Else -> Else
                           end,
@@ -456,7 +464,18 @@ decode_base64(Context, CT, Req0, Body) ->
                                          ,{<<"contents">>, FileContents}
                                          ]),
             lager:debug("request is a base64 file upload of type: ~s", [ContentType]),
-            {cb_context:set_req_files(Context, [{default_filename(), FileJObj}]), Req1}
+            {cb_context:set_req_files(Context, [{default_filename(), FileJObj}]), Req}
+    catch
+        _T:_E ->
+            lager:debug("failed to decode base64 data: ~p:~p", [_T,_E]),
+            JObj = kz_json:from_list([{<<"message">>, <<"failed to decode base64 data">>}]),
+            Context1 = cb_context:add_validation_error(<<"file">>
+                                                      ,<<"encoding">>
+                                                      ,JObj
+                                                      ,cb_context:set_resp_error_code(Context, 413)
+                                                      ),
+
+            ?MODULE:stop(Req, Context1)
     end.
 
 -spec get_request_body(cowboy_req:req()) ->
@@ -1194,7 +1213,7 @@ get_encode_options(Context) ->
 -spec create_csv_resp_content(cowboy_req:req(), cb_context:context()) ->
                                      {kz_term:ne_binary() | iolist(), cowboy_req:req()}.
 create_csv_resp_content(Req, Context) ->
-    Content = csv_body(cb_context:resp_data(Context)),
+    Content = csv_body(cb_context:resp_data(Context), 'true'),
     ContextHeaders = cb_context:resp_headers(Context),
     FileName = csv_file_name(Context, ?DEFAULT_CSV_FILE_NAME),
     Headers = #{<<"content-type">> => maps:get(<<"content-type">>, ContextHeaders, <<"text/csv">>)
@@ -1270,24 +1289,24 @@ create_csv_chunk_response(Req, Context) ->
         {[], IsStarted} ->
             {IsStarted, Req};
         {CSVs, 'true'} ->
-            'ok' = cowboy_req:stream_body(maybe_convert_to_csv(CSVs), 'nofin', Req),
+            'ok' = cowboy_req:stream_body(maybe_convert_to_csv(CSVs, 'false'), 'nofin', Req),
             {'true', Req};
         {CSVs, 'false'} ->
             FileName = csv_file_name(Context, ?DEFAULT_CSV_FILE_NAME),
             Req1 = init_chunk_stream(Req, <<"to_csv">>, FileName),
-            'ok' = cowboy_req:stream_body(maybe_convert_to_csv(CSVs), 'nofin', Req1),
+            'ok' = cowboy_req:stream_body(maybe_convert_to_csv(CSVs, 'true'), 'nofin', Req1),
             {'true', Req1}
     end.
 
--spec maybe_convert_to_csv(kz_term:ne_binary() | kz_term:ne_binaries() | kz_json:object() | kz_json:objects()) -> iolist().
-maybe_convert_to_csv(?NE_BINARY=Body) -> Body;
-maybe_convert_to_csv([Content|_]=Body) ->
+-spec maybe_convert_to_csv(kz_term:ne_binary() | kz_term:ne_binaries() | kz_json:object() | kz_json:objects(), boolean()) -> iolist().
+maybe_convert_to_csv(?NE_BINARY=Body, _) -> Body;
+maybe_convert_to_csv([Content|_]=Body, BuildHeaders) ->
     case kz_json:is_json_object(Content) of
-        'true' -> csv_body(Body);
+        'true' -> csv_body(Body, BuildHeaders);
         'false' -> Body
     end;
-maybe_convert_to_csv(JObj) ->
-    csv_body(JObj).
+maybe_convert_to_csv(JObj, BuildHeaders) ->
+    csv_body(JObj, BuildHeaders).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the `x-file-name' from the request header if available.
@@ -1319,18 +1338,25 @@ init_chunk_stream(Req, <<"to_csv">>, FileName) ->
     Headers = maps:merge(Headers0, cowboy_req:resp_headers(Req)),
     cowboy_req:stream_reply(200, Headers, Req).
 
--spec csv_body(kz_term:api_binary() | kz_json:object() | kz_json:objects()) -> iolist().
-csv_body('undefined') -> [];
-csv_body(<<>>) -> [];
-csv_body(Body=?NE_BINARY) -> [Body];
-csv_body(JObjs) when is_list(JObjs) ->
+-spec csv_body(kz_term:api_binary() | kz_json:object() | kz_json:objects(), boolean()) -> iolist().
+csv_body('undefined', _) -> [];
+csv_body(<<>>, _) -> [];
+csv_body(Body=?NE_BINARY, _) -> [Body];
+csv_body(JObjs, BuildHeaders) when is_list(JObjs) ->
     FlattenJObjs = [kz_json:flatten(JObj, 'binary_join') || JObj <- JObjs],
-    CsvOptions = [{'transform_fun', fun map_empty_json_value_to_binary/2}
-                 ,{'header_map', ?CSV_HEADER_MAP}
-                 ],
-    kz_csv:from_jobjs(FlattenJObjs, CsvOptions);
-csv_body(JObj) ->
-    csv_body([JObj]).
+    kz_csv:from_jobjs(FlattenJObjs, kz_csv_options(BuildHeaders));
+csv_body(JObj, BuildHeaders) ->
+    csv_body([JObj], BuildHeaders).
+
+-spec kz_csv_options(boolean()) -> kz_term:proplist().
+kz_csv_options('true') ->
+    [{'transform_fun', fun map_empty_json_value_to_binary/2}
+    ,{'header_map', ?CSV_HEADER_MAP}
+    ];
+kz_csv_options('false') ->
+    [{'transform_fun', fun map_empty_json_value_to_binary/2}
+    ,{'build_headers', 'false'}
+    ].
 
 -spec map_empty_json_value_to_binary(kz_json:key(), kz_json:term()) -> {kz_json:key(), kz_json:term()}.
 map_empty_json_value_to_binary(Key, Value) ->
@@ -1499,7 +1525,7 @@ set_resp_headers(Req0, Context) ->
                         {binary(), binary()}.
 fix_header(<<"Location">>, Path, Req) ->
     {<<"location">>, crossbar_util:get_path(Req, Path)};
-fix_header(<<"ocation">> = H, Path, Req) ->
+fix_header(<<"location">> = H, Path, Req) ->
     {H, crossbar_util:get_path(Req, Path)};
 fix_header(H, V, _) ->
     {kz_term:to_lower_binary(H), kz_term:to_binary(V)}.
