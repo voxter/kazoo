@@ -19,8 +19,8 @@
 
 %% API
 -export([start_link/4
-        ,member_connect_req/4
-        ,member_connect_re_req/1
+        ,member_call/3
+        ,member_connect_req/1
         ,member_connect_win/3
         ,timeout_member_call/1, timeout_member_call/2
         ,timeout_agent/2
@@ -123,13 +123,13 @@ start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
                            ,[WorkerSup, MgrPid, AccountId, QueueId]
                            ).
 
--spec member_connect_req(pid(), kz_json:object(), any(), kz_term:api_binary()) -> 'ok'.
-member_connect_req(Srv, MemberCallJObj, Delivery, Url) ->
-    gen_listener:cast(Srv, {'member_connect_req', MemberCallJObj, Delivery, Url}).
+-spec member_call(pid(), kz_json:object(), any()) -> 'ok'.
+member_call(Srv, MemberCallJObj, Delivery) ->
+    gen_listener:cast(Srv, {'member_call', MemberCallJObj, Delivery}).
 
--spec member_connect_re_req(pid()) -> 'ok'.
-member_connect_re_req(Srv) ->
-    gen_listener:cast(Srv, {'member_connect_re_req'}).
+-spec member_connect_req(pid()) -> 'ok'.
+member_connect_req(Srv) ->
+    gen_listener:cast(Srv, 'member_connect_req').
 
 -spec member_connect_win(pid(), kz_json:object(), kz_term:proplist()) -> 'ok'.
 member_connect_win(Srv, RespJObj, QueueOpts) ->
@@ -285,13 +285,10 @@ handle_cast({'start_friends', QueueJObj}, #state{queue_id=QueueId
 handle_cast({'gen_listener', {'created_queue', Q}}, #state{my_q='undefined'}=State) ->
     {'noreply', State#state{my_q=Q}, 'hibernate'};
 
-handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
-           ,#state{my_q=MyQ
-                  ,my_id=MyId
-                  ,account_id=AccountId
-                  ,mgr_pid=MgrPid
-                  ,queue_id=QueueId
-                  }=State) ->
+handle_cast({'member_call', MemberCallJObj, Delivery}, #state{queue_id=QueueId
+                                                             ,account_id=AccountId
+                                                             ,mgr_pid=MgrPid
+                                                             }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, MemberCallJObj)),
     CallId = kapps_call:call_id(Call),
 
@@ -306,7 +303,6 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
         _ ->
             'ok'
     end,
-    send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId),
 
     %% Be ready in case a callback or cancel comes in while queue_listener is handling call
     gen_listener:add_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
@@ -318,16 +314,17 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
     {'noreply', State#state{call=Call
                            ,delivery=Delivery
                            ,member_call_queue=kz_json:get_value(<<"Server-ID">>, MemberCallJObj)
-                           }
-    ,'hibernate'};
-handle_cast({'member_connect_re_req'}, #state{my_q=MyQ
-                                             ,my_id=MyId
-                                             ,account_id=AccountId
-                                             ,queue_id=QueueId
-                                             ,call=Call
-                                             }=State) ->
+                           }};
+
+handle_cast('member_connect_req', #state{queue_id=QueueId
+                                        ,account_id=AccountId
+                                        ,my_id=MyId
+                                        ,my_q=MyQ
+                                        ,call=Call
+                                        }=State) ->
     send_member_connect_req(kapps_call:call_id(Call), AccountId, QueueId, MyQ, MyId),
     {'noreply', State};
+
 handle_cast({'member_connect_win', RespJObj, QueueOpts}, #state{my_q=MyQ
                                                                ,my_id=MyId
                                                                ,call=Call

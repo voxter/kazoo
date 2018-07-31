@@ -18,7 +18,9 @@ echo "--- Make fmt"
 make fmt
 
 echo "--- Make clean"
+set +e
 make clean
+set -e
 
 echo "--- Remove deps and .erlang.mk"
 # Can't do this with `make clean-deps` because of Buildkite's `git clean -fxdq`
