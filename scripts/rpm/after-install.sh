@@ -3,7 +3,7 @@ CONFIG_ROOT=/etc/kazoo
 
 # Add sup / sup bash completion
 ln -s $ROOT/sup.bash /etc/bash_completion.d/
-ln -s $ROOT/bin/sup /usr/bin/sup
+ln -sf $ROOT/bin/sup /usr/bin/sup
 chmod +x /usr/bin/sup
 
 # Kazoo user

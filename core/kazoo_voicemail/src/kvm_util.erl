@@ -181,9 +181,25 @@ enforce_retention(JObj, 'false') ->
     JObj;
 enforce_retention(JObj, 'true') ->
     case kzd_box_message:metadata(JObj) of
-        'undefined' -> kzd_box_message:set_folder_deleted(JObj);
+        'undefined' ->
+            kz_json:set_values([{<<"retention">>, <<"enforced">>}
+                               ,{<<"retention_message">>
+                                ,<<"this message is prior to retention policy, no update operation is permitted">>
+                                }
+                               ]
+                              ,kzd_box_message:set_folder_deleted(JObj)
+                              );
         Metadata ->
-            kzd_box_message:set_metadata(kzd_box_message:set_folder_deleted(Metadata), JObj)
+            kzd_box_message:set_metadata(
+              kz_json:set_values([{<<"retention">>, <<"enforced">>}
+                                 ,{<<"retention_message">>
+                                  ,<<"this message is prior to retention policy, no update operation is permitted">>
+                                  }
+                                 ]
+                                ,kzd_box_message:set_folder_deleted(Metadata)
+                                )
+             ,JObj
+             )
     end.
 
 %%------------------------------------------------------------------------------
@@ -297,7 +313,7 @@ publish_saved_notify(MediaId, BoxId, Call, Length, Props) ->
                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                  ],
 
-    lager:debug("notifying of voicemail saved"),
+    lager:debug("sending voicemail_new notification"),
     kapps_notify_publisher:call_collect(NotifyProp, fun kapi_notifications:publish_voicemail_new/1).
 
 %%------------------------------------------------------------------------------

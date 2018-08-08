@@ -16,6 +16,7 @@
 *.swp
 *.orig
 *.DS_Store
+core.*
 
 /.edts
 .project

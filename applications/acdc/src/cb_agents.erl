@@ -351,7 +351,7 @@ fetch_stats_summary(Context) ->
                                   ,kz_json:get_value(<<"Error-Reason">>, E)
                                   ,Context
                                   );
-        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, []), Context)
+        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, kz_json:new()), Context)
     end.
 
 -spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().

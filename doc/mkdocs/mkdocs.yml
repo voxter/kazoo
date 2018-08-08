@@ -229,6 +229,7 @@ pages:
     - 'Set Call Variable(s)':
         - 'applications/callflow/doc/set_variable.md'
         - 'applications/callflow/doc/set_variables.md'
+    - 'Set Alert-Info': 'applications/callflow/doc/set_alert_info.md'
     - 'Intercept':
         - 'Action': 'applications/callflow/doc/intercept.md'
         - 'Feature Code': 'applications/callflow/doc/intercept_feature.md'
@@ -357,6 +358,9 @@ pages:
     - 'core/kazoo_ips/doc/maintenance.md'
   - 'Kazoo Media':
     - 'core/kazoo_media/doc/README.md'
+  - 'Kazoo Convert':
+    - 'core/kazoo_convert/doc/README.md'
+    - 'core/kazoo_convert/doc/fax_converter.md'
   - 'Kazoo Apps':
     - 'core/kazoo_apps/doc/README.md'
     - 'core/kazoo_apps/doc/kapps_notify_publisher.md'
@@ -398,6 +402,7 @@ pages:
   - 'Kazoo Speech':
       - 'core/kazoo_speech/doc/README.md'
       - 'core/kazoo_speech/doc/ispeech.md'
+      - 'core/kazoo_speech/doc/google.md'
   - 'Kazoo MODB':
     - 'core/kazoo_modb/doc/README.md'
   - 'Kazoo CouchDB':

@@ -718,7 +718,8 @@
                     "description": "Application test phase",
                     "enum": [
                         "alpha",
-                        "beta"
+                        "beta",
+                        "gold"
                     ],
                     "type": "string"
                 },
@@ -3439,6 +3440,19 @@
             "properties": {},
             "type": "object"
         },
+        "callflows.set_alert_info": {
+            "description": "Validator for the set_alert_info callflow's data object",
+            "properties": {
+                "alert_info": {
+                    "description": "Set `Alert-Info` header inside b-leg channel. Used for distinctive ring.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "alert_info"
+            ],
+            "type": "object"
+        },
         "callflows.set_cid": {
             "description": "Validator for the set_cid callflow's data object",
             "properties": {
@@ -4684,6 +4698,14 @@
                 },
                 "formatters": {
                     "$ref": "#/definitions/formatters"
+                },
+                "hotdesk": {
+                    "description": "The hotdesk status of this device",
+                    "type": "object",
+                    "users": {
+                        "description": "The user(s) currently hotdesked into the device",
+                        "type": "object"
+                    }
                 },
                 "language": {
                     "description": "The language for the device",
@@ -11655,6 +11677,12 @@
                     ],
                     "type": "string"
                 },
+                "Export-Bridge-Variables": {
+                    "type": "string"
+                },
+                "Export-Variables": {
+                    "type": "string"
+                },
                 "Fail-On-Single-Reject": {
                     "type": "string"
                 },
@@ -15090,6 +15118,9 @@
                 "Account-ID": {
                     "type": "string"
                 },
+                "Control-Queue": {
+                    "type": "string"
+                },
                 "Event-Category": {
                     "enum": [
                         "start"
@@ -15180,6 +15211,9 @@
                     "type": "string"
                 },
                 "Page": {
+                    "type": "string"
+                },
+                "Stage": {
                     "type": "string"
                 },
                 "Status": {
@@ -17604,10 +17638,28 @@
                 "Fax-To-Email": {
                     "type": "string"
                 },
+                "FaxBox-ID": {
+                    "type": "string"
+                },
+                "FaxBox-Name": {
+                    "type": "string"
+                },
+                "FaxBox-Timezone": {
+                    "type": "string"
+                },
                 "From": {
                     "type": "string"
                 },
                 "HTML": {
+                    "type": "string"
+                },
+                "Number": {
+                    "type": "string"
+                },
+                "Original-Number": {
+                    "type": "string"
+                },
+                "Owner-ID": {
                     "type": "string"
                 },
                 "Preview": {
@@ -17620,6 +17672,9 @@
                     "type": "string"
                 },
                 "Text": {
+                    "type": "string"
+                },
+                "Timestamp": {
                     "type": "string"
                 },
                 "To": {
@@ -19918,6 +19973,12 @@
                 },
                 "To": {
                     "type": "string"
+                },
+                "To-Realm": {
+                    "type": "string"
+                },
+                "To-User": {
+                    "type": "string"
                 }
             },
             "required": [
@@ -19982,6 +20043,12 @@
                     "type": "string"
                 },
                 "To": {
+                    "type": "string"
+                },
+                "To-Realm": {
+                    "type": "string"
+                },
+                "To-User": {
                     "type": "string"
                 }
             },
@@ -20349,6 +20416,9 @@
                 "Account-ID": {
                     "type": "string"
                 },
+                "Alert": {
+                    "type": "string"
+                },
                 "Alert-Body": {
                     "type": "string"
                 },
@@ -20380,6 +20450,9 @@
                     "type": "string"
                 },
                 "Expires": {
+                    "type": "string"
+                },
+                "Payload": {
                     "type": "string"
                 },
                 "Queue": {
@@ -20985,8 +21058,14 @@
                 "Existing-Call-ID": {
                     "type": "string"
                 },
+                "Export-Bridge-Variables": {
+                    "type": "string"
+                },
                 "Export-Custom-Channel-Vars": {
                     "type": "object"
+                },
+                "Export-Variables": {
+                    "type": "string"
                 },
                 "Fail-On-Single-Reject": {
                     "type": "string"
@@ -21223,8 +21302,14 @@
                 "Existing-Call-ID": {
                     "type": "string"
                 },
+                "Export-Bridge-Variables": {
+                    "type": "string"
+                },
                 "Export-Custom-Channel-Vars": {
                     "type": "object"
+                },
+                "Export-Variables": {
+                    "type": "string"
                 },
                 "Fail-On-Single-Reject": {
                     "type": "string"
@@ -22735,6 +22820,12 @@
                     "enum": [
                         "route"
                     ],
+                    "type": "string"
+                },
+                "Export-Bridge-Variables": {
+                    "type": "string"
+                },
+                "Export-Variables": {
                     "type": "string"
                 },
                 "Fail-On-Single-Reject": {
@@ -27891,6 +27982,16 @@
                     "description": "call_command digit timeout",
                     "type": "integer"
                 },
+                "export_bridge_variables": {
+                    "default": [
+                        "hold_music"
+                    ],
+                    "description": "call_command export_bridge_variables",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
                 "interdigit_timeout": {
                     "default": 2000,
                     "description": "call_command interdigit timeout",
@@ -28573,6 +28674,26 @@
                     "default": true,
                     "description": "crossbar pretty metrics",
                     "type": "boolean"
+                },
+                "refresh_app_keys": {
+                    "default": [
+                        "name",
+                        "i18n",
+                        "tags",
+                        "author",
+                        "version",
+                        "license",
+                        "price",
+                        "icon",
+                        "screenshots",
+                        "api_url",
+                        "phase"
+                    ],
+                    "description": "crossbar refresh_app_keys",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 },
                 "request_timeout_ms": {
                     "default": 10000,
@@ -29591,6 +29712,11 @@
                     "description": "ecallmgr maximum timeout for node restart",
                     "type": "integer"
                 },
+                "multivar_separator": {
+                    "default": "~",
+                    "description": "ecallmgr multivar_separator",
+                    "type": "string"
+                },
                 "network_map": {
                     "default": {},
                     "description": "ecallmgr network map",
@@ -29965,11 +30091,6 @@
                     "description": "fax default compare field",
                     "type": "string"
                 },
-                "default_fax_extension": {
-                    "default": ".tiff",
-                    "description": "fax default fax extension",
-                    "type": "string"
-                },
                 "default_retry_count": {
                     "default": 3,
                     "description": "fax default retry count",
@@ -30095,6 +30216,11 @@
                     "description": "fax reschedule",
                     "type": "object"
                 },
+                "serialize_outbound_numbers": {
+                    "default": true,
+                    "description": "fax serialize_outbound_numbers",
+                    "type": "boolean"
+                },
                 "smtp_max_msg_size": {
                     "default": 10485670,
                     "description": "fax smtp maximum msg size",
@@ -30109,6 +30235,21 @@
                     "default": 50,
                     "description": "fax smtp sessions",
                     "type": "integer"
+                },
+                "store_fax_pdf": {
+                    "default": true,
+                    "description": "store the post processed fax document",
+                    "type": "boolean"
+                },
+                "store_fax_tiff": {
+                    "default": true,
+                    "description": "store a pdf copy of the post processed fax document",
+                    "type": "boolean"
+                },
+                "store_url_document": {
+                    "default": true,
+                    "description": "store the document url result in the database",
+                    "type": "boolean"
                 },
                 "wait_for_fax_timeout_ms": {
                     "default": 3600000,
@@ -30384,6 +30525,86 @@
                 "html2pdf": {
                     "default": "/usr/bin/htmldoc --quiet --webpage -f $pdf$ $html$",
                     "description": "kazoo.pdf html2pdf",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.kazoo_convert": {
+            "description": "Schema for kazoo_convert system_config",
+            "properties": {
+                "fax": {
+                    "properties": {
+                        "attachment_format": {
+                            "default": "pdf",
+                            "description": "Format to use for receipt email messages and api responses",
+                            "type": "string"
+                        },
+                        "convert_command_timeout": {
+                            "default": 120000,
+                            "description": "Timeout value in ms for how long a convert command can run before being killed",
+                            "type": "integer"
+                        },
+                        "convert_image_command": {
+                            "default": "convert $FROM -resample 204x98 -units PixelsPerInch -resize 1728x1078\\! -compress group4 $TO",
+                            "description": "The command to resample a tiff file to a fax compatible format or convert a supported image/* format to a tiff",
+                            "type": "string"
+                        },
+                        "convert_openoffice_command": {
+                            "default": "libreoffice --headless --convert-to pdf $FROM --outdir $WORKDIR  2>&1 |egrep 'parser error|Error' && exit 1 || exit 0",
+                            "description": "The command to convert open office documents to pdf",
+                            "type": "string"
+                        },
+                        "convert_pdf_command": {
+                            "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg4 -sOutputFile=$TO -- $FROM",
+                            "description": "The command to convert pdf documents to tiff",
+                            "type": "string"
+                        },
+                        "convert_tiff_command": {
+                            "default": "tiff2pdf -o $TO $FROM",
+                            "description": "The command to convert a tiff file to PDF",
+                            "type": "string"
+                        },
+                        "enable_openoffice": {
+                            "default": true,
+                            "description": "Enables the conversion of openoffice compatible documents",
+                            "type": "boolean"
+                        },
+                        "large_tiff_command": {
+                            "default": "convert $FROM -resample 204x98 -units PixelsPerInch -resize 1728\\!x1078 -compress group4 $TO",
+                            "description": "The command to convert large tiffs to standard dimensions",
+                            "type": "string"
+                        },
+                        "serialize_openoffice": {
+                            "default": true,
+                            "description": "Enable Serialization of openoffice compatible document conversions",
+                            "type": "boolean"
+                        },
+                        "small_tiff_command": {
+                            "default": "convert $FROM -gravity center -resample 204x98 -units PixelsPerInch -extent 1728x1078 -compress group4 $TO",
+                            "description": "The command to convert small tiffs to a fax compatible format",
+                            "type": "string"
+                        },
+                        "validate_pdf_command": {
+                            "default": "gs -dNOPAUSE -dBATCH -sDEVICE=nullpage $FILE",
+                            "description": "The command to verify a PDF file is valid",
+                            "type": "string"
+                        },
+                        "validate_tiff_command": {
+                            "default": "tiffinfo $FILE",
+                            "description": "The command to verify a TIFF file is valid",
+                            "type": "string"
+                        }
+                    }
+                },
+                "fax_converter": {
+                    "default": "fax_converter",
+                    "description": "Module to use for fax related file conversions",
+                    "type": "string"
+                },
+                "file_cache_path": {
+                    "default": "/tmp/",
+                    "description": "The default working directory to use when converting files",
                     "type": "string"
                 }
             },
@@ -31427,16 +31648,16 @@
                         "did_us": {
                             "friendly_name": "US DID",
                             "pretty_print": "SS(###) ### - ####",
-                            "regex": "^\\+?1?([2-9][0-9]{2}[2-9][0-9]{6})$"
+                            "regex": "^(\\+?1)?([2-9][0-9]{2}[2-9][0-9]{6})$"
                         },
                         "emergency": {
                             "emergency": true,
                             "friendly_name": "Emergency Dispatcher",
-                            "regex": "^(911)$"
+                            "regex": "^(911|922|933|833|811|711|999)$"
                         },
                         "international": {
                             "friendly_name": "International",
-                            "regex": "^(011\\d*)$|^(00\\d*)$"
+                            "regex": "^\\+([2-9]\\d{7,})$"
                         },
                         "toll_us": {
                             "friendly_name": "US Toll",
@@ -31472,6 +31693,17 @@
                     "type": "boolean"
                 },
                 "e164_converters": {
+                    "default": {
+                        "^(\\+?1)?([2-9][0-9]{2}[2-9][0-9]{6})$": {
+                            "prefix": "+1"
+                        },
+                        "^011(\\d{5,})$|^00(\\d{5,})$": {
+                            "prefix": "+"
+                        },
+                        "^[2-9]\\d{7,}$": {
+                            "prefix": "+"
+                        }
+                    },
                     "description": "regular expressions to convert numbers to E164 format",
                     "type": "object"
                 },
@@ -31542,7 +31774,7 @@
                     "type": "array"
                 },
                 "reconcile_regex": {
-                    "default": "^\\+?1?\\d{10}$|^\\+[2-9]\\d{7,}$|^011\\d*$|^00\\d*$",
+                    "default": "^(\\+?1)?\\d{10}$|^\\+[2-9]\\d{7,}$|^011\\d*$|^00\\d*$",
                     "description": "if a number matches this regular expression then it is reconcilable",
                     "type": "string"
                 },
@@ -31829,6 +32061,11 @@
                 },
                 "routesip": {
                     "description": "number_manager.vitelity routesip"
+                },
+                "use_stepswitch_cnam": {
+                    "default": false,
+                    "description": "number_manager.vitelity use_stepswitch_cnam",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -32512,6 +32749,33 @@
                     "type": "string"
                 }
             },
+            "type": "object"
+        },
+        "system_config.speech.google": {
+            "description": "Schema for speech.google system_config",
+            "properties": {
+                "asr_api_key": {
+                    "default": "",
+                    "description": "API key for Google Cloud Speech",
+                    "type": "string"
+                },
+                "asr_enable_word_time_offsets": {
+                    "description": "top result includes a list of words and the start and end time offsets",
+                    "type": "boolean"
+                },
+                "asr_profanity_filter": {
+                    "description": "server will attempt to filter out profanities, replacing all but the initial character in each filtered word with asterisk",
+                    "type": "boolean"
+                },
+                "asr_url": {
+                    "default": "https://speech.googleapis.com/v1/speech:recognize",
+                    "description": "Google Cloud Speech API url",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "asr_api_key"
+            ],
             "type": "object"
         },
         "system_config.stepswitch": {
@@ -41773,6 +42037,49 @@
                     },
                     {
                         "$ref": "#/parameters/QUEUE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/QUEUE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members/{CALL_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/QUEUE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/CALL_ID"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"

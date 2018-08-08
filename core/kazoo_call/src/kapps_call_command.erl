@@ -251,6 +251,9 @@
 -define(EXTRA_BRIDGE_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"bridge_timeout_extended_ms">>, 20 * ?MILLISECONDS_IN_SECOND)).
 -define(BRIDGE_DEFAULT_TIMEOUT, ?BRIDGE_DEFAULT_SYSTEM_TIMEOUT_S * ?MILLISECONDS_IN_SECOND).
 
+-define(BRIDGE_EXPORT_VARS, kapps_config:get_ne_binaries(?CONFIG_CAT, <<"export_bridge_variables">>, ?BRIDGE_DEFAULT_EXPORT_VARS)).
+-define(BRIDGE_DEFAULT_EXPORT_VARS, [<<"hold_music">>]).
+
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -1130,6 +1133,7 @@ bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHead
     ,{<<"Custom-SIP-Headers">>, SIPHeaders}
     ,{<<"Ignore-Forward">>, IgnoreForward}
     ,{<<"Language">>, kapps_call:language(Call)}
+    ,{<<"Export-Bridge-Variables">>, ?BRIDGE_EXPORT_VARS}
     ].
 
 -spec bridge(kz_json:objects(), kapps_call:call()) -> 'ok'.

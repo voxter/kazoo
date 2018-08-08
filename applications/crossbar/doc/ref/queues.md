@@ -135,6 +135,16 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/stats
 ```
 
+#### Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members
+```
+
 #### Create
 
 > PUT /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/eavesdrop
@@ -173,5 +183,15 @@ curl -v -X POST \
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
+```
+
+#### Remove
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members/{CALL_ID}
+
+```shell
+curl -v -X DELETE \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members/{CALL_ID}
 ```
 

@@ -31,6 +31,10 @@
 %%% /queues/QID/eavesdrop
 %%%   PUT: ring a phone/user and eavesdrop on the queue's calls
 %%%
+%%% /queues/QID/members
+%%%   GET: list members of a queue
+%%% /queues/QID/members/{call_id}
+%%%   DELETE: remove a call from a queue
 %%%
 %%% @author James Aimonetti
 %%% @end
@@ -38,14 +42,14 @@
 -module(cb_queues).
 
 -export([init/0
-        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
+        ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
         ,content_types_provided/1, content_types_provided/2
-        ,validate/1, validate/2, validate/3
+        ,validate/1, validate/2, validate/3, validate/4
         ,put/1, put/2, put/3
         ,post/2, post/3
         ,patch/2
-        ,delete/2, delete/3
+        ,delete/2, delete/3, delete/4
         ,delete_account/2
         ]).
 -export([maybe_add_queue_to_agent/2, maybe_rm_queue_from_agent/2]).
@@ -62,6 +66,7 @@
 -define(STATS_SUMMARY_PATH_TOKEN, <<"stats_summary">>).
 -define(ROSTER_PATH_TOKEN, <<"roster">>).
 -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
+-define(MEMBERS_PATH_TOKEN, <<"members">>).
 
 -define(STAT_TIMESTAMP_PROCESSED, <<"finished_with_agent">>).
 -define(STAT_TIMESTAMP_HANDLING, <<"connected_with_agent">>).
@@ -135,7 +140,13 @@ allowed_methods(_QueueId) ->
 allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
 allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
-    [?HTTP_PUT].
+    [?HTTP_PUT];
+allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN) ->
+    [?HTTP_GET].
+
+-spec allowed_methods(path_token(), path_token(), path_token()) -> http_methods().
+allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN, _CallId) ->
+    [?HTTP_DELETE].
 
 %%------------------------------------------------------------------------------
 %% @doc Does the path point to a valid resource.
@@ -156,7 +167,11 @@ resource_exists(_) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
-resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true';
+resource_exists(_, ?MEMBERS_PATH_TOKEN) -> 'true'.
+
+-spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
+resource_exists(_, ?MEMBERS_PATH_TOKEN, _) -> 'true'.
 
 %%------------------------------------------------------------------------------
 %% @doc Add content types accepted and provided by this module
@@ -225,7 +240,14 @@ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_POST) ->
 validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_DELETE) ->
     rm_queue_from_agents(Id, Context);
 validate_queue_operation(Context, Id, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
-    validate_eavesdrop_on_queue(Context, Id).
+    validate_eavesdrop_on_queue(Context, Id);
+validate_queue_operation(Context, Id, ?MEMBERS_PATH_TOKEN, ?HTTP_GET) ->
+    list_members(Context, Id).
+
+-spec validate(cb_context:context(), path_token(), path_token(), path_token()) ->
+                      cb_context:context().
+validate(Context, _Id, ?MEMBERS_PATH_TOKEN, _CallId) ->
+    cb_context:set_resp_status(Context, 'success').
 
 validate_eavesdrop_on_call(Context) ->
     Data = cb_context:req_data(Context),
@@ -484,6 +506,17 @@ delete(Context, _) ->
 delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(Context)).
+
+-spec delete(cb_context:context(), path_token(), path_token(), path_token()) -> cb_context:context().
+delete(Context, Id, ?MEMBERS_PATH_TOKEN, CallId) ->
+    Req = [{<<"Account-ID">>, cb_context:account_id(Context)}
+          ,{<<"Call-ID">>, CallId}
+          ,{<<"Queue-ID">>, Id}
+          ,{<<"Reason">>, <<"removed">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    kapi_acdc_queue:publish_member_call_cancel(Req),
+    crossbar_util:response(<<"member remove sent">>, Context).
 
 -spec delete_account(cb_context:context(), path_token()) -> cb_context:context().
 delete_account(Context, AccountId) ->
@@ -782,6 +815,39 @@ normalize_view_results(JObj, Acc) ->
 
 normalize_agents_results(JObj, Acc) ->
     [kz_doc:id(JObj) | Acc].
+
+%%------------------------------------------------------------------------------
+%% @doc Fetch the list of members of a queue
+%% @end
+%%------------------------------------------------------------------------------
+-spec list_members(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+list_members(Context, Id) ->
+    lager:debug("listing waiting members of queue ~s", [Id]),
+    Req = [{<<"Account-ID">>, cb_context:account_id(Context)}
+          ,{<<"Queue-ID">>, Id}
+          ,{<<"Status">>, <<"waiting">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case kapps_util:amqp_pool_request(Req
+                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
+                                     ,fun kapi_acdc_stats:current_calls_resp_v/1
+                                     )
+    of
+        {'error', E} ->
+            lager:error("failed to recv resp from AMQP: ~p", [E]),
+            cb_context:add_system_error('datastore_unreachable', Context);
+        {'ok', Resp} ->
+            Members = extract_members(kz_json:get_list_value(<<"Waiting">>, Resp, [])),
+            crossbar_util:response(Members, Context)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Extract call IDs from waiting stats resp
+%% @end
+%%------------------------------------------------------------------------------
+-spec extract_members(kz_json:objects()) -> kz_term:ne_binaries().
+extract_members(Stats) ->
+    [kz_json:get_ne_binary_value(<<"call_id">>, Stat) || Stat <- Stats].
 
 %%------------------------------------------------------------------------------
 %% @doc Creates an entry in the acdc db of the account's participation in acdc
