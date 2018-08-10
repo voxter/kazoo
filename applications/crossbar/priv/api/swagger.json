@@ -6524,6 +6524,41 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_stats.call_average_wait_time_estimated": {
+            "description": "AMQP API for acdc_stats.call_average_wait_time_estimated",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Average-Wait-Time": {
+                    "type": "integer"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_call_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "average_wait_time_estimated"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Call-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.call_exited_position": {
             "description": "AMQP API for acdc_stats.call_exited_position",
             "properties": {
@@ -6859,6 +6894,9 @@
             "properties": {
                 "Account-ID": {
                     "type": "string"
+                },
+                "Average-Wait-Time": {
+                    "type": "integer"
                 },
                 "Call-ID": {
                     "type": "string"

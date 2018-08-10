@@ -18,6 +18,8 @@
         ,call_handled/1, call_handled_v/1
         ,call_processed/1, call_processed_v/1
 
+        ,call_average_wait_time_estimated/1, call_average_wait_time_estimated_v/1
+
         ,call_exited_position/1, call_exited_position_v/1
 
         ,call_flush/1, call_flush_v/1
@@ -70,6 +72,8 @@
         ,publish_call_handled/1, publish_call_handled/2
         ,publish_call_processed/1, publish_call_processed/2
 
+        ,publish_call_average_wait_time_estimated/1, publish_call_average_wait_time_estimated/2
+
         ,publish_call_exited_position/1, publish_call_exited_position/2
 
         ,publish_call_flush/1, publish_call_flush/2
@@ -119,10 +123,12 @@
 
 -define(WAITING_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
                          ,<<"Entered-Timestamp">>, <<"Entered-Position">>, <<"Caller-Priority">>
-                         ,<<"Required-Skills">>
+                         ,<<"Required-Skills">>, <<"Average-Wait-Time">>
                          ]).
 -define(WAITING_VALUES, ?CALL_REQ_VALUES(<<"waiting">>)).
--define(WAITING_TYPES, [{<<"Required-Skills">>, fun kz_term:is_ne_binaries/1}]).
+-define(WAITING_TYPES, [{<<"Required-Skills">>, fun kz_term:is_ne_binaries/1}
+                       ,{<<"Average-Wait-Time">>, fun is_integer/1}
+                       ]).
 
 -define(MISS_HEADERS, [<<"Agent-ID">>, <<"Miss-Reason">>, <<"Miss-Timestamp">>]).
 -define(MISS_VALUES, ?CALL_REQ_VALUES(<<"missed">>)).
@@ -143,6 +149,10 @@
 -define(PROCESS_HEADERS, [<<"Agent-ID">>, <<"Processed-Timestamp">>, <<"Hung-Up-By">>]).
 -define(PROCESS_VALUES, ?CALL_REQ_VALUES(<<"processed">>)).
 -define(PROCESS_TYPES, []).
+
+-define(AVERAGE_WAIT_TIME_ESTIMATED_HEADERS, [<<"Average-Wait-Time">>]).
+-define(AVERAGE_WAIT_TIME_ESTIMATED_VALUES, ?CALL_REQ_VALUES(<<"average_wait_time_estimated">>)).
+-define(AVERAGE_WAIT_TIME_ESTIMATED_TYPES, [{<<"Average-Wait-Time">>, fun is_integer/1}]).
 
 -define(EXITED_HEADERS, [<<"Exited-Position">>]).
 -define(EXITED_VALUES, ?CALL_REQ_VALUES(<<"exited-position">>)).
@@ -253,6 +263,23 @@ call_processed_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?PROCESS_VALUES, ?PROCESS_TYPES);
 call_processed_v(JObj) ->
     call_processed_v(kz_json:to_proplist(JObj)).
+
+-spec call_average_wait_time_estimated(api_terms()) ->
+                                              {'ok', iolist()} |
+                                              {'error', string()}.
+call_average_wait_time_estimated(Props) when is_list(Props) ->
+    case call_average_wait_time_estimated_v(Props) of
+        'true' -> kz_api:build_message(Props, ?CALL_REQ_HEADERS, ?AVERAGE_WAIT_TIME_ESTIMATED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_average_wait_time_estimated"}
+    end;
+call_average_wait_time_estimated(JObj) ->
+    call_average_wait_time_estimated(kz_json:to_proplist(JObj)).
+
+-spec call_average_wait_time_estimated_v(api_terms()) -> boolean().
+call_average_wait_time_estimated_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?AVERAGE_WAIT_TIME_ESTIMATED_VALUES, ?AVERAGE_WAIT_TIME_ESTIMATED_TYPES);
+call_average_wait_time_estimated_v(JObj) ->
+    call_average_wait_time_estimated_v(kz_json:to_proplist(JObj)).
 
 -spec call_exited_position(api_terms()) ->
                                   {'ok', iolist()} |
@@ -1034,6 +1061,14 @@ publish_call_processed(JObj) ->
     publish_call_processed(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_call_processed(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?PROCESS_VALUES, fun call_processed/1),
+    amqp_util:kapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+-spec publish_call_average_wait_time_estimated(api_terms()) -> 'ok'.
+-spec publish_call_average_wait_time_estimated(api_terms(), binary()) -> 'ok'.
+publish_call_average_wait_time_estimated(JObj) ->
+    publish_call_average_wait_time_estimated(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_average_wait_time_estimated(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?AVERAGE_WAIT_TIME_ESTIMATED_VALUES, fun call_average_wait_time_estimated/1),
     amqp_util:kapps_publish(call_stat_routing_key(API), Payload, ContentType).
 
 -spec publish_call_exited_position(api_terms()) -> 'ok'.

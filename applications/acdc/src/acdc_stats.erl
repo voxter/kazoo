@@ -12,13 +12,14 @@
 -behaviour(gen_listener).
 
 %% Public API
--export([call_waiting/6
-        ,call_waiting/8
+-export([call_waiting/9
         ,call_abandoned/4
         ,call_marked_callback/4
         ,call_handled/4
         ,call_missed/5
         ,call_processed/5
+
+        ,call_average_wait_time_estimated/4
 
         ,find_call/1
         ,call_stat_to_json/1
@@ -76,34 +77,15 @@
 %% Public API
 -spec call_waiting(api_binary()
                   ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ,api_binary()
-                  ) -> 'ok' | {'error', any()}.
--spec call_waiting(api_binary()
-                  ,api_binary()
                   ,integer()
                   ,api_binary()
                   ,api_binary()
                   ,api_binary()
                   ,api_binary()
                   ,api_binaries()
+                  ,api_integer()
                   ) -> 'ok' | {'error', any()}.
-call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
-    Prop = props:filter_undefined(
-             [{<<"Account-ID">>, AccountId}
-             ,{<<"Queue-ID">>, QueueId}
-             ,{<<"Call-ID">>, CallId}
-             ,{<<"Caller-ID-Name">>, CallerIdName}
-             ,{<<"Caller-ID-Number">>, CallerIdNumber}
-             ,{<<"Entered-Timestamp">>, kz_time:current_tstamp()}
-             ,{<<"Caller-Priority">>, CallerPriority}
-              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-             ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
-
-call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority, RequiredSkills) ->
+call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority, RequiredSkills, AverageWaitTimeEstimation) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
@@ -114,6 +96,7 @@ call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber,
              ,{<<"Entered-Position">>, Position}
              ,{<<"Caller-Priority">>, CallerPriority}
              ,{<<"Required-Skills">>, RequiredSkills}
+             ,{<<"Average-Wait-Time">>, AverageWaitTimeEstimation}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
@@ -185,6 +168,22 @@ call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_processed/1).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Update the average_wait_time_estimation for a call stat
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec call_average_wait_time_estimated(ne_binary(), ne_binary(), ne_binary(), integer()) -> 'ok'.
+call_average_wait_time_estimated(AccountId, QueueId, CallId, AverageWaitTime) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+           ,{<<"Queue-ID">>, QueueId}
+           ,{<<"Call-ID">>, CallId}
+           ,{<<"Average-Wait-Time">>, AverageWaitTime}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_average_wait_time_estimated/1).
 
 -spec agent_ready(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
 agent_ready(AcctId, AgentId) ->
@@ -371,6 +370,7 @@ call_summary_table_opts() ->
                       ,{<<"acdc_call_stat">>, <<"marked_callback">>}
                       ,{<<"acdc_call_stat">>, <<"handled">>}
                       ,{<<"acdc_call_stat">>, <<"processed">>}
+                      ,{<<"acdc_call_stat">>, <<"average_wait_time_estimated">>}
                       ,{<<"acdc_call_stat">>, <<"exited-position">>}
                       ,{<<"acdc_call_stat">>, <<"id-change">>}
                       ,{<<"acdc_call_stat">>, <<"flush">>}
@@ -428,6 +428,7 @@ handle_call_stat(JObj, Props) ->
         <<"marked_callback">> -> handle_marked_callback_stat(JObj, Props);
         <<"handled">> -> handle_handled_stat(JObj, Props);
         <<"processed">> -> handle_processed_stat(JObj, Props);
+        <<"average_wait_time_estimated">> -> handle_average_wait_time_estimated_stat(JObj, Props);
         <<"exited-position">> -> handle_exited_stat(JObj, Props);
         <<"flush">> -> flush_call_stat(JObj, Props);
         _Name ->
@@ -545,6 +546,7 @@ handle_cast({'create_call', JObj}, State) ->
                      ,queue_id = kz_json:get_value(<<"Queue-ID">>, JObj)
                      ,entered_timestamp = kz_json:get_value(<<"Entered-Timestamp">>, JObj, kz_time:current_tstamp())
                      ,abandoned_timestamp = kz_json:get_value(<<"Abandon-Timestamp">>, JObj)
+                     ,average_wait_time_estimation = kz_json:get_integer_value(<<"Average-Wait-Time">>, JObj)
                      ,entered_position = kz_json:get_value(<<"Entered-Position">>, JObj)
                      ,abandoned_reason = kz_json:get_value(<<"Abandon-Reason">>, JObj)
                      ,misses = []
@@ -1150,6 +1152,7 @@ call_stat_to_doc(#call_stat{id=Id
                            ,abandoned_timestamp=AbandonedT
                            ,handled_timestamp=HandledT
                            ,processed_timestamp=ProcessedT
+                           ,average_wait_time_estimation=AverageWaitTimeEstimation
                            ,hung_up_by=HungUpBy
                            ,entered_position=EnteredPos
                            ,exited_position=ExitedPos
@@ -1171,6 +1174,7 @@ call_stat_to_doc(#call_stat{id=Id
                                    ,{<<"abandoned_timestamp">>, AbandonedT}
                                    ,{<<"handled_timestamp">>, HandledT}
                                    ,{<<"processed_timestamp">>, ProcessedT}
+                                   ,{<<"average_wait_time_estimation">>, AverageWaitTimeEstimation}
                                    ,{<<"hung_up_by">>, HungUpBy}
                                    ,{<<"entered_position">>, EnteredPos}
                                    ,{<<"exited_position">>, ExitedPos}
@@ -1201,6 +1205,7 @@ call_stat_to_json(#call_stat{id=Id
                             ,abandoned_timestamp=AbandonedT
                             ,handled_timestamp=HandledT
                             ,processed_timestamp=ProcessedT
+                            ,average_wait_time_estimation=AverageWaitTimeEstimation
                             ,hung_up_by=HungUpBy
                             ,entered_position=EnteredPos
                             ,exited_position=ExitedPos
@@ -1222,6 +1227,7 @@ call_stat_to_json(#call_stat{id=Id
       ,{<<"Abandoned-Timestamp">>, AbandonedT}
       ,{<<"Handled-Timestamp">>, HandledT}
       ,{<<"Processed-Timestamp">>, ProcessedT}
+      ,{<<"Average-Wait-Time-Estimation">>, AverageWaitTimeEstimation}
       ,{<<"Hung-Up-By">>, HungUpBy}
       ,{<<"Entered-Position">>, EnteredPos}
       ,{<<"Exited-Position">>, ExitedPos}
@@ -1326,6 +1332,7 @@ handle_waiting_stat(JObj, Props) ->
             Updates = props:filter_undefined(
                         [{#call_stat.entered_timestamp, kz_json:get_value(<<"Entered-Timestamp">>, JObj)}
                         ,{#call_stat.abandoned_timestamp, 'undefined'}
+                        ,{#call_stat.average_wait_time_estimation, kz_json:get_integer_value(<<"Average-Wait-Time">>, JObj)}
                         ,{#call_stat.entered_position, kz_json:get_value(<<"Entered-Position">>, JObj)}
                         ,{#call_stat.exited_position, 'undefined'}
                         ,{#call_stat.abandoned_reason, 'undefined'}
@@ -1409,6 +1416,14 @@ handle_processed_stat(JObj, Props) ->
                 ,{#call_stat.hung_up_by, kz_json:get_value(<<"Hung-Up-By">>, JObj)}
                 ,{#call_stat.status, <<"processed">>}
                 ]),
+    update_call_stat(Id, Updates, Props).
+
+-spec handle_average_wait_time_estimated_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_average_wait_time_estimated_stat(JObj, Props) ->
+    'true' = kapi_acdc_stats:call_average_wait_time_estimated_v(JObj),
+
+    Id = call_stat_id(JObj),
+    Updates = [{#call_stat.average_wait_time_estimation, kz_json:get_integer_value(<<"Average-Wait-Time">>, JObj)}],
     update_call_stat(Id, Updates, Props).
 
 -spec handle_exited_stat(kz_json:object(), kz_proplist()) -> 'ok'.
