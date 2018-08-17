@@ -27,6 +27,8 @@
                    ,handled_timestamp :: api_integer() | '$3' | '_'
                    ,processed_timestamp :: api_integer() | '_'
 
+                   ,average_wait_time_estimation :: api_non_neg_integer() | '_' %% Last average wait time calculated for this call
+
                    ,hung_up_by :: api_binary() | '_'
 
                    ,entered_position :: api_integer() | '_'

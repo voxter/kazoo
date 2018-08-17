@@ -57,6 +57,11 @@ handle(Data, Call) ->
         {'ok', Resp} ->
             AverageWaitTime = kz_json:get_integer_value(<<"Average-Wait-Time">>, Resp, 0),
             lager:info("average wait time for account ~s queue ~s is ~B seconds", [AccountId, QueueId, AverageWaitTime]),
+
+            %% Save the estimated wait time so it can later be included in the
+            %% call stat if the caller enters the queue
+            kapps_call:kvs_store('acdc_average_wait_time_estimation', AverageWaitTime, Call),
+
             {'branch_keys', BranchKeys} = cf_exe:get_branch_keys(Call),
             evaluate_average_wait_time(AverageWaitTime, BranchKeys, Call);
         {'error', E} ->
