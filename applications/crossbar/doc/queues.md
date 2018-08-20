@@ -211,6 +211,106 @@ curl -v -X POST \
 ```
 
 
+#### List queues stats (processed calls are summarized) (lightweight API)
+
+> GET /v2/accounts/{ACCOUNT_ID}/queues/stats_summary
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/stats_summary
+```
+
+Handled/Waiting stat fields:
+
+Key | Type | Description
+--- | ---- | -----------
+`agent_id` | `string()` | ID of the agent whom was assigned to the call
+`average_wait_time_estimation` | `integer()` | Most recent prediction of number of seconds until pickup
+`call_id` | `string()` | ID of the call (the original call in case of a callback)
+`caller_id_name` | `string()` | Caller ID name of the queue caller
+`caller_id_number` | `string()` | Caller ID number of the queue caller
+`caller_priority` | `integer()` | Priority of the queue call (higher value =:= higher priority)
+`entered_position` | `integer()` | Position in the queue when the call first entered
+`entered_timestamp` | `integer()` | Gregorian timestamp of when the call entered the queue
+`exited_position` | `integer()` | Position in the queue when the call was picked up
+`handled_timestamp` | `integer()` | Gregorian timestamp of when the call was picked up by the agent
+`id` | `string()` | ID of the queue call stat
+`is_callback` | `boolean()` | True if the call is a callback
+`queue_id` | `string()` | ID of the queue the call is in
+`required_skills` | `array(string())` | Array of skills required for an agent to be able to ring for the call
+`status` | `string()` | Status of the queue call
+`wait_time` | `integer()` | Number of seconds of waiting before the call was picked up
+
+Summarized stat fields:
+
+Key | Type | Description
+--- | ---- | -----------
+`{QUEUE_ID}.abandoned_calls` | `integer()` | Number of abandoned calls in the queue within the stats window
+`{QUEUE_ID}.total_calls` | `integer()` | Total number of calls in the queue within the stats window
+`{QUEUE_ID}.total_wait_time` | `integer()` | Total seconds of wait for all calls in the queue within the stats window
+`{QUEUE_ID}` | `object()` | Summarized queue stats for {QUEUE_ID}
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "current_timestamp": 63642383800,
+        "Handled": [
+            {
+                "agent_id": "c278b28e4e2267b49d64fdca7b0e4ec6",
+                "average_wait_time_estimation": 35,
+                "call_id": "WVpVIZID4ZWsToxgZXvqtoAarEHKIkXd",
+                "caller_id_name": "1003 Guy",
+                "caller_id_number": "1003",
+                "entered_position": 1,
+                "entered_timestamp": 63702004038,
+                "exited_position": 1,
+                "exited_timestamp": 63702004395,
+                "id": "WVpVIZID4ZWsToxgZXvqtoAarEHKIkXd::f55a9c721180cb044c3a28239f47f460",
+                "is_callback": false,
+                "queue_id": "f55a9c721180cb044c3a28239f47f460",
+                "required_skills": [
+                    "EN"
+                ],
+                "status": "waiting",
+                "wait_time": 357
+            }
+        ],
+        "Summarized": [
+            {
+                "f55a9c721180cb044c3a28239f47f460": {
+                    "abandoned_calls": 1,
+                    "total_calls": 2,
+                    "total_wait_time": 1
+                }
+            }
+        ],
+        "Waiting": [
+            {
+                "average_wait_time_estimation": 35,
+                "call_id": "WVpVIZID4ZWsToxgZXvqtoAarEHKIkXd",
+                "caller_id_name": "1003 Guy",
+                "caller_id_number": "1003",
+                "entered_position": 1,
+                "entered_timestamp": 63702004038,
+                "id": "WVpVIZID4ZWsToxgZXvqtoAarEHKIkXd::f55a9c721180cb044c3a28239f47f460",
+                "is_callback": false,
+                "queue_id": "f55a9c721180cb044c3a28239f47f460",
+                "required_skills": [
+                    "EN"
+                ],
+                "status": "waiting"
+            }
+        ]
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
 #### List queues stats
 
 > GET /v2/accounts/{ACCOUNT_ID}/queues/stats
