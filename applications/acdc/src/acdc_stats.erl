@@ -37,6 +37,8 @@
         ,manual_cleanup_statuses/1
         ]).
 
+-export([average_wait_time_estimation/2, average_wait_time_estimation/4]).
+
 %% ETS config
 -export([call_table_id/0
         ,call_key_pos/0
@@ -338,6 +340,42 @@ manual_cleanup_statuses(Window) ->
                    ,['$_']
                    }],
     gen_listener:cast(Srv, {'remove_status', StatusMatch}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get an estimation of the average wait time for a call with the
+%% given properties.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec average_wait_time_estimation(ne_binary(), ne_binary()) ->
+                                          {'ok', non_neg_integer()} | {'error', any()}.
+average_wait_time_estimation(AccountId, QueueId) ->
+    average_wait_time_estimation(AccountId, QueueId, 'undefined', 'undefined').
+
+-spec average_wait_time_estimation(ne_binary(), ne_binary(), api_ne_binaries(), api_non_neg_integer()) ->
+                                          {'ok', non_neg_integer()} | {'error', any()}.
+average_wait_time_estimation(AccountId, QueueId, Skills, Window) ->
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Skills">>, Skills}
+            ,{<<"Window">>, Window}
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    case kapps_util:amqp_pool_request(Req
+                                     ,fun kapi_acdc_stats:publish_average_wait_time_req/1
+                                     ,fun kapi_acdc_stats:average_wait_time_resp_v/1
+                                     )
+    of
+        {'ok', Resp} ->
+            AverageWaitTime = kz_json:get_integer_value(<<"Average-Wait-Time">>, Resp, 0),
+            lager:info("average wait time for account ~s queue ~s is ~B seconds", [AccountId, QueueId, AverageWaitTime]),
+            {'ok', AverageWaitTime};
+        {'error', E} ->
+            lager:error("could not fetch average wait time for account ~s queue ~s: ~p", [AccountId, QueueId, E]),
+            {'error', E}
+    end.
 
 %% ETS config
 -spec call_table_id() -> atom().

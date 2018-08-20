@@ -42,30 +42,15 @@ handle(Data, Call) ->
         _ -> lager:info("evaluating average wait time over last ~b seconds", [Window])
     end,
 
-    Req = props:filter_undefined(
-            [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Skills">>, Skills}
-            ,{<<"Window">>, Window}
-             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ]),
-    case kapps_util:amqp_pool_request(Req
-                                     ,fun kapi_acdc_stats:publish_average_wait_time_req/1
-                                     ,fun kapi_acdc_stats:average_wait_time_resp_v/1
-                                     )
-    of
-        {'ok', Resp} ->
-            AverageWaitTime = kz_json:get_integer_value(<<"Average-Wait-Time">>, Resp, 0),
-            lager:info("average wait time for account ~s queue ~s is ~B seconds", [AccountId, QueueId, AverageWaitTime]),
-
+    case acdc_stats:average_wait_time_estimation(AccountId, QueueId, Skills, Window) of
+        {'ok', AverageWaitTime} ->
             %% Save the estimated wait time so it can later be included in the
             %% call stat if the caller enters the queue
             kapps_call:kvs_store('acdc_average_wait_time_estimation', AverageWaitTime, Call),
 
             {'branch_keys', BranchKeys} = cf_exe:get_branch_keys(Call),
             evaluate_average_wait_time(AverageWaitTime, BranchKeys, Call);
-        {'error', E} ->
-            lager:error("could not fetch average wait time for account ~s queue ~s: ~p", [AccountId, QueueId, E]),
+        {'error', _} ->
             cf_exe:continue(Call)
     end.
 
