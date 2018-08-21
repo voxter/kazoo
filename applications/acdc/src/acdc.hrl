@@ -59,6 +59,9 @@
 
 -define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
 
+-define(ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, 'acdc_average_wait_time_estimation').
+-define(ACDC_REQUIRED_SKILLS_KEY, 'acdc_required_skills').
+
 -define(PRINT(Str), ?PRINT(Str, [])).
 -define(PRINT(Fmt, Args), begin
                               lager:info(Fmt, Args),
