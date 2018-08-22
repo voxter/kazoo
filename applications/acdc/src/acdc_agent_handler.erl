@@ -172,6 +172,8 @@ maybe_stop_agent(AccountId, AgentId, JObj) ->
 
     end.
 
+maybe_pause_agent(AccountId, AgentId, <<"infinity">>, Alias, JObj) ->
+    maybe_pause_agent(AccountId, AgentId, 'infinity', Alias, JObj);
 maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("agent ~s (~s) not found, nothing to do", [AgentId, AccountId]);
@@ -476,8 +478,8 @@ update_probe(JObj, P) when is_pid(P) ->
 
 send_probe(JObj, State) ->
     To = <<(kz_json:get_value(<<"Username">>, JObj))/binary
-           ,"@"
-           ,(kz_json:get_value(<<"Realm">>, JObj))/binary>>,
+          ,"@"
+          ,(kz_json:get_value(<<"Realm">>, JObj))/binary>>,
     PresenceUpdate =
         [{<<"State">>, State}
         ,{<<"Presence-ID">>, To}

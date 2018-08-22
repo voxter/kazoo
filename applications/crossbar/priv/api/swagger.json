@@ -1053,7 +1053,10 @@
                 },
                 "timeout": {
                     "description": "Time, in seconds, for 'paused' state",
-                    "type": "integer"
+                    "type": [
+                        "integer",
+                        "string"
+                    ]
                 }
             },
             "type": "object"

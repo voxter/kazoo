@@ -1824,12 +1824,8 @@ handle_event({'pause', Timeout, Alias}, 'ringing', #state{agent_listener=AgentLi
     NewFSMState = clear_call(State, 'failed'),
     %% After clearing we are basically 'ready' state, pause from that state
     handle_event({'pause', Timeout, Alias}, 'ready', NewFSMState);
-handle_event({'pause', <<"infinity">>, _}=Event, 'ready', #state{agent_state_updates=Queue}=State) ->
-    lager:debug("recv status update:, pausing for up to infinity s"),
-    NewQueue = [Event | Queue],
-    apply_state_updates(State#state{agent_state_updates=NewQueue});
 handle_event({'pause', Timeout, _}=Event, 'ready', #state{agent_state_updates=Queue}=State) ->
-    lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
+    lager:debug("recv status update: pausing for up to ~p s", [Timeout]),
     NewQueue = [Event | Queue],
     apply_state_updates(State#state{agent_state_updates=NewQueue});
 handle_event({'pause', Timeout, Alias}, 'paused', State) ->
@@ -2055,12 +2051,12 @@ call_id(JObj) ->
     end.
 
 %% returns time left in seconds
--spec time_left(reference() | 'false' | api_integer() | 'infinity') -> api_integer() | ne_binary().
+-spec time_left(reference() | 'false' | api_integer() | 'infinity') -> api_integer() | 'infinity'.
 time_left(Ref) when is_reference(Ref) ->
     time_left(erlang:read_timer(Ref));
 time_left('false') -> 'undefined';
 time_left('undefined') -> 'undefined';
-time_left('infinity') -> <<"infinity">>;
+time_left('infinity') -> 'infinity';
 time_left(Ms) when is_integer(Ms) -> Ms div 1000.
 
 -spec clear_call(state(), atom()) -> state().
@@ -2190,7 +2186,7 @@ outbound_hungup(#state{agent_listener=AgentListener
         _W ->
             case time_left(PRef) of
                 N when is_integer(N), N > 0 -> apply_state_updates(clear_call(State, 'paused'));
-                <<"infinity">> -> apply_state_updates(clear_call(State, 'paused'));
+                'infinity' -> apply_state_updates(clear_call(State, 'paused'));
                 _P ->
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
                     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
@@ -2460,7 +2456,7 @@ apply_state_updates(#state{agent_state_updates=Q
                            _W ->
                                case time_left(PRef) of
                                    N when is_integer(N), N > 0 -> 'paused';
-                                   <<"infinity">> -> 'paused';
+                                   'infinity' -> 'paused';
                                    _P -> 'ready'
                                end
                        end,
@@ -2486,8 +2482,6 @@ apply_state_updates_fold({_, StateName, #state{account_id=AccountId
             acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef), Alias)
     end,
     Acc;
-apply_state_updates_fold({_, _, State}, [{'pause', <<"infinity">>, Alias}|Updates]) ->
-    apply_state_updates_fold(handle_pause('infinity', Alias, State), Updates);
 apply_state_updates_fold({_, _, State}, [{'pause', Timeout, Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause(Timeout, Alias, State), Updates);
 apply_state_updates_fold({_, _, State}, [{'resume'}|Updates]) ->
@@ -2538,7 +2532,7 @@ handle_resume(#state{agent_listener=AgentListener
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     {'next_state', 'ready', State#state{pause_ref='undefined'}}.
 
--spec handle_pause(integer() | 'infinity', api_binary(), state()) -> handle_fsm_ret(state()).
+-spec handle_pause(kz_timeout(), api_binary(), state()) -> handle_fsm_ret(state()).
 handle_pause(Timeout, Alias, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
     State1 = case Timeout of
