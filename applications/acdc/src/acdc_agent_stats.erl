@@ -168,7 +168,7 @@ agent_wrapup(AccountId, AgentId, WaitTime) ->
                              ,fun kapi_acdc_stats:publish_status_wrapup/1
                              ).
 
--spec agent_paused(ne_binary(), ne_binary(), api_integer(), api_binary()) -> 'ok'.
+-spec agent_paused(ne_binary(), ne_binary(), kz_timeout() | 'undefined', api_binary()) -> 'ok'.
 agent_paused(AccountId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AccountId]);
 agent_paused(AccountId, AgentId, PauseTime, Alias) ->
@@ -223,16 +223,16 @@ handle_status_stat(JObj, Props) ->
                      ,{'create_status'
                       ,#status_stat{
                           id=status_stat_id(AgentId, Timestamp, EventName)
-                                   ,agent_id=AgentId
-                                   ,account_id=kz_json:get_value(<<"Account-ID">>, JObj)
-                                   ,status=EventName
-                                   ,timestamp=Timestamp
-                                   ,callid=kz_json:get_value(<<"Call-ID">>, JObj)
-                                   ,wait_time=acdc_stats_util:wait_time(EventName, JObj)
-                                   ,pause_time=acdc_stats_util:pause_time(EventName, JObj)
-                                   ,pause_alias=kz_json:get_value(<<"Pause-Alias">>, JObj)
-                                   ,caller_id_name=acdc_stats_util:caller_id_name(EventName, JObj)
-                                   ,caller_id_number=acdc_stats_util:caller_id_number(EventName, JObj)
+                         ,agent_id=AgentId
+                         ,account_id=kz_json:get_value(<<"Account-ID">>, JObj)
+                         ,status=EventName
+                         ,timestamp=Timestamp
+                         ,callid=kz_json:get_value(<<"Call-ID">>, JObj)
+                         ,wait_time=acdc_stats_util:wait_time(EventName, JObj)
+                         ,pause_time=acdc_stats_util:pause_time(EventName, JObj)
+                         ,pause_alias=kz_json:get_value(<<"Pause-Alias">>, JObj)
+                         ,caller_id_name=acdc_stats_util:caller_id_name(EventName, JObj)
+                         ,caller_id_number=acdc_stats_util:caller_id_number(EventName, JObj)
                          }
                       }
                      ).
