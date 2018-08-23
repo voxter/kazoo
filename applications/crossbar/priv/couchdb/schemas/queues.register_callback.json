@@ -23,7 +23,7 @@
             "type": "object"
         },
         "callback_number": {
-            "description": "DID to call back",
+            "description": "Number to call back",
             "type": "string"
         },
         "cid_name": {
