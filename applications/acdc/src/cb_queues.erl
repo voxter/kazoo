@@ -63,6 +63,7 @@
 
 -include_lib("crossbar/src/crossbar.hrl").
 -include("acdc_config.hrl").
+-include("acdc_shared_defines.hrl").
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".queues">>).
 

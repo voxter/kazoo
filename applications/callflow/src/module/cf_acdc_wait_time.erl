@@ -18,6 +18,7 @@
 -behaviour(gen_cf_action).
 
 -include("callflow.hrl").
+-include_lib("acdc/include/acdc_shared_defines.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -46,7 +47,7 @@ handle(Data, Call) ->
         {'ok', AverageWaitTime} ->
             %% Save the estimated wait time so it can later be included in the
             %% call stat if the caller enters the queue
-            kapps_call:kvs_store('acdc_average_wait_time_estimation', AverageWaitTime, Call),
+            kapps_call:kvs_store(?ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, AverageWaitTime, Call),
 
             {'branch_keys', BranchKeys} = cf_exe:get_branch_keys(Call),
             evaluate_average_wait_time(AverageWaitTime, BranchKeys, Call);
@@ -88,7 +89,7 @@ maybe_include_skills(QueueId, Call) ->
     {'ok', JObj} = kz_datamgr:open_cache_doc(AccountDb, QueueId),
     case kz_json:get_ne_binary_value(<<"strategy">>, JObj) of
         <<"skills_based_round_robin">> ->
-            kapps_call:kvs_fetch('acdc_required_skills', [], Call);
+            kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, [], Call);
         _ -> 'undefined'
     end.
 

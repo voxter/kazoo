@@ -685,7 +685,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,CIDNumber
                            ,Priority
                            ,StatSkills
-                           ,kapps_call:kvs_fetch('acdc_average_wait_time_estimation', Call1)
+                           ,kapps_call:kvs_fetch(?ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, Call1)
                            ),
 
     publish_queue_member_add(AccountId, QueueId, Call1, Priority

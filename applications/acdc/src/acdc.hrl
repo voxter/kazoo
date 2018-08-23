@@ -4,6 +4,7 @@
 -include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo/include/kz_api_literals.hrl").
 -include("acdc_config.hrl").
+-include("acdc_shared_defines.hrl").
 
 -define(APP_NAME, <<"acdc">>).
 -define(APP_VERSION, <<"4.0.0">>).
@@ -58,9 +59,6 @@
 -define(ARCHIVE_WINDOW, ?ACDC_ARCHIVE_WINDOW).
 
 -define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
-
--define(ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, 'acdc_average_wait_time_estimation').
--define(ACDC_REQUIRED_SKILLS_KEY, 'acdc_required_skills').
 
 -define(PRINT(Str), ?PRINT(Str, [])).
 -define(PRINT(Fmt, Args), begin
