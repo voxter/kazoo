@@ -260,8 +260,9 @@ validate_queue_operation(Context, Id, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
     validate_eavesdrop_on_queue(Context, Id);
 validate_queue_operation(Context, Id, ?MEMBERS_PATH_TOKEN, ?HTTP_GET) ->
     list_members(Context, Id);
-validate_queue_operation(Context, _, ?REGISTER_CALLBACK_PATH_TOKEN, ?HTTP_PUT) ->
-    cb_context:validate_request_data(<<"queues.register_callback">>, Context).
+validate_queue_operation(Context, Id, ?REGISTER_CALLBACK_PATH_TOKEN, ?HTTP_PUT) ->
+    OnSuccess = fun(C) -> on_successful_register_callback_validation(Id, C) end,
+    cb_context:validate_request_data(<<"queues.register_callback">>, Context, OnSuccess).
 
 validate(Context, _Id, ?MEMBERS_PATH_TOKEN, _CallId) ->
     cb_context:set_resp_status(Context, 'success').
@@ -895,6 +896,22 @@ list_members(Context, Id) ->
 -spec extract_members(kz_json:objects()) -> ne_binaries().
 extract_members(Stats) ->
     [kz_json:get_ne_binary_value(<<"call_id">>, Stat) || Stat <- Stats].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Validate that a callback registration is permitted by the number
+%% classification
+%% @end
+%%--------------------------------------------------------------------
+-spec on_successful_register_callback_validation(path_token(), cb_context:context()) -> cb_context:context().
+on_successful_register_callback_validation(QueueId, Context) ->
+    CallbackNumber = cb_context:req_value(Context, <<"callback_number">>),
+    CallbackNumberClassification = knm_converters:classify(CallbackNumber),
+    case acdc_util:callback_restricted(cb_context:account_db(Context), QueueId, CallbackNumberClassification) of
+        'false' -> Context;
+        'true' -> crossbar_util:response_400(<<"callback_restricted">>, kz_json:new(), Context)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

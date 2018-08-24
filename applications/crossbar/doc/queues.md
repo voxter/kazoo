@@ -337,6 +337,8 @@ curl -v -X GET \
 
 #### Register a callback
 
+Request that a callback be registered for the given callback\_number. The callback will only be able to be registered if the classification of the callback\_number is permitted in the queue configuration.
+
 PUT body options:
 
 Key | Description | Type | Default | Required
@@ -358,6 +360,10 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback
 ```
 
+##### Success
+
+Response when the callback is successfully registered.
+
 Key | Type | Description
 --- | ---- | -----------
 `call_id` | `string()` | A call ID generated to represent the callback that was registered
@@ -371,6 +377,24 @@ Key | Type | Description
     "node": "{NODE}",
     "request_id": "{REQUEST_ID}",
     "status": "success",
+    "timestamp": "{TIMESTAMP}",
+    "version": "{VERSION}"
+}
+```
+
+##### Callback number is restricted
+
+Response when the callback number is restricted (set to Deny) in the queue configuration.
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {},
+    "error": "400",
+    "message": "callback_restricted",
+    "node": "{NODE}",
+    "request_id": "{REQUEST_ID}",
+    "status": "error",
     "timestamp": "{TIMESTAMP}",
     "version": "{VERSION}"
 }
