@@ -1,0 +1,18 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.crossbar.thumbnails",
+    "description": "Schema for crossbar.thumbnails system_config",
+    "properties": {
+        "dim_x": {
+            "default": 90,
+            "description": "The width of the thumbnail",
+            "type": "integer"
+        },
+        "dim_y": {
+            "default": 90,
+            "description": "The height of the thumbnail",
+            "type": "integer"
+        }
+    },
+    "type": "object"
+}
