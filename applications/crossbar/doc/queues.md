@@ -335,6 +335,72 @@ curl -v -X GET \
 ```
 
 
+#### Register a callback
+
+Request that a callback be registered for the given callback\_number. The callback will only be able to be registered if the classification of the callback\_number is permitted in the queue configuration.
+
+PUT body options:
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`average_wait_time_estimation.enabled` | If true, estimate the average wait time for the call before registering the callback | `boolean()` | `false` | `true`
+`average_wait_time_estimation.window` | Window over which average wait time is calculated (in seconds) | `integer()` |   | `false`
+`average_wait_time_estimation` | Options for the average_wait_time_estimation for a callback registered via API | `object()` |   | `false`
+`callback_number` | Number to call back | `string()` |   | `true`
+`cid_name` | Caller ID name that the user should see when they receive the callback | `string()` |   | `false`
+`cid_number` | Caller ID number that the user should see when they receive the callback | `string()` |   | `false`
+`priority` | assign a priority to the caller | `integer()` |   | `false`
+`required_skills` | Array of skills required for an agent to be able to ring for the call | `array(string())` |   | `false`
+
+> PUT /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback
+```
+
+##### Success
+
+Response when the callback is successfully registered.
+
+Key | Type | Description
+--- | ---- | -----------
+`call_id` | `string()` | A call ID generated to represent the callback that was registered
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "call_id": "{CALL_ID}"
+    },
+    "node": "{NODE}",
+    "request_id": "{REQUEST_ID}",
+    "status": "success",
+    "timestamp": "{TIMESTAMP}",
+    "version": "{VERSION}"
+}
+```
+
+##### Callback number is restricted
+
+Response when the callback number is restricted (set to Deny) in the queue configuration.
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {},
+    "error": "400",
+    "message": "callback_restricted",
+    "node": "{NODE}",
+    "request_id": "{REQUEST_ID}",
+    "status": "error",
+    "timestamp": "{TIMESTAMP}",
+    "version": "{VERSION}"
+}
+```
+
+
 #### List waiting members (call IDs) of queue
 
 > GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members

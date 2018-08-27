@@ -37,7 +37,5 @@
                }).
 -type mgr_state() :: #state{}.
 
--define(ACDC_REQUIRED_SKILLS_KEY, 'acdc_required_skills').
-
 -define(ACDC_QUEUE_MANAGER_HRL, 'true').
 -endif.

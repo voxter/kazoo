@@ -24,8 +24,7 @@
 -behaviour(gen_cf_action).
 
 -include("callflow.hrl").
-
--define(KVS_KEY, 'acdc_required_skills').
+-include_lib("acdc/include/acdc_shared_defines.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -38,12 +37,12 @@ handle(Data, Call) ->
     Add = kz_json:get_list_value(<<"add">>, Data, []),
     Remove = kz_json:get_list_value(<<"remove">>, Data, []),
 
-    Skills = kapps_call:kvs_fetch(?KVS_KEY, [], Call),
+    Skills = kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, [], Call),
     Skills1 = remove_skills(Remove, add_skills(Add, Skills)),
 
     lager:info("resulting list of required skills: ~p", [Skills1]),
 
-    Call1 = kapps_call:kvs_store(?KVS_KEY, Skills1, Call),
+    Call1 = kapps_call:kvs_store(?ACDC_REQUIRED_SKILLS_KEY, Skills1, Call),
     cf_exe:set_call(Call1),
     cf_exe:continue(Call1).
 

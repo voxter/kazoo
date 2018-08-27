@@ -135,6 +135,16 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/stats
 ```
 
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback
+```
+
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/members

@@ -182,23 +182,13 @@ play_announcements(Prompts, #{call := Call
 get_average_wait_time(Call) ->
     AccountId = kapps_call:account_id(Call),
     QueueId = kapps_call:custom_channel_var(<<"Queue-ID">>, Call),
-    Req = props:filter_undefined(
-            [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ]),
-    case kapps_util:amqp_pool_request(Req
-                                     ,fun kapi_acdc_stats:publish_average_wait_time_req/1
-                                     ,fun kapi_acdc_stats:average_wait_time_resp_v/1
-                                     )
-    of
-        {'error', E} ->
-            lager:error("failed to receive current calls from AMQP: ~p", [E]),
-            'undefined';
-        {'ok', Resp} ->
-            AverageWaitTime = kz_json:get_integer_value(<<"Average-Wait-Time">>, Resp, 0),
+
+    case acdc_stats:average_wait_time_estimation(AccountId, QueueId) of
+        {'ok', AverageWaitTime} ->
             acdc_stats:call_average_wait_time_estimated(AccountId, QueueId, kapps_call:call_id(Call), AverageWaitTime),
-            AverageWaitTime
+            AverageWaitTime;
+        {'error', _} ->
+            'undefined'
     end.
 
 %%--------------------------------------------------------------------
