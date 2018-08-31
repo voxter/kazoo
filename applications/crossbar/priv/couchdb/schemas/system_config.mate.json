@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.mate",
+    "description": "Schema for mate system_config",
+    "properties": {
+        "port": {
+            "default": 7886,
+            "description": "the port that mate listens for mattermost on",
+            "type": "integer"
+        }
+    },
+    "type": "object"
+}

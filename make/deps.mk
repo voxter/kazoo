@@ -26,6 +26,7 @@ DEPS = amqp_client \
 	inet_cidr \
 	jesse \
 	jiffy \
+	jsx \
 	lager \
 	lager_syslog \
 	meck \
@@ -39,7 +40,9 @@ DEPS = amqp_client \
 	syslog \
 	trie \
 	wsock \
-	zucchini
+	zucchini \
+	gm \
+	fcm
 
 BUILD_DEPS = parse_trans
 IGNORE_DEPS = hamcrest
@@ -71,7 +74,7 @@ dep_erlcloud = git https://github.com/lazedo/erlcloud 54fe6b96eb0bc591b80161fc55
 
 dep_erlazure = git https://github.com/lazedo/erlazure.git add-start-link
 
-dep_couchbeam = git https://github.com/2600hz/couchbeam 2600hz 
+dep_couchbeam = git https://github.com/2600hz/couchbeam 2600hz
 ###dep_couchbeam = git https://github.com/benoitc/couchbeam 1.4.1
 ### waiting for pull requests
 ### https://github.com/benoitc/couchbeam/pull/158
@@ -104,3 +107,7 @@ dep_parse_trans = git https://github.com/lazedo/parse_trans
 dep_horse = git https://github.com/ninenines/horse
 
 dep_proper = git https://github.com/manopapad/proper v1.2
+
+### Hero additions
+dep_gm = git https://github.com/nuex/erl_gm.git
+dep_fcm = git https://github.com/softwarejoint/fcm-erlang.git

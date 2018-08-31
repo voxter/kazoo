@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.crossbar.mattermost",
+    "description": "Schema for crossbar.mattermost system_config",
+    "properties": {
+        "mattermost_admin_password": {
+            "default": "change_me",
+            "description": "password which should be used to log in to the Mattermost admin account",
+            "type": "string"
+        },
+        "mattermost_admin_token": {
+            "description": "This is set by the system. Do not touch.",
+            "type": "string"
+        },
+        "mattermost_admin_user": {
+            "default": "change_me",
+            "description": "username/email which should be used to log in to the Mattermost admin account",
+            "type": "string"
+        },
+        "mattermost_notify_props": {
+            "default": {
+                "push": "all",
+                "push_status": "online"
+            },
+            "description": "Properties to use for Mattermost notifications",
+            "properties": {
+                "push": {
+                    "default": "all",
+                    "description": "What channel types should push notifications be sent for?",
+                    "type": "string"
+                },
+                "push_status": {
+                    "default": "online",
+                    "description": "What statuses should mean push notifications get sent",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "mattermost_url": {
+            "default": "https://c-chat.conversanthq.com/api",
+            "description": "URL to use for the Mattermost API",
+            "type": "string"
+        },
+        "timeout_ms": {
+            "default": 30000,
+            "description": "How long to wait for the crossbar_mattermost_account server to return a reply",
+            "minimum": 1,
+            "type": "integer"
+        }
+    },
+    "type": "object"
+}
