@@ -178,7 +178,7 @@ agent_wrapup(AccountId, AgentId, WaitTime) ->
                              ,fun kapi_acdc_stats:publish_status_wrapup/1
                              ).
 
--spec agent_paused(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_integer(), kz_term:api_binary()) -> 'ok'.
+-spec agent_paused(kz_term:ne_binary(), kz_term:ne_binary(), timeout() | 'undefined', kz_term:api_binary()) -> 'ok'.
 agent_paused(AccountId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AccountId]);
 agent_paused(AccountId, AgentId, PauseTime, Alias) ->

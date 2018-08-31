@@ -88,11 +88,10 @@ handle(Data, Call) ->
 
 -spec maybe_enable_callback(kapps_call:call(), kz_json:object()) -> kapps_call:call().
 maybe_enable_callback(Call, QueueJObj) ->
-    RestrictedClassifiers = kz_json:get_json_value([<<"breakout">>, <<"classifiers">>], QueueJObj, kz_json:new()),
     CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
     BreakoutKey = kz_json:get_ne_binary_value([<<"breakout">>, <<"dtmf">>], QueueJObj),
     case BreakoutKey =/= 'undefined'
-        andalso not callback_restricted(RestrictedClassifiers, CallerClassification)
+        andalso not acdc_util:callback_restricted(QueueJObj, CallerClassification)
     of
         'true' ->
             lager:debug("callbacks are enabled"),
@@ -133,9 +132,8 @@ maybe_enter_queue(#member_call{call=Call
                               ,queue_jobj=QueueJObj
                               }=MC
                  ,'false') ->
-    RestrictedClassifiers = kz_json:get_json_value([<<"breakout">>, <<"classifiers">>], QueueJObj, kz_json:new()),
     CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
-    case callback_restricted(RestrictedClassifiers, CallerClassification) of
+    case acdc_util:callback_restricted(QueueJObj, CallerClassification) of
         'false' ->
             kapps_call_command:flush(Call),
             kapps_call_command:hold(<<"silence_stream://0">>, Call),
@@ -408,10 +406,6 @@ breakout_invalid_selection(Call, #breakout_state{retries=Retries}=State, DTMF) -
     lager:debug("invalid selection ~s", [DTMF]),
     kapps_call_command:prompt(<<"menu-invalid_entry">>, Call),
     State#breakout_state{retries=Retries-1}.
-
--spec callback_restricted(kz_json:object(), kz_term:api_binary()) -> boolean().
-callback_restricted(RestrictedClassifiers, CallerClassification) ->
-    kz_json:is_false(CallerClassification, RestrictedClassifiers).
 
 -spec breakout_prompt(kz_json:object()) -> kz_term:ne_binary().
 breakout_prompt(JObj) ->

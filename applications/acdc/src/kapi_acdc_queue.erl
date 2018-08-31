@@ -955,7 +955,11 @@ publish_member_call_failure(Q, JObj) ->
 -spec publish_member_call_failure(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_member_call_failure(Q, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?MEMBER_CALL_FAIL_VALUES, fun member_call_failure/1),
-    amqp_util:targeted_publish(Q, Payload, ContentType),
+    %% Undefined if the proc that registered a call does not have a msg queue
+    case Q of
+        'undefined' -> 'ok';
+        _ -> amqp_util:targeted_publish(Q, Payload, ContentType)
+    end,
     amqp_util:callmgr_publish(Payload, ContentType, member_call_result_routing_key(API)).
 
 -spec publish_member_call_success(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
@@ -965,7 +969,11 @@ publish_member_call_success(Q, JObj) ->
 -spec publish_member_call_success(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_member_call_success(Q, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?MEMBER_CALL_SUCCESS_VALUES, fun member_call_success/1),
-    amqp_util:targeted_publish(Q, Payload, ContentType),
+    %% Undefined if the proc that registered a call does not have a msg queue
+    case Q of
+        'undefined' -> 'ok';
+        _ -> amqp_util:targeted_publish(Q, Payload, ContentType)
+    end,
     amqp_util:callmgr_publish(Payload, ContentType, member_call_result_routing_key(API)).
 
 -spec publish_member_connect_req(kz_term:api_terms()) -> 'ok'.

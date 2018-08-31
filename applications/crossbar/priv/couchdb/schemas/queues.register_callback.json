@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "queues.register_callback",
+    "description": "Call Queues - Register a callback via API",
+    "properties": {
+        "average_wait_time_estimation": {
+            "description": "Options for the average_wait_time_estimation for a callback registered via API",
+            "properties": {
+                "enabled": {
+                    "default": false,
+                    "description": "If true, estimate the average wait time for the call before registering the callback",
+                    "type": "boolean"
+                },
+                "window": {
+                    "description": "Window over which average wait time is calculated (in seconds)",
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "enabled"
+            ],
+            "type": "object"
+        },
+        "callback_number": {
+            "description": "Number to call back",
+            "type": "string"
+        },
+        "cid_name": {
+            "description": "Caller ID name that the user should see when they receive the callback",
+            "type": "string"
+        },
+        "cid_number": {
+            "description": "Caller ID number that the user should see when they receive the callback",
+            "type": "string"
+        },
+        "priority": {
+            "description": "assign a priority to the caller",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+        },
+        "required_skills": {
+            "description": "Array of skills required for an agent to be able to ring for the call",
+            "items": {
+                "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+        }
+    },
+    "required": [
+        "callback_number"
+    ],
+    "type": "object"
+}
