@@ -12,6 +12,7 @@
 
 -export([handle/2]).
 
+-include("acdc_shared_defines.hrl").
 -include_lib("callflow/src/callflow.hrl").
 
 -define(AVAILABLE_BRANCH_KEY, <<"available">>).
@@ -26,7 +27,7 @@ handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
     Req = props:filter_undefined([{<<"Account-ID">>, kapps_call:account_id(Call)}
                                  ,{<<"Queue-ID">>, QueueId}
-                                 ,{<<"Skills">>, kapps_call:kvs_fetch('acdc_required_skills', Call)}
+                                 ,{<<"Skills">>, kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, Call)}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     case kapps_util:amqp_pool_request(Req

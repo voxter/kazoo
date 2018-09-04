@@ -21,6 +21,7 @@
         ,caller_id/1
         ,hangup_cause/1
         ,max_priority/2
+        ,callback_restricted/2, callback_restricted/3
         ]).
 
 -include("acdc.hrl").
@@ -177,4 +178,18 @@ max_priority(QueueJObj) ->
     case kz_json:get_integer_value(<<"max_priority">>, QueueJObj) of
         'undefined' -> kapps_config:get_integer(?CONFIG_CAT, <<"default_queue_max_priority">>);
         Priority -> Priority
+    end.
+
+-spec callback_restricted(kz_json:object(), kz_term:api_binary()) -> boolean().
+callback_restricted(QueueJObj, CallerClassification) ->
+    RestrictedClassifiers = kz_json:get_json_value([<<"breakout">>, <<"classifiers">>], QueueJObj, kz_json:new()),
+    kz_json:is_false(CallerClassification, RestrictedClassifiers).
+
+-spec callback_restricted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) -> boolean().
+callback_restricted(AccountDb, QueueId, CallerClassification) ->
+    case kz_datamgr:open_cache_doc(AccountDb, QueueId) of
+        {'ok', QueueJObj} -> callback_restricted(QueueJObj, CallerClassification);
+        {'error', E} ->
+            lager:error("failed to load doc ~s (~p) to check callback restrictions, defaulting unrestricted", [QueueId, E]),
+            'false'
     end.
