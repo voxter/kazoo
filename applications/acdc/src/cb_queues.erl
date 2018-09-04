@@ -35,6 +35,8 @@
 %%%   GET: list members of a queue
 %%% /queues/QID/members/{call_id}
 %%%   DELETE: remove a call from a queue
+%%% /queues/QID/register_callback
+%%%   PUT: register a callback in a queue
 %%%
 %%% @author James Aimonetti
 %%% @end
@@ -56,6 +58,7 @@
 
 -include_lib("crossbar/src/crossbar.hrl").
 -include("acdc_config.hrl").
+-include("acdc_shared_defines.hrl").
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".queues">>).
 
@@ -67,6 +70,7 @@
 -define(ROSTER_PATH_TOKEN, <<"roster">>).
 -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
 -define(MEMBERS_PATH_TOKEN, <<"members">>).
+-define(REGISTER_CALLBACK_PATH_TOKEN, <<"register_callback">>).
 
 -define(STAT_TIMESTAMP_PROCESSED, <<"finished_with_agent">>).
 -define(STAT_TIMESTAMP_HANDLING, <<"connected_with_agent">>).
@@ -142,7 +146,9 @@ allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
 allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
     [?HTTP_PUT];
 allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN) ->
-    [?HTTP_GET].
+    [?HTTP_GET];
+allowed_methods(_QueueId, ?REGISTER_CALLBACK_PATH_TOKEN) ->
+    [?HTTP_PUT].
 
 -spec allowed_methods(path_token(), path_token(), path_token()) -> http_methods().
 allowed_methods(_QueueId, ?MEMBERS_PATH_TOKEN, _CallId) ->
@@ -168,7 +174,8 @@ resource_exists(_) -> 'true'.
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
 resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true';
-resource_exists(_, ?MEMBERS_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?MEMBERS_PATH_TOKEN) -> 'true';
+resource_exists(_, ?REGISTER_CALLBACK_PATH_TOKEN) -> 'true'.
 
 -spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 resource_exists(_, ?MEMBERS_PATH_TOKEN, _) -> 'true'.
@@ -242,7 +249,10 @@ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_DELETE) ->
 validate_queue_operation(Context, Id, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
     validate_eavesdrop_on_queue(Context, Id);
 validate_queue_operation(Context, Id, ?MEMBERS_PATH_TOKEN, ?HTTP_GET) ->
-    list_members(Context, Id).
+    list_members(Context, Id);
+validate_queue_operation(Context, Id, ?REGISTER_CALLBACK_PATH_TOKEN, ?HTTP_PUT) ->
+    OnSuccess = fun(C) -> on_successful_register_callback_validation(Id, C) end,
+    cb_context:validate_request_data(<<"queues.register_callback">>, Context, OnSuccess).
 
 -spec validate(cb_context:context(), path_token(), path_token(), path_token()) ->
                       cb_context:context().
@@ -426,7 +436,9 @@ put(Context, QID, ?EAVESDROP_PATH_TOKEN) ->
     Prop = [{<<"Eavesdrop-Group-ID">>, QID}
             | default_eavesdrop_req(Context)
            ],
-    eavesdrop_req(Context, Prop).
+    eavesdrop_req(Context, Prop);
+put(Context, QID, ?REGISTER_CALLBACK_PATH_TOKEN) ->
+    register_callback(Context, QID).
 
 -spec default_eavesdrop_req(cb_context:context()) -> kz_term:proplist().
 default_eavesdrop_req(Context) ->
@@ -848,6 +860,101 @@ list_members(Context, Id) ->
 -spec extract_members(kz_json:objects()) -> kz_term:ne_binaries().
 extract_members(Stats) ->
     [kz_json:get_ne_binary_value(<<"call_id">>, Stat) || Stat <- Stats].
+
+%%------------------------------------------------------------------------------
+%% @doc Validate that a callback registration is permitted by the number
+%% classification
+%% @end
+%%------------------------------------------------------------------------------
+-spec on_successful_register_callback_validation(path_token(), cb_context:context()) -> cb_context:context().
+on_successful_register_callback_validation(QueueId, Context) ->
+    CallbackNumber = cb_context:req_value(Context, <<"callback_number">>),
+    CallbackNumberClassification = knm_converters:classify(CallbackNumber),
+    case acdc_util:callback_restricted(cb_context:account_db(Context), QueueId, CallbackNumberClassification) of
+        'false' -> Context;
+        'true' -> crossbar_util:response_400(<<"callback_restricted">>, kz_json:new(), Context)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Register a callback via API
+%% @end
+%%------------------------------------------------------------------------------
+-spec register_callback(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+register_callback(Context, QueueId) ->
+    CallId = kz_binary:rand_hex(16),
+    CallbackNumber = knm_converters:normalize(
+                       cb_context:req_value(Context, <<"callback_number">>)
+                      ),
+
+    Call = kapps_call_from_register_callback_req(Context, QueueId, CallId, CallbackNumber),
+    publish_member_callback(Context, QueueId, Call, CallbackNumber),
+
+    Resp = kz_json:from_list([{<<"call_id">>, CallId}]),
+    crossbar_util:response(Resp, Context).
+
+-spec kapps_call_from_register_callback_req(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                                   kapps_call:call().
+kapps_call_from_register_callback_req(Context, QueueId, CallId, CallbackNumber) ->
+    CallerIdNumber = cb_context:req_value(Context, <<"cid_number">>),
+    CallerIdName = cb_context:req_value(Context, <<"cid_name">>, CallerIdNumber),
+    JObj = kz_json:from_list([{<<"Account-DB">>, cb_context:account_db(Context)}
+                             ,{<<"Account-ID">>, cb_context:account_id(Context)}
+                             ,{<<"Call-ID">>, CallId}
+                             ,{<<"Callee-ID-Name">>, CallerIdName}
+                             ,{<<"Callee-ID-Number">>, CallerIdNumber}
+                             ,{<<"Caller-ID-Name">>, CallbackNumber}
+                             ,{<<"Caller-ID-Number">>, CallbackNumber}
+                             ,{<<"Inception">>, <<"offnet">>}
+                             ,{<<"Resource-Type">>, <<"audio">>}
+                             ]),
+    Call = kapps_call:from_json(JObj),
+    kapps_call:exec([{fun maybe_add_callback_required_skills/2, Context}
+                    ,{fun maybe_add_average_wait_time_estimation/2, {Context, QueueId}}
+                    ], Call).
+
+-spec maybe_add_callback_required_skills(cb_context:context(), kapps_call:call()) ->
+                                                kapps_call:call().
+maybe_add_callback_required_skills(Context, Call) ->
+    case cb_context:req_value(Context, <<"required_skills">>) of
+        'undefined' -> Call;
+        RequiredSkills ->
+            kapps_call:kvs_store(?ACDC_REQUIRED_SKILLS_KEY
+                                ,lists:usort(RequiredSkills)
+                                ,Call
+                                )
+    end.
+
+-spec maybe_add_average_wait_time_estimation({cb_context:context(), kz_term:ne_binary()}, kapps_call:call()) ->
+                                                    kapps_call:call().
+maybe_add_average_wait_time_estimation({Context, QueueId}, Call) ->
+    case cb_context:req_value(Context, [<<"average_wait_time_estimation">>, <<"enabled">>], 'false') of
+        'false' -> Call;
+        'true' ->
+            AccountId = cb_context:account_id(Context),
+            Skills = kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, Call),
+            Window = cb_context:req_value(Context, [<<"average_wait_time_estimation">>, <<"window">>]),
+            Result = acdc_stats:average_wait_time_estimation(AccountId, QueueId, Skills, Window),
+            maybe_add_average_wait_time_estimation2(Call, Result)
+    end.
+
+-spec maybe_add_average_wait_time_estimation2(kapps_call:call(), {'ok', kz_term:non_neg_integer()} | {'error', any()}) ->
+                                                     kapps_call:call().
+maybe_add_average_wait_time_estimation2(Call, {'error', _}) -> Call;
+maybe_add_average_wait_time_estimation2(Call, {'ok', AverageWaitTime}) ->
+    kapps_call:kvs_store(?ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, AverageWaitTime, Call).
+
+-spec publish_member_callback(cb_context:context(), kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) -> 'ok'.
+publish_member_callback(Context, QueueId, Call, CallbackNumber) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, cb_context:account_id(Context)}
+             ,{<<"Queue-ID">>, QueueId}
+             ,{<<"Call">>, kapps_call:to_json(Call)}
+             ,{<<"Callback-Number">>, CallbackNumber}
+             ,{<<"Enter-As-Callback">>, 'true'}
+             ,{<<"Member-Priority">>, cb_context:req_value(Context, <<"priority">>)}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_queue:publish_member_call/1).
 
 %%------------------------------------------------------------------------------
 %% @doc Creates an entry in the acdc db of the account's participation in acdc

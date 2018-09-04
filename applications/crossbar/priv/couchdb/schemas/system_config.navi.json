@@ -1,0 +1,142 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.navi",
+    "description": "Schema for navi system_config",
+    "properties": {
+        "apns": {
+            "properties": {
+                "dev_host": {
+                    "default": "api.development.push.apple.com",
+                    "description": "The APNS host to use for dev push notifications",
+                    "type": "string"
+                },
+                "dev_port": {
+                    "default": 443,
+                    "description": "The APNS port to use for dev push notifications",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "max_overflow_pool_size": {
+                    "default": 40,
+                    "description": "The maximum number of APNS connections to create",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "pool_size": {
+                    "default": 20,
+                    "description": "The number of APNS connections to create",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "prod_host": {
+                    "default": "api.push.apple.com",
+                    "description": "The APNS host to use for prod push notifications",
+                    "type": "string"
+                },
+                "prod_port": {
+                    "default": 443,
+                    "description": "The APNS port to use for prod push notifications",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "timeout_ms": {
+                    "default": 1,
+                    "description": "How long to wait for APNS send confirmation. Hint - it never comes",
+                    "minimum": 1,
+                    "type": "integer"
+                }
+            }
+        },
+        "notification_servers": {
+            "default": [],
+            "description": "all apps that users can subscribe to push notifications from",
+            "items": {
+                "anyOf": [
+                    {
+                        "properties": {
+                            "notification_type": {
+                                "enum": [
+                                    "apns"
+                                ]
+                            },
+                            "pushkit": {
+                                "default": false,
+                                "description": "Is this app using pushkit notifications?",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "certificate",
+                            "default_topic",
+                            "environment",
+                            "key"
+                        ]
+                    },
+                    {
+                        "properties": {
+                            "notification_type": {
+                                "enum": [
+                                    "fcm"
+                                ]
+                            },
+                            "platform": {
+                                "enum": [
+                                    "android",
+                                    "ios"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "api_key",
+                            "platform"
+                        ]
+                    }
+                ],
+                "properties": {
+                    "api_key": {
+                        "description": "the android api key for the app that will send push notifications",
+                        "type": "string"
+                    },
+                    "app_name": {
+                        "description": "an identifier for the app that will be sending push notifications",
+                        "type": "string"
+                    },
+                    "certificate": {
+                        "description": "the Apple provider certificate for apns notifications, stored in .pem format",
+                        "type": "string"
+                    },
+                    "default_topic": {
+                        "description": "the base topic for the app to receive notifications (iOS only)"
+                    },
+                    "environment": {
+                        "description": "the environment of the app (prod or dev). Only used for apns",
+                        "enum": [
+                            "dev",
+                            "prod"
+                        ],
+                        "type": "string"
+                    },
+                    "key": {
+                        "description": "the RSA private key for apns notifications, stored in .pem format",
+                        "type": "string"
+                    },
+                    "notification_type": {
+                        "description": "the notification service that should be used for this notification server",
+                        "enum": [
+                            "apns",
+                            "fcm"
+                        ],
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "app_name",
+                    "notification_type"
+                ],
+                "type": "object"
+            },
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

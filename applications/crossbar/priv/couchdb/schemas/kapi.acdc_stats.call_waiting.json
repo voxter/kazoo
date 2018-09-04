@@ -6,6 +6,9 @@
         "Account-ID": {
             "type": "string"
         },
+        "Average-Wait-Time": {
+            "type": "integer"
+        },
         "Call-ID": {
             "type": "string"
         },

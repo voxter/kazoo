@@ -166,6 +166,7 @@ pages:
     - 'applications/acdc/doc/todo.md'
     - 'applications/acdc/doc/ui.md'
     - 'Call Stats': 'applications/crossbar/doc/acdc_call_stats.md'
+    - 'Webhooks': 'applications/acdc/doc/notifications.md'
   - 'Ananke':
     - 'applications/ananke/doc/README.md'
   - 'Callflows':
@@ -448,6 +449,7 @@ pages:
   - 'Caller ID Formatting': 'doc/reference/caller_id_formatting.md'
   - 'Documentation':
     - 'How to write docs': 'doc/engineering/documentation.md'
+    - 'How to Write Erlang Documentation': 'doc/engineering/erlang-documentation.md'
     - 'Sample API reference doc': 'doc/engineering/things.md'
   - 'Erlang Releases': 'doc/engineering/releases.md'
   - 'Erlang VM Tracing': 'doc/engineering/tracing.md'

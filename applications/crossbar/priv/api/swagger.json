@@ -1321,7 +1321,10 @@
                 },
                 "timeout": {
                     "description": "Time, in seconds, for 'paused' state",
-                    "type": "integer"
+                    "type": [
+                        "integer",
+                        "string"
+                    ]
                 }
             },
             "type": "object"
@@ -5683,6 +5686,47 @@
             ],
             "type": "object"
         },
+        "hero_preferences": {
+            "description": "Hero user preferences JSON schema",
+            "properties": {
+                "custom_hero_groups": {
+                    "description": "the user's custom user groupings for Hero",
+                    "items": {
+                        "properties": {
+                            "name": {
+                                "description": "the name of the group",
+                                "type": "string"
+                            },
+                            "users": {
+                                "description": "the users in the group",
+                                "items": {
+                                    "description": "the kazoo user id of the user in the group",
+                                    "title": "user_id",
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "users"
+                        ],
+                        "title": "custom_hero_group"
+                    },
+                    "type": "array"
+                },
+                "locale": {
+                    "description": "The local that should be used for i18n",
+                    "enum": [
+                        "de",
+                        "en-nz",
+                        "mi"
+                    ],
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "ips": {
             "description": "IP addresses assigned to the account",
             "properties": {
@@ -7344,6 +7388,41 @@
             ],
             "type": "object"
         },
+        "kapi.acdc_stats.call_average_wait_time_estimated": {
+            "description": "AMQP API for acdc_stats.call_average_wait_time_estimated",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Average-Wait-Time": {
+                    "type": "integer"
+                },
+                "Call-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "acdc_call_stat"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "average_wait_time_estimated"
+                    ],
+                    "type": "string"
+                },
+                "Queue-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Call-ID",
+                "Queue-ID"
+            ],
+            "type": "object"
+        },
         "kapi.acdc_stats.call_exited_position": {
             "description": "AMQP API for acdc_stats.call_exited_position",
             "properties": {
@@ -7679,6 +7758,9 @@
             "properties": {
                 "Account-ID": {
                     "type": "string"
+                },
+                "Average-Wait-Time": {
+                    "type": "integer"
                 },
                 "Call-ID": {
                     "type": "string"
@@ -16304,6 +16386,117 @@
                 "Amount",
                 "Transaction-ID"
             ],
+            "type": "object"
+        },
+        "kapi.navi.push": {
+            "description": "AMQP API for navi.push",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "App-Name": {
+                    "enum": [
+                        "mate"
+                    ],
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "navi"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "push"
+                    ],
+                    "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "Metadata": {
+                    "type": "string"
+                },
+                "Push-Topic": {
+                    "type": "string"
+                },
+                "User-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Message",
+                "Push-Topic",
+                "User-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.navi.push_device": {
+            "description": "AMQP API for navi.push_device",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Device-ID": {
+                    "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "Metadata": {
+                    "type": "string"
+                },
+                "Push-Topic": {
+                    "type": "string"
+                },
+                "Title": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Device-ID",
+                "Message",
+                "Push-Topic"
+            ],
+            "type": "object"
+        },
+        "kapi.navi.push_v_device": {
+            "description": "AMQP API for navi.push_v_device",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Device-ID": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "navi"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "push_device"
+                    ],
+                    "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "Metadata": {
+                    "type": "object"
+                },
+                "Push-Topic": {
+                    "type": "string"
+                },
+                "Title": {
+                    "type": "string"
+                }
+            },
             "type": "object"
         },
         "kapi.nodes.advertise": {
@@ -26219,6 +26412,77 @@
             },
             "type": "object"
         },
+        "push_notification_subscriptions": {
+            "description": "Schema for a push notification subscription",
+            "oneOf": [
+                {
+                    "properties": {
+                        "notification_type": {
+                            "enum": [
+                                "apns"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "properties": {
+                        "notification_type": {
+                            "enum": [
+                                "fcm"
+                            ]
+                        },
+                        "platform": {
+                            "default": "android",
+                            "description": "The platform that the push notification subscription is for. Used only by fcm",
+                            "enum": [
+                                "android",
+                                "ios"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "platform"
+                    ]
+                }
+            ],
+            "properties": {
+                "notification_preferences": {
+                    "default": [
+                        "new_voicemail",
+                        "chat"
+                    ],
+                    "description": "The types of notifications that the user wants to receive",
+                    "items": {
+                        "enum": [
+                            "new_unowned_voicemail",
+                            "new_voicemail",
+                            "chat"
+                        ],
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "notification_registration_id": {
+                    "description": "The registration id for the mobile device",
+                    "type": "string"
+                },
+                "notification_type": {
+                    "description": "The type of notification service to use",
+                    "enum": [
+                        "apns",
+                        "fcm"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "notification_preferences",
+                "notification_registration_id",
+                "notification_type"
+            ],
+            "type": "object"
+        },
         "queue_update": {
             "description": "Schema for queue update request",
             "properties": {
@@ -26432,6 +26696,60 @@
             },
             "required": [
                 "name"
+            ],
+            "type": "object"
+        },
+        "queues.register_callback": {
+            "description": "Call Queues - Register a callback via API",
+            "properties": {
+                "average_wait_time_estimation": {
+                    "description": "Options for the average_wait_time_estimation for a callback registered via API",
+                    "properties": {
+                        "enabled": {
+                            "default": false,
+                            "description": "If true, estimate the average wait time for the call before registering the callback",
+                            "type": "boolean"
+                        },
+                        "window": {
+                            "description": "Window over which average wait time is calculated (in seconds)",
+                            "minimum": 0,
+                            "type": "integer"
+                        }
+                    },
+                    "required": [
+                        "enabled"
+                    ],
+                    "type": "object"
+                },
+                "callback_number": {
+                    "description": "Number to call back",
+                    "type": "string"
+                },
+                "cid_name": {
+                    "description": "Caller ID name that the user should see when they receive the callback",
+                    "type": "string"
+                },
+                "cid_number": {
+                    "description": "Caller ID number that the user should see when they receive the callback",
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "assign a priority to the caller",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "required_skills": {
+                    "description": "Array of skills required for an agent to be able to ring for the call",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                }
+            },
+            "required": [
+                "callback_number"
             ],
             "type": "object"
         },
@@ -29124,6 +29442,57 @@
             },
             "type": "object"
         },
+        "system_config.crossbar.mattermost": {
+            "description": "Schema for crossbar.mattermost system_config",
+            "properties": {
+                "mattermost_admin_password": {
+                    "default": "change_me",
+                    "description": "password which should be used to log in to the Mattermost admin account",
+                    "type": "string"
+                },
+                "mattermost_admin_token": {
+                    "description": "This is set by the system. Do not touch.",
+                    "type": "string"
+                },
+                "mattermost_admin_user": {
+                    "default": "change_me",
+                    "description": "username/email which should be used to log in to the Mattermost admin account",
+                    "type": "string"
+                },
+                "mattermost_notify_props": {
+                    "default": {
+                        "push": "all",
+                        "push_status": "online"
+                    },
+                    "description": "Properties to use for Mattermost notifications",
+                    "properties": {
+                        "push": {
+                            "default": "all",
+                            "description": "What channel types should push notifications be sent for?",
+                            "type": "string"
+                        },
+                        "push_status": {
+                            "default": "online",
+                            "description": "What statuses should mean push notifications get sent",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                },
+                "mattermost_url": {
+                    "default": "https://c-chat.conversanthq.com/api",
+                    "description": "URL to use for the Mattermost API",
+                    "type": "string"
+                },
+                "timeout_ms": {
+                    "default": 30000,
+                    "description": "How long to wait for the crossbar_mattermost_account server to return a reply",
+                    "minimum": 1,
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "system_config.crossbar.media": {
             "description": "Schema for crossbar.media system_config",
             "properties": {
@@ -29240,6 +29609,22 @@
                     "default": false,
                     "description": "crossbar.sms api e164 convert to",
                     "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.crossbar.thumbnails": {
+            "description": "Schema for crossbar.thumbnails system_config",
+            "properties": {
+                "dim_x": {
+                    "default": 90,
+                    "description": "The width of the thumbnail",
+                    "type": "integer"
+                },
+                "dim_y": {
+                    "default": 90,
+                    "description": "The height of the thumbnail",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -30890,6 +31275,17 @@
             },
             "type": "object"
         },
+        "system_config.mate": {
+            "description": "Schema for mate system_config",
+            "properties": {
+                "port": {
+                    "default": 7886,
+                    "description": "the port that mate listens for mattermost on",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "system_config.media": {
             "description": "Schema for media system_config",
             "properties": {
@@ -31144,6 +31540,146 @@
                     "description": "modb routines",
                     "items": {
                         "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.navi": {
+            "description": "Schema for navi system_config",
+            "properties": {
+                "apns": {
+                    "properties": {
+                        "dev_host": {
+                            "default": "api.development.push.apple.com",
+                            "description": "The APNS host to use for dev push notifications",
+                            "type": "string"
+                        },
+                        "dev_port": {
+                            "default": 443,
+                            "description": "The APNS port to use for dev push notifications",
+                            "minimum": 1,
+                            "type": "integer"
+                        },
+                        "max_overflow_pool_size": {
+                            "default": 40,
+                            "description": "The maximum number of APNS connections to create",
+                            "minimum": 1,
+                            "type": "integer"
+                        },
+                        "pool_size": {
+                            "default": 20,
+                            "description": "The number of APNS connections to create",
+                            "minimum": 1,
+                            "type": "integer"
+                        },
+                        "prod_host": {
+                            "default": "api.push.apple.com",
+                            "description": "The APNS host to use for prod push notifications",
+                            "type": "string"
+                        },
+                        "prod_port": {
+                            "default": 443,
+                            "description": "The APNS port to use for prod push notifications",
+                            "minimum": 1,
+                            "type": "integer"
+                        },
+                        "timeout_ms": {
+                            "default": 1,
+                            "description": "How long to wait for APNS send confirmation. Hint - it never comes",
+                            "minimum": 1,
+                            "type": "integer"
+                        }
+                    }
+                },
+                "notification_servers": {
+                    "default": [],
+                    "description": "all apps that users can subscribe to push notifications from",
+                    "items": {
+                        "anyOf": [
+                            {
+                                "properties": {
+                                    "notification_type": {
+                                        "enum": [
+                                            "apns"
+                                        ]
+                                    },
+                                    "pushkit": {
+                                        "default": false,
+                                        "description": "Is this app using pushkit notifications?",
+                                        "type": "boolean"
+                                    }
+                                },
+                                "required": [
+                                    "certificate",
+                                    "default_topic",
+                                    "environment",
+                                    "key"
+                                ]
+                            },
+                            {
+                                "properties": {
+                                    "notification_type": {
+                                        "enum": [
+                                            "fcm"
+                                        ]
+                                    },
+                                    "platform": {
+                                        "enum": [
+                                            "android",
+                                            "ios"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "api_key",
+                                    "platform"
+                                ]
+                            }
+                        ],
+                        "properties": {
+                            "api_key": {
+                                "description": "the android api key for the app that will send push notifications",
+                                "type": "string"
+                            },
+                            "app_name": {
+                                "description": "an identifier for the app that will be sending push notifications",
+                                "type": "string"
+                            },
+                            "certificate": {
+                                "description": "the Apple provider certificate for apns notifications, stored in .pem format",
+                                "type": "string"
+                            },
+                            "default_topic": {
+                                "description": "the base topic for the app to receive notifications (iOS only)"
+                            },
+                            "environment": {
+                                "description": "the environment of the app (prod or dev). Only used for apns",
+                                "enum": [
+                                    "dev",
+                                    "prod"
+                                ],
+                                "type": "string"
+                            },
+                            "key": {
+                                "description": "the RSA private key for apns notifications, stored in .pem format",
+                                "type": "string"
+                            },
+                            "notification_type": {
+                                "description": "the notification service that should be used for this notification server",
+                                "enum": [
+                                    "apns",
+                                    "fcm"
+                                ],
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "app_name",
+                            "notification_type"
+                        ],
+                        "type": "object"
                     },
                     "type": "array"
                 }
@@ -32961,6 +33497,11 @@
                     "description": "stepswitch.cnam http method",
                     "type": "string"
                 },
+                "http_token_auth_token": {
+                    "default": "",
+                    "description": "stepswitch cnam http_token_auth_token",
+                    "type": "string"
+                },
                 "http_url": {
                     "default": "https://api.opencnam.com/v2/phone/{{phone_number}}",
                     "description": "stepswitch.cnam http url",
@@ -34706,6 +35247,12 @@
             "required": true,
             "type": "string"
         },
+        "APP": {
+            "in": "path",
+            "name": "APP",
+            "required": true,
+            "type": "string"
+        },
         "APP_ID": {
             "in": "path",
             "maxLength": 32,
@@ -35027,6 +35574,12 @@
             "minLength": 32,
             "name": "MIGRATION_ID",
             "pattern": "^[0-9a-f]+$",
+            "required": true,
+            "type": "string"
+        },
+        "MOBILE_DEVICE_ID": {
+            "in": "path",
+            "name": "MOBILE_DEVICE_ID",
             "required": true,
             "type": "string"
         },
@@ -38964,6 +39517,63 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/hero": {
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/hero_preferences": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "hero_preferences",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/hero_preferences"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/hotdesks": {
             "get": {
                 "parameters": [
@@ -39147,6 +39757,23 @@
                     },
                     {
                         "$ref": "#/parameters/IP_ADDRESS"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/kudos": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
@@ -39792,6 +40419,57 @@
                     },
                     {
                         "$ref": "#/parameters/TEMPLATE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/mattermost": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/mattermost/teams_map": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/mattermost/users_map": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
@@ -41840,6 +42518,108 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/APP"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/APP"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "push_notification_subscriptions",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/push_notification_subscriptions"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/APP"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "put": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "push_notification_subscriptions",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/push_notification_subscriptions"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/APP"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/queues": {
             "get": {
                 "parameters": [
@@ -42080,6 +42860,34 @@
                     },
                     {
                         "$ref": "#/parameters/CALL_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/register_callback": {
+            "put": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "queues",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/queues"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/QUEUE_ID"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
@@ -44229,6 +45037,23 @@
                     },
                     {
                         "$ref": "#/parameters/TEMPORAL_RULE_SET"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/thumbnail": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"

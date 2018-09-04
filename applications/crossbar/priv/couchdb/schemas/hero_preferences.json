@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "hero_preferences",
+    "description": "Hero user preferences JSON schema",
+    "properties": {
+        "custom_hero_groups": {
+            "description": "the user's custom user groupings for Hero",
+            "items": {
+                "properties": {
+                    "name": {
+                        "description": "the name of the group",
+                        "type": "string"
+                    },
+                    "users": {
+                        "description": "the users in the group",
+                        "items": {
+                            "description": "the kazoo user id of the user in the group",
+                            "title": "user_id",
+                            "type": "string"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "name",
+                    "users"
+                ],
+                "title": "custom_hero_group"
+            },
+            "type": "array"
+        },
+        "locale": {
+            "description": "The local that should be used for i18n",
+            "enum": [
+                "de",
+                "en-nz",
+                "mi"
+            ],
+            "type": "string"
+        }
+    },
+    "type": "object"
+}

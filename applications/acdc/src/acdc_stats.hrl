@@ -27,6 +27,8 @@
                    ,handled_timestamp :: kz_term:api_integer() | '$3' | '_'
                    ,processed_timestamp :: kz_term:api_integer() | '_'
 
+                   ,average_wait_time_estimation :: kz_term:api_non_neg_integer() | '_' %% Last average wait time calculated for this call
+
                    ,hung_up_by :: kz_term:api_binary() | '_'
 
                    ,entered_position :: kz_term:api_integer() | '_'

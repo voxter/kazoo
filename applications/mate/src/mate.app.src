@@ -1,0 +1,10 @@
+{application,mate,
+             [{applications,[cowboy,kazoo,kazoo_amqp,kazoo_data,
+                             kazoo_documents,kazoo_stdlib,kernel,lager,navi,
+                             stdlib]},
+              {description,"Mate - A mattermost push notification proxy server"},
+              {vsn,"4.0.0"},
+              {modules,[]},
+              {registered,[mate_sup]},
+              {env,[{is_kazoo_app,true}]},
+              {mod,{mate_app,[]}}]}.
