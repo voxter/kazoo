@@ -83,8 +83,6 @@ wait_for_pivot(Data, Call) ->
                 {<<"call_event">>,<<"CHANNEL_DESTROY">>} ->
                     lager:debug("CHANNEL_DESTROY received stoping call"),
                     cf_exe:stop(Call);
-                {<<"pivot">>,<<"succeeded">>} ->
-                    cf_exe:control_usurped(Call);
                 {<<"pivot">>,<<"failed">>} ->
                     lager:warning("pivot failed failing back to next callflow action"),
                     cf_exe:continue(Call);

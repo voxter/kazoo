@@ -16,9 +16,7 @@
         ]).
 
 
--export([succeeded/1, succeeded_v/1
-        ,failed/1, failed_v/1
-        ,publish_succeeded/2
+-export([failed/1, failed_v/1
         ,publish_failed/2
         ]).
 
@@ -37,13 +35,6 @@
 -define(PIVOT_REQ_TYPES, [{<<"Call">>, fun kz_json:is_json_object/1}
                          ,{<<"Debug">>, fun kz_term:is_boolean/1}
                          ]).
-
--define(PIVOT_SUCCEEDED_HEADERS, [<<"Call-ID">>]).
--define(OPTIONAL_PIVOT_SUCCEEDED_HEADERS, []).
--define(PIVOT_SUCCEEDED_VALUES, [{<<"Event-Category">>,<<"pivot">>}
-                                ,{<<"Event-Name">>, <<"succeeded">>}
-                                ]).
--define(PIVOT_SUCCEEDED_TYPES, []).
 
 -define(PIVOT_FAILED_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_PIVOT_FAILED_HEADERS, []).
@@ -67,22 +58,6 @@ req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?PIVOT_REQ_HEADERS, ?PIVOT_REQ_VALUES, ?PIVOT_REQ_TYPES);
 req_v(JObj) ->
     req_v(kz_json:to_proplist(JObj)).
-
--spec succeeded(kz_term:api_terms()) -> {'ok', iolist()} |
-                                        {'error', string()}.
-succeeded(Prop) when is_list(Prop) ->
-    case succeeded_v(Prop) of
-        'false' -> {'error', "Proplist failed validation for pivot_succeeded"};
-        'true' -> kz_api:build_message(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?OPTIONAL_PIVOT_SUCCEEDED_HEADERS)
-    end;
-succeeded(JObj) ->
-    succeeded(kz_json:to_proplist(JObj)).
-
--spec succeeded_v(kz_term:api_terms()) -> boolean().
-succeeded_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?PIVOT_SUCCEEDED_VALUES, ?PIVOT_SUCCEEDED_TYPES);
-succeeded_v(JObj) ->
-    succeeded_v(kz_json:to_proplist(JObj)).
 
 -spec failed(kz_term:api_terms()) -> {'ok', iolist()} |
                                      {'error', string()}.
@@ -131,11 +106,6 @@ publish_req(JObj) ->
 publish_req(Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PIVOT_REQ_VALUES, fun req/1),
     amqp_util:callmgr_publish(Payload, ContentType, get_pivot_req_routing(Req)).
-
--spec publish_succeeded(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-publish_succeeded(Target, JObj) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PIVOT_SUCCEEDED_VALUES, fun succeeded/1),
-    amqp_util:targeted_publish(Target, Payload).
 
 -spec publish_failed(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_failed(Target, JObj) ->
