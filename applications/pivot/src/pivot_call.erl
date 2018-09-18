@@ -168,13 +168,8 @@ handle_call(_Request, _From, State) ->
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> {'noreply', state()} |
                                      {'stop', 'normal', state()}.
-handle_cast('usurp', #state{call=Call
-                           ,requester_queue=RequesterQ
-                           }=State) ->
+handle_cast('usurp', State) ->
     lager:debug("terminating pivot call because of usurp"),
-    kapi_pivot:publish_succeeded(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
-                                              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-                                             ]),
     {'stop', 'normal', State#state{call='undefined'}};
 handle_cast({'request', Uri, Method}
            ,#state{call=Call
