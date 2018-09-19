@@ -132,32 +132,7 @@ most_recent_statuses(AccountId, Options) when is_list(Options) ->
                                   statuses_return().
 most_recent_statuses(AccountId, AgentId, Options) ->
     ETS = kz_util:spawn_monitor(fun async_most_recent_ets_statuses/4, [AccountId, AgentId, Options, self()]),
-                                                %DB = maybe_start_db_lookup('async_most_recent_db_statuses'
-                                                %                          ,fun async_most_recent_db_statuses/4
-                                                %                          ,AccountId, AgentId, Options, self()
-                                                %                          ),
-
-    maybe_reduce_statuses(AgentId, receive_statuses([ETS])).
-
--spec maybe_reduce_statuses(kz_term:api_binary(), kz_json:object()) ->
-                                   {'ok', kz_json:object()}.
-maybe_reduce_statuses('undefined', Statuses) ->
-    {'ok', kz_json:map(fun map_reduce_agent_statuses/2, Statuses)};
-maybe_reduce_statuses(_, Statuses) -> {'ok', Statuses}.
-
-map_reduce_agent_statuses(AgentId, Statuses) ->
-    {_, S} = kz_json:foldl(fun reduce_agent_statuses/3, {0, kz_json:new()}, Statuses),
-    {AgentId, S}.
-
-reduce_agent_statuses(_, Data, {T, _}=Acc) ->
-    StatT = kz_json:get_value(<<"timestamp">>, Data),
-    try kz_term:to_integer(StatT) of
-        Timestamp when Timestamp > T ->
-            {Timestamp, Data};
-        _ -> Acc
-    catch
-        _:_ -> Acc
-    end.
+    {'ok', receive_statuses([ETS])}.
 
 -type receive_info() :: [{pid(), reference()} | 'undefined'].
 
@@ -168,8 +143,6 @@ receive_statuses(Reqs) -> receive_statuses(Reqs, kz_json:new()).
 -spec receive_statuses(receive_info(), kz_json:object()) ->
                               kz_json:object().
 receive_statuses([], AccJObj) -> AccJObj;
-                                                % receive_statuses(['undefined' | Reqs], AccJObj) ->
-                                                %     receive_statuses(Reqs, AccJObj);
 receive_statuses([{Pid, Ref} | Reqs], AccJObj) ->
     receive
         {'statuses', Statuses, Pid} ->
