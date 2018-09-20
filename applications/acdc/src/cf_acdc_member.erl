@@ -14,6 +14,7 @@
 
 -export([handle/2]).
 
+-include("acdc_shared_defines.hrl").
 -include_lib("callflow/src/callflow.hrl").
 
 -type max_wait() :: pos_integer() | 'infinity'.
@@ -127,19 +128,13 @@ maybe_enter_queue(#member_call{call=Call}, 'true') ->
     lager:info("queue has reached max size"),
     cf_exe:continue(Call);
 maybe_enter_queue(#member_call{call=Call
-                              ,breakout_media=BreakoutMedia
                               ,enter_as_callback='true'
                               ,queue_jobj=QueueJObj
                               }=MC
                  ,'false') ->
     CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
     case acdc_util:callback_restricted(QueueJObj, CallerClassification) of
-        'false' ->
-            kapps_call_command:flush(Call),
-            kapps_call_command:hold(<<"silence_stream://0">>, Call),
-            kapps_call_command:answer(Call),
-            kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
-            enter_as_callback_loop(MC, #breakout_state{});
+        'false' -> check_enter_when_empty(MC);
         'true' ->
             lager:info("queue restricted callback from caller with classification \"~s\"", [CallerClassification]),
             cf_exe:continue(Call)
@@ -164,6 +159,49 @@ maybe_enter_queue(#member_call{call=Call
             lager:info("not entering queue; call was destroyed already (~s)", [E]),
             cf_exe:stop(Call)
     end.
+
+-spec check_enter_when_empty(member_call()) -> 'ok'.
+check_enter_when_empty(#member_call{queue_jobj=QueueJObj}=MC) ->
+    EnterWhenEmpty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true'),
+    check_enter_when_empty(MC, EnterWhenEmpty).
+
+-spec check_enter_when_empty(member_call(), boolean()) -> 'ok'.
+check_enter_when_empty(MC, 'true') ->
+    enter_as_callback(MC);
+check_enter_when_empty(#member_call{call=Call
+                                   ,queue_id=QueueId
+                                   }=MC, 'false') ->
+    Req = props:filter_undefined([{<<"Account-ID">>, kapps_call:account_id(Call)}
+                                 ,{<<"Queue-ID">>, QueueId}
+                                 ,{<<"Skills">>, kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, Call)}
+                                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                 ]),
+    case kapps_util:amqp_pool_request(Req
+                                     ,fun kapi_acdc_queue:publish_agents_available_req/1
+                                     ,fun kapi_acdc_queue:agents_available_resp_v/1
+                                     ) of
+        {'error', E} ->
+            lager:debug("error ~p when getting agents availability in queue ~s", [E, QueueId]),
+            enter_as_callback(MC);
+        {'ok', Resp} ->
+            AgentCount = kz_json:get_integer_value(<<"Agent-Count">>, Resp),
+            case AgentCount > 0 of
+                'true' -> enter_as_callback(MC);
+                'false' ->
+                    lager:info("callback was denied due to enter_when_empty = false and no agents available"),
+                    cf_exe:continue(Call)
+            end
+    end.
+
+-spec enter_as_callback(member_call()) -> 'ok'.
+enter_as_callback(#member_call{call=Call
+                              ,breakout_media=BreakoutMedia
+                              }=MC) ->
+    kapps_call_command:flush(Call),
+    kapps_call_command:hold(<<"silence_stream://0">>, Call),
+    kapps_call_command:answer(Call),
+    kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
+    enter_as_callback_loop(MC, #breakout_state{}).
 
 -spec enter_as_callback_loop(member_call(), breakout_state()) -> 'ok'.
 enter_as_callback_loop(MC, BreakoutState) ->
