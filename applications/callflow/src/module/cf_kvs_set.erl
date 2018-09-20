@@ -9,8 +9,6 @@
 
 -export([handle/2]).
 -export([get_kv/2, get_kv/3]).
--export([add_kvs_to_props/2]).
--export([format_json/1]).
 
 -include("../callflow.hrl").
 
@@ -95,10 +93,6 @@ evaluate_ui([<<"type">>, <<"value">>], Value, Call) ->
 evaluate_ui(_, Value, _) ->
     Value.
 
--spec get_kvs_collection(kapps_call:call()) -> kz_term:api_binary().
-get_kvs_collection(Call) ->
-    get_collection(?COLLECTION_KVS, Call).
-
 get_collection(Collection, Call) ->
     kz_json:get_value(Collection, kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call), kz_json:new()).
 
@@ -115,67 +109,3 @@ set_collection(Collection, Key, Value, Call) ->
       kz_json:set_value(Collection, NewCollection, Collections),
       Call
      ).
-
--spec add_kvs_to_props(kz_term:proplist(), kapps_call:call()) -> kz_term:proplist().
-add_kvs_to_props(Props, Call) ->
-    case kz_json:get_value(<<"kvs_mode">>, get_collection(?COLLECTION_MODE, Call), undefined) of
-        <<"json">> ->
-            Collection = get_kvs_collection(Call),
-            Keys = kz_json:get_keys(Collection),
-
-            lists:foldl(fun(Key, Props2) ->
-                                [{Key, list_to_binary(format_json(kz_json:get_value(Key, Collection)))}] ++ Props2
-                        end, Props, Keys);
-        _ ->
-            [{<<"Custom-KVS">>, get_kvs_collection(Call)}] ++ Props
-    end.
-
--spec format_json(kz_json:json_term()) -> string().
-format_json(Data) ->
-    Proplist = case kz_json:is_json_object(Data) of
-                   true ->
-                       kz_json:to_proplist(Data);
-                   _ ->
-                       Data
-               end,
-
-    format_json_rec(Proplist).
-
-format_json_rec(Proplist) ->
-    format_json_rec(Proplist, []).
-
-format_json_rec([{K,V}], []) ->
-    "{" ++ format_json_rec({K, V}) ++ "}";
-
-format_json_rec([{K,V}], _) ->
-    format_json_rec({K, V}) ++ "}";
-
-format_json_rec([{K,V}=KV|Others], []) ->
-    "{" ++ format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV]);
-
-format_json_rec([{K,V}=KV|Others], Done) ->
-    format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV] ++ Done);
-
-format_json_rec({K, V}, _) ->
-    "\"" ++ binary_to_list(K) ++ "\":" ++ format_json_rec(V, []);
-
-format_json_rec([Prim], []) ->
-    "[" ++ format_type(Prim) ++ "]";
-
-format_json_rec([Prim], _) ->
-    format_type(Prim) ++ "]";
-
-format_json_rec([Prim|Others], []) ->
-    "[" ++ format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
-
-format_json_rec([Prim|Others], _) ->
-    format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
-
-format_json_rec(V, _) ->
-    "\"" ++ kz_term:to_list(V) ++ "\"".
-
-format_type(Data) when not is_binary(Data) ->
-    kz_term:to_list(Data);
-
-format_type(<<Data/binary>>) ->
-    "\"" ++ binary_to_list(Data) ++ "\"".
