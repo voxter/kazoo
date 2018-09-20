@@ -474,35 +474,32 @@ name_compare(Name1a, Name1b, Name2a, Name2b) ->
     end.
 
 -spec filter_users(directory_users(), kz_term:ne_binary(), 'last' | 'first' | 'both') -> directory_users().
-filter_users(Users, DTMFs, 'last') ->
+filter_users(Users, DTMFs, FirstCheck) ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-      lists:foldl(fun(U, Q) -> maybe_queue_user(U, Q, DTMFs, Size, 'last') end
-                 ,queue:new()
-                 ,Users
-                 )
-     );
-filter_users(Users, DTMFs, 'first') ->
-    lager:info("filtering users by ~s", [DTMFs]),
-    Size = byte_size(DTMFs),
-    queue:to_list(
-      lists:foldl(fun(U, Q) -> maybe_queue_user(U, Q, DTMFs, Size, 'first') end
+      lists:foldl(fun(U, Q) -> maybe_queue_user(U, Q, DTMFs, Size, FirstCheck) end
                  ,queue:new()
                  ,Users
                  )
      ).
 
--spec maybe_queue_user(directory_user(), queue:queue(), kz_term:ne_binary(), pos_integer(), 'last' | 'first') ->
+-spec maybe_queue_user(directory_user(), queue:queue(), kz_term:ne_binary(), pos_integer(), 'last' | 'first' | 'both') ->
                               queue:queue().
-maybe_queue_user(User, Queue, DTMFs, Size, FirstCheck) ->
-    case maybe_dtmf_matches(DTMFs, Size, first_check(FirstCheck, User)) of
+maybe_queue_user(User, Queue, DTMFs, Size, 'both') ->
+    case maybe_dtmf_matches(DTMFs, Size, first_check('first', User)) of
         'true' -> queue:in_r(User, Queue);
         'false' ->
-            case maybe_dtmf_matches(DTMFs, Size, second_check(FirstCheck, User)) of
+            case maybe_dtmf_matches(DTMFs, Size, first_check('last', User)) of
                 'true' -> queue:in(User, Queue);
                 'false' -> Queue
             end
+    end;
+
+maybe_queue_user(User, Queue, DTMFs, Size, FirstCheck) ->
+    case maybe_dtmf_matches(DTMFs, Size, first_check(FirstCheck, User)) of
+        'true' -> queue:in_r(User, Queue);
+        'false' -> Queue
     end.
 
 -spec first_check('last' | 'first', directory_user()) -> kz_term:ne_binary().
@@ -510,12 +507,6 @@ first_check('last', User) ->
     last_first_dtmfs(User);
 first_check('first', User) ->
     first_last_dtmfs(User).
-
--spec second_check('last' | 'first', directory_user()) -> kz_term:ne_binary().
-second_check('last', User) ->
-    first_last_dtmfs(User);
-second_check('first', User) ->
-    last_first_dtmfs(User).
 
 -spec maybe_dtmf_matches(kz_term:ne_binary(), pos_integer(), kz_term:ne_binary()) -> boolean().
 maybe_dtmf_matches(_, 0, _) -> 'false';
