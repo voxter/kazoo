@@ -93,6 +93,7 @@ req_params(Call) ->
           ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
           ,{<<"Language">>, kapps_call:language(Call)}
           ,{<<"Callflow-ID">>, kapps_call:kvs_fetch('cf_flow_id', Call)}
+          ,{<<"ACDc-Required-Skills">>, format_acdc_required_skills(kapps_call:kvs_fetch('acdc_required_skills', Call))}
           ]).
 
 -spec format_custom_kvs(kz_json:object()) -> kz_term:proplist().
@@ -100,3 +101,7 @@ format_custom_kvs(JObj) ->
     lists:map(fun({K, V}) -> {K, kz_json:encode(V)} end
              ,kz_json:to_proplist(JObj)
              ).
+
+-spec format_acdc_required_skills(kz_term:api_binaries()) -> kz_term:api_binary().
+format_acdc_required_skills('undefined') -> 'undefined';
+format_acdc_required_skills(Skills) -> kz_json:encode(Skills).
