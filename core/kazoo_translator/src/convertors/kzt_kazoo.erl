@@ -67,31 +67,41 @@ req_params(Call) ->
                  [_|_]=IDs -> IDs
              end,
     props:filter_undefined(
-      cf_kvs_set:add_kvs_to_props(
-        [{<<"Call-ID">>, kapps_call:call_id(Call)}
-        ,{<<"Account-ID">>, kapps_call:account_id(Call)}
-        ,{<<"From">>, kapps_call:from_user(Call)}
-        ,{<<"From-Realm">>, kapps_call:from_realm(Call)}
-        ,{<<"To">>, kapps_call:to_user(Call)}
-        ,{<<"To-Realm">>, kapps_call:to_realm(Call)}
-        ,{<<"Request">>, kapps_call:request_user(Call)}
-        ,{<<"Request-Realm">>, kapps_call:request_realm(Call)}
-        ,{<<"Call-Status">>, kzt_util:get_call_status(Call)}
-        ,{<<"Api-Version">>, <<"4.x">>}
-        ,{<<"Direction">>, <<"inbound">>}
-        ,{<<"Caller-ID-Name">>, kapps_call:caller_id_name(Call)}
-        ,{<<"Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
-        ,{<<"User-ID">>, Owners}
-        ,{<<"Language">>, kapps_call:language(Call)}
-        ,{<<"Recording-Url">>, kzt_util:get_recording_url(Call)}
-        ,{<<"Recording-Duration">>, kzt_util:get_recording_duration(Call)}
-        ,{<<"Recording-ID">>, kzt_util:get_recording_sid(Call)}
-        ,{<<"Digits">>, kzt_util:get_digit_pressed(Call)}
-        ,{<<"Transcription-ID">>, kzt_util:get_transcription_sid(Call)}
-        ,{<<"Transcription-Text">>, kzt_util:get_transcription_text(Call)}
-        ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
-        ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
-        ,{<<"Language">>, kapps_call:language(Call)}
-        ,{<<"Callflow-ID">>, kapps_call:kvs_fetch('cf_flow_id', Call)}
-        ,{<<"ACDc-Required-Skills">>, kapps_call:kvs_fetch('acdc_required_skills', [], Call)}
-        ], Call)).
+      format_custom_kvs(kapps_call:custom_kvs(Call)) ++
+          [{<<"Call-ID">>, kapps_call:call_id(Call)}
+          ,{<<"Account-ID">>, kapps_call:account_id(Call)}
+          ,{<<"From">>, kapps_call:from_user(Call)}
+          ,{<<"From-Realm">>, kapps_call:from_realm(Call)}
+          ,{<<"To">>, kapps_call:to_user(Call)}
+          ,{<<"To-Realm">>, kapps_call:to_realm(Call)}
+          ,{<<"Request">>, kapps_call:request_user(Call)}
+          ,{<<"Request-Realm">>, kapps_call:request_realm(Call)}
+          ,{<<"Call-Status">>, kzt_util:get_call_status(Call)}
+          ,{<<"Api-Version">>, <<"4.x">>}
+          ,{<<"Direction">>, <<"inbound">>}
+          ,{<<"Caller-ID-Name">>, kapps_call:caller_id_name(Call)}
+          ,{<<"Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
+          ,{<<"User-ID">>, Owners}
+          ,{<<"Language">>, kapps_call:language(Call)}
+          ,{<<"Recording-Url">>, kzt_util:get_recording_url(Call)}
+          ,{<<"Recording-Duration">>, kzt_util:get_recording_duration(Call)}
+          ,{<<"Recording-ID">>, kzt_util:get_recording_sid(Call)}
+          ,{<<"Digits">>, kzt_util:get_digit_pressed(Call)}
+          ,{<<"Transcription-ID">>, kzt_util:get_transcription_sid(Call)}
+          ,{<<"Transcription-Text">>, kzt_util:get_transcription_text(Call)}
+          ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
+          ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
+          ,{<<"Language">>, kapps_call:language(Call)}
+          ,{<<"Callflow-ID">>, kapps_call:kvs_fetch('cf_flow_id', Call)}
+          ,{<<"ACDc-Required-Skills">>, format_acdc_required_skills(kapps_call:kvs_fetch('acdc_required_skills', Call))}
+          ]).
+
+-spec format_custom_kvs(kz_json:object()) -> kz_term:proplist().
+format_custom_kvs(JObj) ->
+    lists:map(fun({K, V}) -> {K, kz_json:encode(V)} end
+             ,kz_json:to_proplist(JObj)
+             ).
+
+-spec format_acdc_required_skills(kz_term:api_binaries()) -> kz_term:api_binary().
+format_acdc_required_skills('undefined') -> 'undefined';
+format_acdc_required_skills(Skills) -> kz_json:encode(Skills).

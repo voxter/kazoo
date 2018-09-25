@@ -19929,30 +19929,6 @@
             ],
             "type": "object"
         },
-        "kapi.pivot.succeeded": {
-            "description": "AMQP API for pivot.succeeded",
-            "properties": {
-                "Call-ID": {
-                    "type": "string"
-                },
-                "Event-Category": {
-                    "enum": [
-                        "pivot"
-                    ],
-                    "type": "string"
-                },
-                "Event-Name": {
-                    "enum": [
-                        "succeeded"
-                    ],
-                    "type": "string"
-                }
-            },
-            "required": [
-                "Call-ID"
-            ],
-            "type": "object"
-        },
         "kapi.presence.dialog": {
             "description": "AMQP API for presence.dialog",
             "properties": {

@@ -14,6 +14,7 @@
 
 -export([handle/2]).
 
+-include("acdc_shared_defines.hrl").
 -include_lib("callflow/src/callflow.hrl").
 
 -type max_wait() :: pos_integer() | 'infinity'.
@@ -25,7 +26,7 @@
                      ,queue_id         :: kz_term:api_binary()
                      ,config_data = [] :: kz_term:proplist()
                      ,breakout_media    :: kz_term:api_object()
-                     ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
+                     ,max_wait = 60 :: max_wait()
                      ,silence_noop      :: kz_term:api_binary()
                      ,enter_as_callback :: boolean()
                      ,queue_jobj        :: kz_json:object()
@@ -127,19 +128,13 @@ maybe_enter_queue(#member_call{call=Call}, 'true') ->
     lager:info("queue has reached max size"),
     cf_exe:continue(Call);
 maybe_enter_queue(#member_call{call=Call
-                              ,breakout_media=BreakoutMedia
                               ,enter_as_callback='true'
                               ,queue_jobj=QueueJObj
                               }=MC
                  ,'false') ->
     CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
     case acdc_util:callback_restricted(QueueJObj, CallerClassification) of
-        'false' ->
-            kapps_call_command:flush(Call),
-            kapps_call_command:hold(<<"silence_stream://0">>, Call),
-            kapps_call_command:answer(Call),
-            kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
-            enter_as_callback_loop(MC, #breakout_state{});
+        'false' -> check_enter_when_empty(MC);
         'true' ->
             lager:info("queue restricted callback from caller with classification \"~s\"", [CallerClassification]),
             cf_exe:continue(Call)
@@ -164,6 +159,49 @@ maybe_enter_queue(#member_call{call=Call
             lager:info("not entering queue; call was destroyed already (~s)", [E]),
             cf_exe:stop(Call)
     end.
+
+-spec check_enter_when_empty(member_call()) -> 'ok'.
+check_enter_when_empty(#member_call{queue_jobj=QueueJObj}=MC) ->
+    EnterWhenEmpty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true'),
+    check_enter_when_empty(MC, EnterWhenEmpty).
+
+-spec check_enter_when_empty(member_call(), boolean()) -> 'ok'.
+check_enter_when_empty(MC, 'true') ->
+    enter_as_callback(MC);
+check_enter_when_empty(#member_call{call=Call
+                                   ,queue_id=QueueId
+                                   }=MC, 'false') ->
+    Req = props:filter_undefined([{<<"Account-ID">>, kapps_call:account_id(Call)}
+                                 ,{<<"Queue-ID">>, QueueId}
+                                 ,{<<"Skills">>, kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, Call)}
+                                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                 ]),
+    case kapps_util:amqp_pool_request(Req
+                                     ,fun kapi_acdc_queue:publish_agents_available_req/1
+                                     ,fun kapi_acdc_queue:agents_available_resp_v/1
+                                     ) of
+        {'error', E} ->
+            lager:debug("error ~p when getting agents availability in queue ~s", [E, QueueId]),
+            enter_as_callback(MC);
+        {'ok', Resp} ->
+            AgentCount = kz_json:get_integer_value(<<"Agent-Count">>, Resp),
+            case AgentCount > 0 of
+                'true' -> enter_as_callback(MC);
+                'false' ->
+                    lager:info("callback was denied due to enter_when_empty = false and no agents available"),
+                    cf_exe:continue(Call)
+            end
+    end.
+
+-spec enter_as_callback(member_call()) -> 'ok'.
+enter_as_callback(#member_call{call=Call
+                              ,breakout_media=BreakoutMedia
+                              }=MC) ->
+    kapps_call_command:flush(Call),
+    kapps_call_command:hold(<<"silence_stream://0">>, Call),
+    kapps_call_command:answer(Call),
+    kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
+    enter_as_callback_loop(MC, #breakout_state{}).
 
 -spec enter_as_callback_loop(member_call(), breakout_state()) -> 'ok'.
 enter_as_callback_loop(MC, BreakoutState) ->
@@ -216,10 +254,14 @@ wait_for_bridge(#member_call{call=Call}, _, Timeout, _Start) when Timeout < 0 ->
     end_member_call(Call);
 wait_for_bridge(#member_call{call=Call}=MC, BreakoutState, Timeout, Start) ->
     Wait = os:timestamp(),
+    TimeoutMs = case Timeout of
+                    'infinity' -> 'infinity';
+                    _ -> Timeout * ?MILLISECONDS_IN_SECOND
+                end,
     receive
         {'amqp_msg', JObj} ->
             process_message(MC, BreakoutState, Timeout, Start, Wait, JObj, kz_util:get_event_type(JObj))
-    after Timeout ->
+    after TimeoutMs ->
             lager:info("failed to handle the call in time, proceeding"),
             end_member_call(Call)
     end.
@@ -427,10 +469,9 @@ call_back_at(JObj) ->
 number_correct(JObj) ->
     kz_json:get_ne_value(<<"number_correct">>, JObj, <<"breakout-number_correct">>).
 
-%% convert from seconds to milliseconds, or infinity
 -spec max_wait(integer()) -> max_wait().
 max_wait(N) when N < 1 -> 'infinity';
-max_wait(N) -> N * ?MILLISECONDS_IN_SECOND.
+max_wait(N) -> N.
 
 max_queue_size(N) when is_integer(N), N > 0 -> N;
 max_queue_size(_) -> 0.
