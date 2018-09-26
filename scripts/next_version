@@ -11,4 +11,4 @@ else
    version=$parent
 fi
 vsn=$(git describe --abbrev=0 --tags --match "$version*" 2>/dev/null || echo $version.0)
-increment_version $vsn 3
+echo $vsn
