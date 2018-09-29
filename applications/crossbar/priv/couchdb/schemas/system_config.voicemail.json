@@ -3,6 +3,12 @@
     "_id": "system_config.voicemail",
     "description": "Schema for voicemail system_config",
     "properties": {
+        "min_vmbox_length": {
+            "default": 3,
+            "description": "The minimum allowed length of a voicemail box number",
+            "minimum": 1,
+            "type": "integer"
+        },
         "pin_pass_sync": {
             "default": false,
             "description": "voicemail pin_pass_sync",
