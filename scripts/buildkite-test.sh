@@ -106,3 +106,5 @@ if [[ $(grep -c -v -F 'exit with reason shutdown' ${ARTIFACTS_PATH}/log/error.lo
   cat ${ARTIFACTS_PATH}/log/error.log
   exit 1
 fi
+
+make clean-release
