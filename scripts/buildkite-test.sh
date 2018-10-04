@@ -8,7 +8,10 @@ TEST_REPORTS_PATH=${PWD}/_rel/kazoo/buildkite-test-results
 
 mkdir -p $ARTIFACTS_PATH $TEST_REPORTS_PATH
 
+# Don't fail if xargs exits w/ 123 due to no input (there are no changes after merge)
+set +e
 CHANGED=$(git --no-pager diff --name-only HEAD origin/4.2-develop -- applications core | xargs readlink -e)
+set -e
 
 echo "--- Changed"
 echo $CHANGED
