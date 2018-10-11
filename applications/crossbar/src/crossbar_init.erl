@@ -188,11 +188,12 @@ maybe_start_plaintext(Dispatch) ->
                                    ,{'num_acceptors', Workers}
                                    ]
                                   ,#{'env' => #{'dispatch' => Dispatch
-                                               ,'timeout' => ReqTimeout
                                                }
                                     ,'onrequest' => fun on_request/1
                                     ,'onresponse' => fun on_response/4
                                     ,'compress' => ?USE_COMPRESSION
+                                    ,'shutdown_timeout' => ReqTimeout
+                                    ,'idle_timeout' => 120 * ?MILLISECONDS_IN_SECOND
                                     }
                                   )
             of
@@ -275,11 +276,12 @@ start_ssl(Dispatch) ->
                                   | SSLOpts
                                  ]
                                 ,#{'env' => #{'dispatch' => Dispatch
-                                             ,'timeout' => ReqTimeout
                                              }
                                   ,'onrequest' => fun on_request/1
                                   ,'onresponse' => fun on_response/4
                                   ,'compress' => ?USE_COMPRESSION
+                                  ,'shutdown_timeout' => ReqTimeout
+                                  ,'idle_timeout' => 120 * ?MILLISECONDS_IN_SECOND
                                   }
                                 )
             of
