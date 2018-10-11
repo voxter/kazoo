@@ -3,16 +3,24 @@
 set -x
 set -e
 
-CHANGED='git --no-pager diff --name-only HEAD origin/4.2-develop -- applications core'
+ARTIFACTS_PATH=${PWD}/_rel/kazoo/buildkite-artifacts
+TEST_REPORTS_PATH=${PWD}/_rel/kazoo/buildkite-test-results
+
+mkdir -p $ARTIFACTS_PATH $TEST_REPORTS_PATH
+
+# Don't fail if xargs exits w/ 123 due to no input (there are no changes after merge)
+set +e
+CHANGED=$(git --no-pager diff --name-only HEAD origin/4.2-develop -- applications core | xargs readlink -e)
+set -e
 
 echo "--- Changed"
-echo $($CHANGED)
+echo $CHANGED
 
 echo "--- Script state-of-docs"
 ./scripts/state-of-docs.sh || true
 
 echo "--- Script code_checks"
-./scripts/code_checks.bash $($CHANGED)
+./scripts/code_checks.bash $CHANGED
 
 echo "--- Make fmt"
 make fmt
@@ -40,7 +48,7 @@ echo "--- Make clean"
 make clean
 
 echo "--- Make"
-make
+JOBS="2" make
 
 echo "--- Make code_checks"
 make code_checks
@@ -49,7 +57,7 @@ echo "--- Make app_applications"
 make app_applications
 
 echo "--- Script validate-js"
-./scripts/validate-js.sh $($CHANGED)
+./scripts/validate-js.sh $CHANGED
 
 echo "--- Make apis"
 make apis
@@ -68,15 +76,6 @@ set +e
 make validate-swagger
 set -e
 
-echo "--- ??"
-if [[ 0 -ne `git status --porcelain | wc -l` ]]; then
-  echo Unstaged changes!
-  git status --porcelain
-  git --no-pager diff
-  echo 'Maybe try `make apis` and see if that fixes anything ;)'
-  exit 1
-fi
-
 echo "--- Swagger Tools"
 set +e
 time swagger-tools validate applications/crossbar/priv/api/swagger.json
@@ -89,20 +88,26 @@ echo "--- Make sup_completion"
 make sup_completion
 
 echo "--- Make dialyze"
-if [[ ! -z "$($CHANGED)" ]]; then
-  make build-plt
-  TO_DIALYZE="$(echo $($CHANGED))" make dialyze
-fi
+TO_DIALYZE="$(echo $CHANGED)" make build-plt dialyze
 
 echo "--- Make elvis"
 make elvis
 
-# echo "--- Make sdks"
-# made sdks
-
 echo "--- Make build-ci-release"
 make build-ci-release
 
-echo "--- Script check-release-startup"
-echo "Output being sent to check-release-startup.buildkite.log, chcek build artifacts for log."
-./scripts/check-release-startup.sh > check-release-startup.buildkite.log
+echo "--- Check for unstaged files"
+${PWD}/scripts/check-unstaged.bash
+
+echo "--- Make release"
+KAZOO_CONFIG=${PWD}/rel/ci.config.ini REL="kazoo_apps" ACT="console" NODE_NAME_TYPE="-sname" make release
+
+cp ${PWD}/rel/ci.relx.config $ARTIFACTS_PATH/
+find ${PWD}/_rel/kazoo/releases -name kazoo.rel -exec cp {} $ARTIFACTS_PATH/ \;
+
+if [[ $(grep -c -v -F 'exit with reason shutdown' ${ARTIFACTS_PATH}/log/error.log) -gt 0 ]]; then
+  cat ${ARTIFACTS_PATH}/log/error.log
+  exit 1
+fi
+
+make clean-release

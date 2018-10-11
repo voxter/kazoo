@@ -172,6 +172,7 @@ shared_call_id(ServerRef, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec call_event(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+call_event(_, <<"call_event">>, <<"CHANNEL_CREATE">>, _) -> 'ok';
 call_event(ServerRef, <<"call_event">>, <<"CHANNEL_BRIDGE">>, JObj) ->
     gen_statem:cast(ServerRef, {'channel_bridged', call_id(JObj)});
 call_event(ServerRef, <<"call_event">>, <<"CHANNEL_UNBRIDGE">>, JObj) ->
@@ -214,8 +215,13 @@ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
     Transferor = kz_call_event:other_leg_call_id(JObj),
     Transferee = kz_call_event:call_id(JObj),
     gen_statem:cast(ServerRef, {'channel_transferee', Transferor, Transferee});
+call_event(_, <<"call_event">>, <<"CALL_UPDATE">>, _) -> 'ok';
+call_event(_, <<"call_event">>, <<"PLAYBACK_START">>, _) -> 'ok';
 call_event(ServerRef, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
     gen_statem:cast(ServerRef, {'playback_stop', kz_call_event:call_id(JObj)});
+call_event(_, <<"call_event">>, <<"RECORD_START">>, _) -> 'ok';
+call_event(_, <<"call_event">>, <<"RECORD_STOP">>, _) -> 'ok';
+call_event(_, <<"call_event">>, <<"usurp_publisher">>, _) -> 'ok';
 call_event(_, _C, _E, _) ->
     lager:info("Unhandled combo: ~s/~s", [_C, _E]).
 
