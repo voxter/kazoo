@@ -106,7 +106,7 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
-            Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            Value = kapps_call:custom_application_var(Variable, Call),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)

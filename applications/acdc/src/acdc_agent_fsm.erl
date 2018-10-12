@@ -1279,11 +1279,11 @@ awaiting_callback('cast', {'channel_answered', JObj}=Evt, #state{account_id=Acco
 
             %% Update control queue so call recordings work
             %% Also preserve some metadata included in call recordings
-            CustomKVs = kapps_call:custom_kvs(OriginalMemberCall),
+            CAVs = kz_json:to_proplist(kapps_call:custom_application_vars(OriginalMemberCall)),
             MemberCall = kapps_call:exec([fun(Call) -> kapps_call:set_account_id(AccountId, Call) end
                                          ,fun(Call) -> kapps_call:set_control_queue(CtrlQ, Call) end
+                                         ,fun(Call) -> kapps_call:set_custom_application_vars(CAVs, Call) end
                                          ,fun(Call) -> kapps_call:set_custom_channel_var(<<"Queue-ID">>, QueueId, Call) end
-                                         ,fun(Call) -> kapps_call:set_custom_kvs(CustomKVs, Call) end
                                          ], kapps_call:from_json(JObj)),
 
             kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
@@ -2342,8 +2342,10 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"caller_id_name">>, CIDName}
                ,{<<"caller_id_number">>, CIDNumber}
                ,{<<"call_state">>, Key}
+               ,{<<"custom_application_vars">>, kapps_call:custom_application_vars(MemberCall)}
                ,{<<"now">>, kz_time:current_tstamp()}
-               ,{<<"Custom-KVs">>, kapps_call:custom_kvs(MemberCall)}
+                %% Custom-KVs to be deprecated
+               ,{<<"Custom-KVs">>, kapps_call:custom_application_vars(MemberCall)}
                ,{<<"agent_username">>, AgentName}
                ]),
     Headers = case Method of
