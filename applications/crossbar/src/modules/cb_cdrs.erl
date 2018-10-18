@@ -227,7 +227,7 @@ validate_utc_offset(Context) ->
     UTCSecondsOffset = cb_context:req_value(Context, ?KEY_UO),
     validate_utc_offset(Context, UTCSecondsOffset).
 
--spec validate_utc_offset(cb_context:context(), gregorian_seconds()) -> cb_context:context().
+-spec validate_utc_offset(cb_context:context(), kz_time:gregorian_seconds()) -> cb_context:context().
 validate_utc_offset(Context, 'undefined') ->
     validate_chunk_view(Context);
 validate_utc_offset(Context, 'true') ->
@@ -503,7 +503,7 @@ col_call_priority(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<
 col_reseller_cost(JObj, _Timestamp, _Context) -> kz_term:to_binary(reseller_cost(JObj)).
 col_reseller_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"reseller_billing">>], JObj, <<>>).
 
--spec handle_utc_time_offset(gregorian_seconds(), integer()) -> gregorian_seconds().
+-spec handle_utc_time_offset(kz_time:gregorian_seconds(), integer()) -> kz_time:gregorian_seconds().
 handle_utc_time_offset(Timestamp, 'undefined') -> Timestamp;
 handle_utc_time_offset(Timestamp, UTCSecondsOffset) ->
     Timestamp + kz_term:to_number(UTCSecondsOffset).
