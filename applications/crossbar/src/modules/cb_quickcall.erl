@@ -23,10 +23,10 @@
 
 -spec init() -> 'ok'.
 init() ->
-    Bindings = [{<<"v2_resource.allowed_methods.quickcall">>, 'allowed_methods'}
-               ,{<<"v2_resource.resource_exists.quickcall">>, 'resource_exists'}
-               ,{<<"v2_resource.validate.quickcall">>, 'validate'}
-               ,{<<"v2_resource.execute.post.quickcall">>, 'post'}
+    Bindings = [{<<"*.allowed_methods.quickcall">>, 'allowed_methods'}
+               ,{<<"*.resource_exists.quickcall">>, 'resource_exists'}
+               ,{<<"*.validate.quickcall">>, 'validate'}
+               ,{<<"*.execute.post.quickcall">>, 'post'}
                ],
     cb_modules_util:bind(?MODULE, Bindings).
 
