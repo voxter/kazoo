@@ -124,11 +124,6 @@
         ,kvs_update_counter/3
         ]).
 
--export([custom_kv/2, set_custom_kv/3
-        ,custom_kvs/1, set_custom_kvs/2
-        ,custom_kvs_mode/1, set_custom_kvs_mode/2
-        ]).
-
 -export([flush/0
         ,cache/1, cache/2, cache/3
         ,retrieve/1, retrieve/2
@@ -485,15 +480,8 @@ to_json(#kapps_call{}=Call) ->
                   ,V =/= 'undefined'
                   ,kz_json:is_json_term(V)
           ],
-
-    CustomKVs = [KV
-                 || {_, V}=KV <- props:get_value(<<"Custom-KVs">>, Props, [])
-                        ,V =/= 'undefined'
-                        ,kz_json:is_json_term(V)
-                ],
     kz_json:from_list([KV
-                       || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)}
-                                       ,{<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
+                       || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)} |
                                         props:delete(<<"Key-Value-Store">>, Props)
                                        ],
                           V =/= 'undefined',
@@ -527,7 +515,6 @@ to_proplist(#kapps_call{}=Call) ->
     ,{<<"Inception">>, inception(Call)}
     ,{<<"Is-Recording">>, is_recording(Call)}
     ,{<<"Key-Value-Store">>, kvs_to_proplist(Call)}
-    ,{<<"Custom-KVs">>, kz_json:to_proplist(custom_kvs(Call))}
     ,{<<"Language">>, language(Call)}
     ,{<<"Message-Left">>, message_left(Call)}
     ,{<<"Other-Leg-Call-ID">>, other_leg_call_id(Call)}
@@ -1376,66 +1363,6 @@ kvs_update(Key, Fun, Initial, #kapps_call{kvs=Dict}=Call) ->
 -spec kvs_update_counter(any(), number(), call()) -> call().
 kvs_update_counter(Key, Number, #kapps_call{kvs=Dict}=Call) ->
     Call#kapps_call{kvs=orddict:update_counter(kz_term:to_binary(Key), Number, Dict)}.
-
--define(KVS_DB, <<"kvs_collections">>).
--define(COLLECTION_KVS, <<"Custom-KVS">>).
--define(COLLECTION_MODE, <<"KVS-Mode">>).
-
--spec custom_kv(binary(), call()) -> kz_json:json_term() | 'undefined'.
-custom_kv(Key, Call) ->
-    kz_json:get_value(Key, custom_kvs_collection(?COLLECTION_KVS, Call)).
-
--spec set_custom_kv(binary(), kz_json:json_term(), call()) -> call().
-set_custom_kv(Key, Value, Call) ->
-    set_custom_kvs_collection(?COLLECTION_KVS, Key, Value, Call).
-
--spec set_custom_kvs_collection(binary(), binary(), kz_json:json_term(), call()) -> call().
-set_custom_kvs_collection(Collection, Key, Value, Call) ->
-    Collections = custom_kvs_collections(Call),
-    OldCollection = custom_kvs_collection(Collection, Call),
-    NewCollection = kz_json:set_value(Key, Value, OldCollection),
-    ?MODULE:kvs_store(
-        ?KVS_DB,
-        kz_json:set_value(Collection, NewCollection, Collections),
-        Call
-    ).
-
--spec custom_kvs(call()) -> kz_json:object().
-custom_kvs(Call) ->
-    custom_kvs_collection(?COLLECTION_KVS, Call).
-
--spec set_custom_kvs([{binary(), kz_json:json_term()}] | kz_json:object(), call()) ->
-                            call().
-set_custom_kvs([], Call) -> Call;
-set_custom_kvs([{Key, Value}|KVs], Call) ->
-    set_custom_kvs(KVs, set_custom_kv(Key, Value, Call));
-set_custom_kvs(JObj, Call) ->
-    Collections = custom_kvs_collections(Call),
-    OldCollection = custom_kvs_collection(?COLLECTION_KVS, Call),
-    NewCollection = kz_json:merge(fun kz_json:merge_right/2
-                                 ,OldCollection
-                                 ,JObj),
-    ?MODULE:kvs_store(
-        ?KVS_DB,
-        kz_json:set_value(?COLLECTION_KVS, NewCollection, Collections),
-        Call
-    ).
-
--spec custom_kvs_mode(call()) -> kz_json:json_term().
-custom_kvs_mode(Call) ->
-    kz_json:get_value(<<"kvs_mode">>, custom_kvs_collection(?COLLECTION_MODE, Call), <<"props">>).
-
--spec custom_kvs_collection(binary(), call()) -> kz_json:object().
-custom_kvs_collection(Collection, Call) ->
-    kz_json:get_value(Collection, custom_kvs_collections(Call), kz_json:new()).
-
--spec custom_kvs_collections(call()) -> any().
-custom_kvs_collections(Call) ->
-    ?MODULE:kvs_fetch(?KVS_DB, kz_json:new(), Call).
-
--spec set_custom_kvs_mode(binary(), call()) -> call().
-set_custom_kvs_mode(Mode, Call) ->
-    set_custom_kvs_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
 -spec set_dtmf_collection(kz_term:api_binary(), call()) -> call().
 set_dtmf_collection(DTMF, Call) ->

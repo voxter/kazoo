@@ -72,7 +72,7 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             kz_json:get_value(<<"voice_url">>, Data);
         Variable ->
-            kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
+            kapps_call:custom_application_var(Variable, Call)
     end.
 
 -spec wait_for_pivot(kz_json:object(), kapps_call:call()) -> any().

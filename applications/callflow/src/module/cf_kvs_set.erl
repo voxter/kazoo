@@ -8,13 +8,8 @@
 -module(cf_kvs_set).
 
 -export([handle/2]).
--export([get_kv/2, get_kv/3]).
 
 -include("../callflow.hrl").
-
--define(KVS_DB, <<"kvs_collections">>).
--define(COLLECTION_KVS, <<"Custom-KVS">>).
--define(COLLECTION_MODE, <<"KVS-Mode">>).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -22,90 +17,81 @@
 %%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    Call2 = set_kvs(kz_json:delete_key(<<"kvs_mode">>, Data)
-                   ,set_kvs_mode(kz_json:get_value(<<"kvs_mode">>, Data), Call)
-                   ),
-    cf_exe:set_call(Call2),
-    cf_exe:continue(Call2).
+    %% kvs_mode being deprecated, always doing JSON
+    Data1 = kz_json:delete_key(<<"kvs_mode">>, Data),
+    Data2 = kz_json:set_value(<<"custom_application_vars">>
+                             ,eval_expressions(Data1, Call)
+                             ,kz_json:new()
+                             ),
+    cf_set_variables:handle(Data2, Call).
 
--spec get_kv(kz_term:ne_binary(), kapps_call:call()) -> kz_json:json_term() | 'undefined'.
-get_kv(Key, Call) ->
-    get_kv(?COLLECTION_KVS, Key, Call).
+-spec eval_expressions(kz_json:object(), kapps_call:call()) -> kz_json:object().
+eval_expressions(JObj, Call) ->
+    kz_json:filtermap(fun(K, V) ->
+                              case evaluate(K, V, JObj, Call) of
+                                  'false' -> 'false';
+                                  {'true', V1} -> {'true', {K, V1}}
+                              end
+                      end, JObj).
 
--spec get_kv(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) ->
-                    kz_json:json_term() | 'undefined'.
-get_kv(Collection, Key, Call) ->
-    kz_json:get_value(Key, get_collection(Collection, Call)).
+-spec evaluate(kz_json:key(), kz_json:json_term(), kz_json:object(), kapps_call:call()) -> {'true', kz_json:json_term()} | 'false'.
+evaluate(_, <<"$_digits", _/binary>> = V, _, Call) ->
+    case digits_ref(V) of
+        {'error', ErrJObj} -> {'true', ErrJObj};
+        CollectionName -> evaluate_digits(CollectionName, Call)
+    end;
+evaluate(K, <<"$", K/binary>>, _, _) ->
+    %% Detected a ref loop, ignore key
+    'false';
+              evaluate(K, <<"$", Ref/binary>>, JObj, Call) ->
+    case kz_json:get_value(Ref, JObj) of
+        'undefined' ->
+            %% Skip lookups that refer to nothing
+            'false';
+        V ->
+            %% Update the key to its new value (also helps fix ref loops)
+            JObj1 = kz_json:set_value(K, V, JObj),
+            evaluate(Ref, V, JObj1, Call)
+    end;
+                            evaluate(K, V, JObj, Call) ->
+                                  evaluate_ui(K, V, JObj, Call).
 
-set_kvs(Data, Call) ->
-    lists:foldl(fun(Key, Call1) ->
-                        Value = evaluate(kz_json:get_value(Key, Data), Call1),
-                        set_kvs_collection(Key, Value, Call1)
-                end
-               ,Call
-               ,kz_json:get_keys(Data)).
-
-set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
-
-evaluate(Key, Call) ->
-    case digits_key(Key) of
-        {'error', JObj} -> JObj;
-        'false' -> evaluate2(Key, Call);
-        CollectionName -> kapps_call:get_dtmf_collection(CollectionName, Call)
+-spec evaluate_digits(kz_term:ne_binary(), kapps_call:call()) -> {'true', kz_term:binary()} | 'false'.
+evaluate_digits(CollectionName, Call) ->
+    case kapps_call:get_dtmf_collection(CollectionName, Call) of
+        'undefined' -> 'false';
+        Digits -> {'true', Digits}
     end.
 
-evaluate2(<<"$", Key/binary>>, Call) ->
-    get_kv(Key, Call);
-            evaluate2(Value, Call) ->
-                  evaluate_ui(Value, Call).
+-spec evaluate_ui(kz_json:key(), kz_json:json_term(), kz_json:object(), kapps_call:call()) -> {'true', kz_json:json_term()} | 'false'.
+evaluate_ui(K, V, JObj, Call) ->
+    case kz_json:is_json_object(V) of
+        'true' -> evaluate_ui(kz_json:get_keys(V), K, V, JObj, Call);
+        'false' -> {'true', V}
+    end.
 
--spec digits_key(kz_term:ne_binary()) -> kz_term:ne_binary() | {'error', kz_json:object()} | 'false'.
-digits_key(<<"$_digits">>) ->
+-spec evaluate_ui(kz_json:keys(), kz_json:key(), kz_json:object(), kz_json:object(), kapps_call:call()) -> {'true', kz_json:json_term()} | 'false'.
+evaluate_ui([<<"type">>, <<"value">>], K, V, JObj, Call) ->
+    V1 = kz_json:get_value(<<"value">>, V),
+    evaluate(K, V1, JObj, Call);
+evaluate_ui(_, _, V, _, _) ->
+    {'true', V}.
+
+-spec digits_ref(kz_term:ne_binary()) -> kz_term:ne_binary() | {'error', kz_json:object()}.
+digits_ref(<<"$_digits">>) ->
     <<"default">>;
-digits_key(<<"$_digits[", CollectionName/binary>> = Key) when byte_size(CollectionName) > 0 ->
+digits_ref(<<"$_digits[", CollectionName/binary>> = Ref) when byte_size(CollectionName) > 0 ->
     case binary:part(CollectionName, byte_size(CollectionName), -1) of
         <<"]">> -> binary:part(CollectionName, 0, byte_size(CollectionName) - 1);
-        _ -> digit_evaluation_error(Key)
+        _ -> invalid_digits_ref_error(Ref)
     end;
-digits_key(<<"$_digits[">> = Key) ->
-    digit_evaluation_error(Key);
-digits_key(_) -> 'false'.
+digits_ref(Ref) ->
+    invalid_digits_ref_error(Ref).
 
--spec digit_evaluation_error(kz_term:ne_binary()) -> {'error', kz_json:json_term()}.
-digit_evaluation_error(Key) ->
-    Msg = "invalid kv lookup key used",
-    lager:info(Msg ++ ": ~s", [Key]),
+-spec invalid_digits_ref_error(kz_term:ne_binary()) -> {'error', kz_json:json_term()}.
+invalid_digits_ref_error(Ref) ->
+    Msg = "invalid kv lookup ref used",
+    lager:info(Msg ++ ": ~s", [Ref]),
     {'error', kz_json:from_list([{<<"error">>, kz_term:to_binary(Msg)}
-                                ,{<<"key">>, Key}
+                                ,{<<"ref">>, Ref}
                                 ])}.
-
--spec evaluate_ui(kz_json:json_term() | 'undefined', kapps_call:call()) -> kz_json:json_term() | 'undefined'.
-evaluate_ui(Value, Call) ->
-    case kz_json:is_json_object(Value) of
-        'true' -> evaluate_ui(kz_json:get_keys(Value), Value, Call);
-        'false' -> Value
-    end.
-
--spec evaluate_ui(kz_json:keys(), kz_json:object(), kapps_call:call()) -> kz_json:json_term() | 'undefined'.
-evaluate_ui([<<"type">>, <<"value">>], Value, Call) ->
-    KeyToCheck = kz_json:get_value(<<"value">>, Value),
-    kz_json:set_value(<<"value">>, evaluate(KeyToCheck, Call), Value);
-evaluate_ui(_, Value, _) ->
-    Value.
-
-get_collection(Collection, Call) ->
-    kz_json:get_value(Collection, kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call), kz_json:new()).
-
--spec set_kvs_collection(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
-set_kvs_collection(Key, Value, Call) ->
-    set_collection(?COLLECTION_KVS, Key, Value, Call).
-
-set_collection(Collection, Key, Value, Call) ->
-    Collections = kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call),
-    OldCollection = get_collection(Collection, Call),
-    NewCollection = kz_json:set_value(Key, Value, OldCollection),
-    kapps_call:kvs_store(
-      ?KVS_DB,
-      kz_json:set_value(Collection, NewCollection, Collections),
-      Call
-     ).

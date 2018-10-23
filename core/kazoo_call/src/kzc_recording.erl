@@ -486,7 +486,10 @@ store_recording_meta(#state{call=Call
                      ,{<<"caller_id_number">>, kapps_call:caller_id_number(Call)}
                      ,{<<"cdr_id">>, CdrId}
                      ,{<<"content_type">>, kz_mime:from_extension(Ext)}
+                     ,{<<"custom_application_vars">>, kz_call_event:custom_application_vars(EventJObj)}
                      ,{<<"custom_channel_vars">>, kz_call_event:custom_channel_vars(EventJObj)}
+                      %% custom_kvs to be deprecated
+                     ,{<<"custom_kvs">>, kz_call_event:custom_application_vars(EventJObj)}
                      ,{<<"description">>, <<"recording ", MediaName/binary>>}
                      ,{<<"direction">>, kapps_call:direction(Call)}
                      ,{<<"duration">>, Seconds}
@@ -505,7 +508,6 @@ store_recording_meta(#state{call=Call
                      ,{<<"url">>, Url}
                      ,{<<"queue_id">>, kapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
                      ,{<<"language">>, kapps_call:language(Call)}
-                     ,{<<"custom_kvs">>, kapps_call:custom_kvs(Call)}
                      ,{<<"_id">>, DocId}
                       | ExtraMetadata
                      ]
