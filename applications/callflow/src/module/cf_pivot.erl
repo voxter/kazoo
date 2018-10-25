@@ -72,7 +72,7 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             kz_json:get_value(<<"voice_url">>, Data);
         Variable ->
-            kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
+            kapps_call:custom_application_var(Variable, Call)
     end.
 
 -spec wait_for_pivot(kz_json:object(), kapps_call:call()) -> any().
@@ -86,9 +86,10 @@ wait_for_pivot(Data, Call) ->
                 {<<"pivot">>,<<"failed">>} ->
                     lager:warning("pivot failed failing back to next callflow action"),
                     cf_exe:continue(Call);
-                _ ->
+                _Other ->
                     wait_for_pivot(Data, Call)
             end;
         {'error', 'timeout'} ->
-            wait_for_pivot(Data, Call)
+            lager:error("timeout waiting for pivot response, continuing"),
+            cf_exe:continue(Call)
     end.
