@@ -608,7 +608,24 @@ check_user_name(UserId, Context) ->
 -spec check_emergency_caller_id(api_binary(), cb_context:context()) -> cb_context:context().
 check_emergency_caller_id(UserId, Context) ->
     Context1 = crossbar_util:format_emergency_caller_id_number(Context),
-    check_user_schema(UserId, Context1).
+    check_acdc_agent_priority_supported(UserId, Context1).
+
+-spec check_acdc_agent_priority_supported(api_binary(), cb_context:context()) -> cb_context:context().
+-ifdef(ERL_VERSION_GT_5_10).
+check_acdc_agent_priority_supported(UserId, Context) ->
+    check_user_schema(UserId, Context).
+-else.
+check_acdc_agent_priority_supported(UserId, Context) ->
+    lager:error("cannot use acdc_agent_priority - upgrade to Erlang R16 or above"),
+    cb_context:add_validation_error(
+        [<<"acdc_agent_priority">>]
+        ,<<"disabled">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"acdc_agent_priority is not supported on this instance">>}
+         ])
+        ,check_user_schema(UserId, Context)
+    ).
+-endif.
 
 -spec is_username_unique(api_binary(), api_binary(), ne_binary()) -> boolean().
 is_username_unique(AccountDb, UserId, UserName) ->

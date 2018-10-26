@@ -10,6 +10,15 @@ PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 ERLC_OPTS += -Werror +debug_info +warn_export_all $(PA)
 ERLC_TEST_OPTS += -Werror +debug_info $(PA)
 
+ERL_VERSION := $(shell script -q -c 'erl +V' | cut -d' ' -f6)
+ERL_VERSION_MAJOR := $(shell echo $(ERL_VERSION) | cut -d. -f1)
+ERL_VERSION_MINOR := $(shell echo $(ERL_VERSION) | cut -d. -f2)
+ERL_VERSION_GT_5_10 := $(shell [ $(ERL_VERSION_MAJOR) -gt 5 -o \( $(ERL_VERSION_MAJOR) -eq 5 -a $(ERL_VERSION_MINOR) -ge 10 \) ] && echo true)
+
+ifeq ($(ERL_VERSION_GT_5_10),true)
+ERLC_OPTS += -DERL_VERSION_GT_5_10
+endif
+
 .PHONY: all compile clean
 
 all: compile
