@@ -35,8 +35,6 @@
         ,normalize_alphanum_name/1
 
         ,used_mac_address_message/2
-
-        ,apply_validators/3
         ]).
 
 -include("crossbar.hrl").
@@ -491,14 +489,4 @@ used_mac_address_message(Prefix, JObj, Context) ->
             <<Prefix/binary, " by device \"", DeviceName/binary, "\" in account \"", AccountName/binary, "\"">>;
         'false' ->
             Prefix
-    end.
-
--spec apply_validators(kz_term:api_binary(), cb_context:context(), cb_context:setters()) -> cb_context:context().
-apply_validators(_, Context, []) -> Context;
-apply_validators(Id, Context, [{Validator, Args}|Validators]) ->
-    case cb_context:has_errors(Context) of
-        'true' -> Context;
-        'false' ->
-            C1 = erlang:apply(Validator, [Id, Context | Args]),
-            apply_validators(Id, C1, Validators)
     end.
