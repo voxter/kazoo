@@ -29,7 +29,7 @@
         ,normalize_media_upload/5
 
         ,update_voicemail_creds/4
-        ,should_update_voicemail_creds/1
+        ,should_update_voicemail_creds/2
 
         ,get_request_action/1
         ,normalize_alphanum_name/1
@@ -40,12 +40,11 @@
 -include("crossbar.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
--define(PIN_PASS_SYNC
-       ,kapps_config:get_is_true(<<"voicemail">>
-                                ,<<"pin_pass_sync">>
-                                ,'false'
-                                )
-       ).
+-define(PIN_PASS_SYNC(AccountId), kapps_account_config:get_global(AccountId
+                                                                 ,<<"voicemail">>
+                                                                 ,<<"pin_pass_sync">>
+                                                                 ,'false'
+                                                                 )).
 
 -type binding() :: {kz_term:ne_binary(), atom()}.
 -type bindings() :: [binding(),...].
@@ -404,9 +403,10 @@ get_request_action(Context) ->
 -spec update_voicemail_creds(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) ->
                                     'ok'.
 update_voicemail_creds(UserId, Username, Password, Context) ->
-    AccountDb = cb_context:account_db(Context),
-    case should_update_voicemail_creds(Username) of
+    AccountId = cb_context:account_id(Context),
+    case should_update_voicemail_creds(Username, AccountId) of
         'true' ->
+            AccountDb = cb_context:account_db(Context),
             case maybe_matching_vmbox(AccountDb, UserId, Username) of
                 'undefined' -> 'ok';
                 Doc ->
@@ -417,16 +417,18 @@ update_voicemail_creds(UserId, Username, Password, Context) ->
         'false' -> 'ok'
     end.
 
--spec should_update_voicemail_creds(kz_term:ne_binary()) -> boolean().
-should_update_voicemail_creds(Username) ->
-    should_update_voicemail_creds(Username, ?PIN_PASS_SYNC).
+-spec should_update_voicemail_creds(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
+should_update_voicemail_creds(Username, AccountId) ->
+    case ?PIN_PASS_SYNC(AccountId) of
+        'true' -> is_username_integer(Username);
+        'false' -> 'false'
+    end.
 
--spec should_update_voicemail_creds(kz_term:ne_binary(), boolean()) -> boolean().
-should_update_voicemail_creds(_, 'false') -> 'false';
-should_update_voicemail_creds(Username, _) ->
+-spec is_username_integer(kz_term:ne_binary()) -> boolean().
+is_username_integer(Username) ->
     case catch kz_term:to_integer(Username) of
         {'EXIT', _} ->
-            lager:debug("username is not numeric, not updating creds"),
+            lager:debug("username is not integer-convertible, not updating creds"),
             'false';
         _ -> 'true'
     end.
