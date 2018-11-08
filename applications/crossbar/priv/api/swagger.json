@@ -348,6 +348,17 @@
             },
             "type": "object"
         },
+        "account_config.voicemail": {
+            "description": "Schema for voicemail account_config",
+            "properties": {
+                "pin_pass_sync": {
+                    "default": false,
+                    "description": "voicemail pin_pass_sync",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "account_config.webhooks": {
             "description": "Schema for webhooks account_config",
             "properties": {

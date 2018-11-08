@@ -660,7 +660,8 @@ update_user_creds(UserId, PIN, Context) ->
     case kz_datamgr:open_doc(AccountDb, UserId) of
         {'ok', Doc} ->
             Username = kz_json:get_value(<<"username">>, Doc),
-            case cb_modules_util:should_update_voicemail_creds(Username) of
+            AccountId = cb_context:account_id(Context),
+            case cb_modules_util:should_update_voicemail_creds(Username, AccountId) of
                 'true' ->
                     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
                     Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
