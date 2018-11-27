@@ -31,6 +31,11 @@
         "dialog_subscribed_mwi_prefix": {
             "description": "callflow dialog_subscribed_mwi_prefix"
         },
+        "enforce_min_length": {
+            "default": false,
+            "description": "callflow enforce_min_length",
+            "type": "boolean"
+        },
         "ensure_valid_caller_id": {
             "default": false,
             "description": "callflow ensure valid caller id",
@@ -49,6 +54,12 @@
         "min_bucket_cost": {
             "default": 5,
             "description": "callflow minimum bucket cost",
+            "type": "integer"
+        },
+        "min_callflow_length": {
+            "default": 1,
+            "description": "The minimum allowed length of a callflow number",
+            "minimum": 1,
             "type": "integer"
         },
         "mwi_send_unsoliciated_updates": {

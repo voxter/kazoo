@@ -642,7 +642,22 @@ check_vmbox_schema(VMBoxId, Context) ->
     Context1 = maybe_migrate_notification_emails(Context),
     OnSuccess = fun(C) -> on_successful_validation(VMBoxId, C) end,
     update_user_creds(Context),
-    cb_context:validate_request_data(<<"vmboxes">>, Context1, OnSuccess).
+    CheckMinLength = kapps_config:get_is_true(<<"voicemail">>, <<"enforce_min_length">>, 'false') and is_mailbox_changed(VMBoxId, Context), % and check if should check min length by sys admin config
+    check_vmbox_schema(Context1, CheckMinLength, OnSuccess).
+
+-spec check_vmbox_schema(cb_context:context(), boolean(), cb_context:after_fun()) -> cb_context:context().
+check_vmbox_schema(Context, 'false', OnSuccess) ->
+    cb_context:validate_request_data(<<"vmboxes">>, Context, OnSuccess);
+check_vmbox_schema(Context, 'true', OnSuccess) ->
+    MinLength = kapps_account_config:get_global(cb_context:account_id(Context), <<"voicemail">>, <<"min_vmbox_length">>, 3),
+    case kz_json_schema:load(<<"vmboxes">>) of
+        {'ok', Schema} ->
+            Schema1 = kz_json:set_value([<<"properties">>, <<"mailbox">>, <<"minLength">>], MinLength, Schema),
+            cb_context:validate_request_data(Schema1, Context, OnSuccess);
+        {'error', _E} ->
+            lager:error("failed to find schema vmboxes: ~p", [_E]),
+            cb_context:system_error(Context, <<"schema not found.">>)
+    end.
 
 %% Update voicemail PIN at the same time as a password update
 -spec update_user_creds(cb_context:context()) -> 'ok'.
@@ -673,6 +688,30 @@ update_user_creds(UserId, PIN, Context) ->
                 'false' -> 'ok'
             end;
         {'error', E} -> lager:error("could not find owner doc (~p)", [E])
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_mailbox_changed(kz_term:api_binary(), cb_context:context()) -> boolean().
+is_mailbox_changed(VMBoxId, Context) ->
+    try kz_json:get_integer_value(<<"mailbox">>, cb_context:req_data(Context)) of
+        Mailbox ->
+            is_mailbox_changed(VMBoxId, Context, Mailbox)
+    catch
+        _:_ ->
+            lager:debug("can't convert mailbox number to integer", []),
+            'true'
+    end.
+-spec is_mailbox_changed(kz_term:api_binary(), cb_context:context(), pos_integer()) -> boolean().
+is_mailbox_changed(VMBoxId, Context, Mailbox) ->
+    case kz_datamgr:open_cache_doc(cb_context:account_db(Context), VMBoxId) of
+        {'ok', JObj} ->
+            Mailbox =/= kz_json:get_integer_value(<<"mailbox">>, JObj);
+        {'error', _} ->
+            lager:debug("failed to load mailbox from account"),
+            'true'
     end.
 
 %%------------------------------------------------------------------------------

@@ -39,6 +39,11 @@
             "properties": {
                 "dialog_subscribed_mwi_prefix": {
                     "description": "callflow dialog_subscribed_mwi_prefix"
+                },
+                "min_callflow_length": {
+                    "default": 1,
+                    "description": "callflow min_callflow_length",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -180,6 +185,17 @@
                     "default": false,
                     "description": "crossbar.sms api e164 convert to",
                     "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.device": {
+            "description": "Schema for device account_config",
+            "properties": {
+                "min_device_length": {
+                    "default": 3,
+                    "description": "device min_device_length",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -348,9 +364,25 @@
             },
             "type": "object"
         },
+        "account_config.user": {
+            "description": "Schema for user account_config",
+            "properties": {
+                "min_user_length": {
+                    "default": 3,
+                    "description": "user min_user_length",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "account_config.voicemail": {
             "description": "Schema for voicemail account_config",
             "properties": {
+                "min_vmbox_length": {
+                    "default": 3,
+                    "description": "voicemail min_vmbox_length",
+                    "type": "integer"
+                },
                 "pin_pass_sync": {
                     "default": false,
                     "description": "voicemail pin_pass_sync",
@@ -28475,6 +28507,11 @@
                 "dialog_subscribed_mwi_prefix": {
                     "description": "callflow dialog_subscribed_mwi_prefix"
                 },
+                "enforce_min_length": {
+                    "default": false,
+                    "description": "callflow enforce_min_length",
+                    "type": "boolean"
+                },
                 "ensure_valid_caller_id": {
                     "default": false,
                     "description": "callflow ensure valid caller id",
@@ -28493,6 +28530,12 @@
                 "min_bucket_cost": {
                     "default": 5,
                     "description": "callflow minimum bucket cost",
+                    "type": "integer"
+                },
+                "min_callflow_length": {
+                    "default": 1,
+                    "description": "The minimum allowed length of a callflow number",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "mwi_send_unsoliciated_updates": {
@@ -29845,6 +29888,23 @@
                 "performance": {
                     "description": "datamgr performance",
                     "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.device": {
+            "description": "Schema for device system_config",
+            "properties": {
+                "enforce_min_length": {
+                    "default": false,
+                    "description": "device enforce_min_length",
+                    "type": "boolean"
+                },
+                "min_device_length": {
+                    "default": 3,
+                    "description": "The minimum allowed length of a device SIP username",
+                    "minimum": 2,
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -33915,9 +33975,37 @@
             },
             "type": "object"
         },
+        "system_config.user": {
+            "description": "Schema for user system_config",
+            "properties": {
+                "enforce_min_length": {
+                    "default": false,
+                    "description": "user enforce_min_length",
+                    "type": "boolean"
+                },
+                "min_user_length": {
+                    "default": 3,
+                    "description": "The minimum allowed length of a username",
+                    "minimum": 1,
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "system_config.voicemail": {
             "description": "Schema for voicemail system_config",
             "properties": {
+                "enforce_min_length": {
+                    "default": false,
+                    "description": "voicemail enforce_min_length",
+                    "type": "boolean"
+                },
+                "min_vmbox_length": {
+                    "default": 3,
+                    "description": "The minimum allowed length of a voicemail box number",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "pin_pass_sync": {
                     "default": false,
                     "description": "voicemail pin_pass_sync",
