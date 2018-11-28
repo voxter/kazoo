@@ -3,8 +3,6 @@
 
 ## Setting up
 
-1. Start the Blackhole Crossbar module
-    * `sup kapps_controller restart_app blackhole`
 1. Find your Account ID (e.g. `4b31dd1d32ce6d249897c06332375d65`)
 1. [Obtain an Auth Token](https://2600hz.atlassian.net/wiki/display/APIs/Generating+an+Authentication+Token) (e.g. `7b70f69a2a4976d80bfa0382894d1553`)
 1. Copy the **Example Client** code into an HTML file (named e.g. `kazoo_example_ws_client.html`)
@@ -150,7 +148,6 @@ send({
 
 The Blackhole application listens to events from AMQP.
 It will send an event to you through Websockets if there is an active binding that matches this event.
-To learn more about how they are routed from your Kazoo cluster to this app, [read on on `kz_hook`](https://github.com/2600hz/kazoo/tree/master/core/kazoo_apps/src).
 
 Events are plain AMQP event messages.
 Here are a few complete `call.*.*` JSON events:
@@ -313,77 +310,3 @@ Here are a few complete `call.*.*` JSON events:
     }
 }
 ```
-
-### Blackhole bindings
-
-See [the section on Blackhole's bindgins](https://github.com/2600hz/kazoo/tree/master/applications/blackhole/doc/bindings.md).
-
-
-## WSS considerations
-
-In order you'd like to secure your websocket connection, you can use HAProxy SSL Termination.
-
-Edit your HAProxy config `/etc/kazoo/haproxy/haproxy.cfg`:
-
-~~~
-global
-        ....
-        tune.ssl.default-dh-param 2048
-        ....
-
-defaults
-        ....
-        timeout tunnel 1h
-        ....
-
-
-(add the next sections at the end of the config file)
-
-frontend secure_blackhole
-        bind 0.0.0.0:7777 ssl crt /etc/kazoo/haproxy/cert_key.pem
-        timeout client 1h
-        default_backend www_blackhole
-        acl is_websocket hdr(Upgrade) -i WebSocket
-        use_backend websocket_blackhole if is_websocket
-
-backend www_blackhole
-        mode http
-        stats enable
-        stats uri /haproxy
-        option forwardfor
-        reqadd x-forwarded-proto:\ https
-        server server1 127.0.0.1:5555 weight 1 maxconn 8192
-
-backend websocket_blackhole
-        mode http
-        option forwardfor
-        option http-server-close
-        option forceclose
-        no option httpclose
-        server server1 127.0.0.1:5555 weight 1 maxconn 8192
-~~~
-
-
-Here is how `cert_key.pem` should look like:
-
-~~~
-[root@kz527 ~]# cat /etc/kazoo/haproxy/cert_key.pem
------BEGIN CERTIFICATE-----
-MIIF0jCCBLqgAwIBAgIRAOQQ6+NpkZwOENe2OQiJlW4wDQYJKoZIhvcNAQEFBQAw
-..........
-LE5OWycye7miZLmgtC6ZkI6HI7KJuIEcfeYaBSpENinOXs0OjvmGBYELgNymAw2L
-FG3/ESMR
------END CERTIFICATE-----
------BEGIN RSA PRIVATE KEY-----
-MIIEpQIBSKDCAQEA0roiYyzi4Auuu2qJ/2uWsmUnNHjKqvWXd6iMf2aNbOKcVVps
-..........
-V8MsGq2IA+2FmrRrd0jYfh8iu1VydbmySghjs69HtYNPndfhs37HtH0=
------END RSA PRIVATE KEY-----
-~~~
-
-
-Now you can use 7777 port for your blackhole WSS connections.
-
-
-Config was created to connect Kazoo-Popup secure and wasn't fully tested,
-so treat it as a hint needed to be proved before putting into production.
