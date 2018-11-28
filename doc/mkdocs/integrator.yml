@@ -214,9 +214,7 @@ pages:
         - 'Offnet': 'applications/callflow/doc/offnet.md'
   - 'Websockets':
     - 'applications/blackhole/doc/README.md'
-    - 'Bindings': 'applications/blackhole/doc/bindings.md'
     - 'API': 'applications/crossbar/doc/websockets.md'
-    - 'HAProxy configuration': 'applications/blackhole/doc/haproxy.md'
     - 'Troubleshooting': 'applications/blackhole/doc/troubleshooting.md'
   - 'Webhooks':
     - 'API': 'applications/crossbar/doc/webhooks.md'
