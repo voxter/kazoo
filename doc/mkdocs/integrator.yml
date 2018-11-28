@@ -1,4 +1,12 @@
-site_name: Integrator Reference
+docs_dir: 'docs'
+theme: 'mkdocs'
+theme_dir: 'voxter_theme'
+site_dir: 'site'
+extra_css: []
+site_name: 'Voxter API Documentation'
+site_author: 'Voxter Ltd'
+site_favicon: 'img/favicon.ico'
+use_directory_urls: true
 
 pages:
 - index.md
