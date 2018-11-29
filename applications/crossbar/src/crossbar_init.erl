@@ -176,6 +176,7 @@ maybe_start_plaintext(Dispatch) ->
         'true' ->
             Port = kapps_config:get_integer(?CONFIG_CAT, <<"port">>, 8000),
             ReqTimeout = kapps_config:get_integer(?CONFIG_CAT, <<"request_timeout_ms">>, 10 * ?MILLISECONDS_IN_SECOND),
+            IdleTimeout = kapps_config:get_integer(?CONFIG_CAT, <<"idle_timeout_ms">>, 120 * ?MILLISECONDS_IN_SECOND),
             Workers = kapps_config:get_integer(?CONFIG_CAT, <<"workers">>, 100),
 
             %% Name, NbAcceptors, Transport, TransOpts, Protocol, ProtoOpts
@@ -193,7 +194,7 @@ maybe_start_plaintext(Dispatch) ->
                                     ,'onresponse' => fun on_response/4
                                     ,'compress' => ?USE_COMPRESSION
                                     ,'shutdown_timeout' => ReqTimeout
-                                    ,'idle_timeout' => 120 * ?MILLISECONDS_IN_SECOND
+                                    ,'idle_timeout' => IdleTimeout
                                     }
                                   )
             of
