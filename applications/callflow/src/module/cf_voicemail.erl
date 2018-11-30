@@ -102,12 +102,11 @@
 
 -define(DEFAULT_FIND_BOX_PROMPT, <<"vm-enter_id">>).
 
--define(PIN_PASS_SYNC
-       ,kapps_config:get_is_true(<<"voicemail">>
-                                ,<<"pin_pass_sync">>
-                                ,'false'
-                                )
-       ).
+-define(PIN_PASS_SYNC(AccountId), kapps_account_config:get_global(AccountId
+                                                                 ,<<"voicemail">>
+                                                                 ,<<"pin_pass_sync">>
+                                                                 ,'false'
+                                                                 )).
 
 -record(keys, {operator = <<"0">> :: kz_term:ne_binary()
                                      %% Compose Voicemail
@@ -1608,7 +1607,8 @@ update_user_creds(AccountDb, OwnerId, PIN) ->
         {'ok', Doc} ->
             Username = kz_json:get_value(<<"username">>, Doc),
             PrivLevel = kz_json:get_value(<<"priv_level">>, Doc),
-            case should_update_user_creds(Username, PrivLevel) of
+            AccountId = kz_util:format_account_id(AccountDb, 'raw'),
+            case should_update_user_creds(Username, PrivLevel, ?PIN_PASS_SYNC(AccountId)) of
                 'true' ->
                     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
                     Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
@@ -1620,10 +1620,6 @@ update_user_creds(AccountDb, OwnerId, PIN) ->
             end;
         {'error', E} -> lager:error("could not find owner doc (~p)", [E])
     end.
-
--spec should_update_user_creds(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
-should_update_user_creds(Username, PrivLevel) ->
-    should_update_user_creds(Username, PrivLevel, ?PIN_PASS_SYNC).
 
 -spec should_update_user_creds(kz_term:ne_binary(), kz_term:ne_binary(), boolean()) -> boolean().
 should_update_user_creds(_, _, 'false') -> 'false';

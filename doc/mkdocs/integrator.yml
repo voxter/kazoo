@@ -1,4 +1,12 @@
-site_name: Integrator Reference
+docs_dir: 'docs'
+theme: 'mkdocs'
+theme_dir: 'voxter_theme'
+site_dir: 'site'
+extra_css: []
+site_name: 'Voxter API Documentation'
+site_author: 'Voxter Ltd'
+site_favicon: 'img/favicon.ico'
+use_directory_urls: true
 
 pages:
 - index.md
@@ -133,9 +141,6 @@ pages:
         - 'applications/pivot/doc/kazoo/recording.md'
         - 'applications/pivot/doc/kazoo/say.md'
         - 'applications/pivot/doc/twiml/README.md'
-    - 'Presentations':
-      - 'doc/kazoocon/pivot2014.md'
-      - 'doc/kazoocon/pivot2016.md'
     - 'Known_Issues':
       - 'applications/pivot/doc/issues.md'
   - 'Callflows':
@@ -217,14 +222,8 @@ pages:
         - 'Offnet': 'applications/callflow/doc/offnet.md'
   - 'Websockets':
     - 'applications/blackhole/doc/README.md'
-    - 'Bindings': 'applications/blackhole/doc/bindings.md'
     - 'API': 'applications/crossbar/doc/websockets.md'
-    - 'HAProxy configuration': 'applications/blackhole/doc/haproxy.md'
     - 'Troubleshooting': 'applications/blackhole/doc/troubleshooting.md'
-    - 'Presentations':
-      - 'doc/kazoocon/realtime_events2016.md'
   - 'Webhooks':
-    - 'applications/webhooks/doc/README.md'
-    - 'Administration': 'applications/webhooks/doc/maintenance.md'
     - 'API': 'applications/crossbar/doc/webhooks.md'
     - 'Queues': 'applications/acdc/doc/notifications.md'

@@ -446,32 +446,22 @@ get_directory_user(U, CallflowId) ->
                    }.
 
 -spec sort_users(directory_users(), 'first' | 'last') -> directory_users().
-sort_users(Users, Order) ->
-    lists:sort(fun(User1, User2) ->
-                       case Order of
-                           'first' ->
-                               name_compare(
-                                 kz_term:to_list(User1#directory_user.first_name)
-                                ,kz_term:to_list(User1#directory_user.last_name)
-                                ,kz_term:to_list(User2#directory_user.first_name)
-                                ,kz_term:to_list(User2#directory_user.last_name)
-                                );
-                           'last' ->
-                               name_compare(
-                                 kz_term:to_list(User1#directory_user.last_name)
-                                ,kz_term:to_list(User1#directory_user.first_name)
-                                ,kz_term:to_list(User2#directory_user.last_name)
-                                ,kz_term:to_list(User2#directory_user.first_name)
-                                )
-                       end
-               end, Users).
+sort_users(Users, 'first') ->
+    lists:sort(fun sort_by_first/2, Users);
+sort_users(Users, 'last') ->
+    lists:sort(fun sort_by_last/2, Users).
 
--spec name_compare(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
-name_compare(Name1a, Name1b, Name2a, Name2b) ->
-    case Name1a =:= Name2a of
-        'true' -> Name1b < Name2b;
-        'false' -> Name1a < Name2a
-    end.
+-spec sort_by_first(directory_user(), directory_user()) -> boolean().
+sort_by_first(#directory_user{first_name=AFirst, last_name=ALast}, #directory_user{first_name=AFirst, last_name=BLast}) ->
+    ALast < BLast;
+sort_by_first(#directory_user{first_name=AFirst}, #directory_user{first_name=BFirst}) ->
+    AFirst < BFirst.
+
+-spec sort_by_last(directory_user(), directory_user()) -> boolean().
+sort_by_last(#directory_user{first_name=AFirst, last_name=ALast}, #directory_user{first_name=BFirst, last_name=ALast}) ->
+    AFirst < BFirst;
+sort_by_last(#directory_user{last_name=ALast}, #directory_user{last_name=BLast}) ->
+    ALast < BLast.
 
 -spec filter_users(directory_users(), kz_term:ne_binary(), 'last' | 'first' | 'both') -> directory_users().
 filter_users(Users, DTMFs, FirstCheck) ->
@@ -488,7 +478,7 @@ filter_users(Users, DTMFs, FirstCheck) ->
                               queue:queue().
 maybe_queue_user(User, Queue, DTMFs, Size, 'both') ->
     case maybe_dtmf_matches(DTMFs, Size, first_check('first', User)) of
-        'true' -> queue:in_r(User, Queue);
+        'true' -> queue:in(User, Queue);
         'false' ->
             case maybe_dtmf_matches(DTMFs, Size, first_check('last', User)) of
                 'true' -> queue:in(User, Queue);
@@ -498,7 +488,7 @@ maybe_queue_user(User, Queue, DTMFs, Size, 'both') ->
 
 maybe_queue_user(User, Queue, DTMFs, Size, FirstCheck) ->
     case maybe_dtmf_matches(DTMFs, Size, first_check(FirstCheck, User)) of
-        'true' -> queue:in_r(User, Queue);
+        'true' -> queue:in(User, Queue);
         'false' -> Queue
     end.
 

@@ -187,8 +187,7 @@ request_patterns(Context) ->
 validate_request(CallflowId, Context) ->
     case request_numbers(Context) of
         [] -> validate_patterns(CallflowId, Context);
-        OriginalNumbers
-          when is_list(OriginalNumbers) ->
+        OriginalNumbers when is_list(OriginalNumbers) ->
             validate_callflow_schema(CallflowId, normalize_numbers(Context, OriginalNumbers));
         OriginalNumbers ->
             Msg = kz_json:from_list(
@@ -323,7 +322,34 @@ validate_callflow_schema(CallflowId, Context) ->
                         Nums = kz_json:get_list_value(<<"numbers">>, Doc, []),
                         cb_modules_util:validate_number_ownership(Nums, C1)
                 end,
-    cb_context:validate_request_data(<<"callflows">>, Context, OnSuccess).
+    CheckMin = kapps_config:get_is_true(<<"callflow">>, <<"enforce_min_length">>, 'false') and are_numbers_changed(CallflowId, Context),
+    validate_callflow_schema(Context, CheckMin, OnSuccess).
+
+-spec validate_callflow_schema(cb_context:context(), boolean(), cb_context:after_fun()) -> cb_context:context().
+validate_callflow_schema(Context, 'false', OnSuccess) ->
+    cb_context:validate_request_data(<<"callflows">>, Context, OnSuccess);
+validate_callflow_schema(Context, 'true', OnSuccess) ->
+    MinLength = kapps_account_config:get_global(cb_context:account_id(Context), <<"callflow">>, <<"min_callflow_length">>, 1),
+    case kz_json_schema:load(<<"callflows">>) of
+        {'ok', Schema} ->
+            Schema1 = kz_json:set_value([<<"properties">>, <<"numbers">>, <<"items">>, <<"minLength">>], MinLength, Schema),
+            cb_context:validate_request_data(Schema1, Context, OnSuccess);
+        {'error', _E} ->
+            lager:error("failed to find schema callflows: ~p", [_E]),
+            cb_context:system_error(Context, <<"schema not found.">>)
+    end.
+
+-spec are_numbers_changed(kz_term:api_binary(), cb_context:context()) -> boolean().
+are_numbers_changed(CallflowId, Context) ->
+    case kz_datamgr:open_cache_doc(cb_context:account_db(Context), CallflowId) of
+        {'ok', JObj} ->
+            CurrNums = kz_json:get_value([<<"numbers">>], JObj, []),
+            Nums = request_numbers(Context),
+            lists:sort(Nums) =/= lists:sort(CurrNums);
+        {'error', _} ->
+            lager:debug("failed to load callflow from account"),
+            'true'
+    end.
 
 -spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
