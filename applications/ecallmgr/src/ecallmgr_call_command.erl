@@ -1601,8 +1601,8 @@ tone_duration_off(Tone) ->
 
 -spec transfer(atom(), kz_term:ne_binary(), kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
 transfer(Node, UUID, JObj) ->
-    TransferType = kz_json:get_value(<<"Transfer-Type">>, JObj),
-    TransferTo = kz_json:get_value(<<"Transfer-To">>, JObj),
+    TransferType = kz_json:get_ne_binary_value(<<"Transfer-Type">>, JObj),
+    TransferTo = kz_json:get_ne_binary_value(<<"Transfer-To">>, JObj),
     transfer(Node, UUID, TransferType, TransferTo, JObj).
 
 -spec transfer(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
@@ -1613,7 +1613,10 @@ transfer(Node, UUID, <<"attended">>, TransferTo, JObj) ->
               ,<<"Authorizing-Type">>
               ,<<"Channel-Authorized">>
               ],
-    Realm = props:get_first_defined([<<"Account-Realm">>, <<"Realm">>], CCVs, <<"norealm">>),
+    Realm = props:get_first_defined([<<"Account-Realm">>, <<"Realm">>]
+                                   ,CCVs
+                                   ,transfer_realm(UUID)
+                                   ),
     ReqURI = <<TransferTo/binary, "@", Realm/binary>>,
     Vars = props:filter_undefined(
              [{<<"Ignore-Early-Media">>, <<"ring_ready">>}
@@ -1636,6 +1639,9 @@ transfer(Node, UUID, <<"blind">>, TransferTo, JObj) ->
     Realm = transfer_realm(UUID),
     TransferLeg = transfer_leg(JObj),
     TargetUUID = transfer_set_callid(UUID, TransferLeg),
+
+    lager:debug("blind transfer to ~s @ ~s", [TransferTo, Realm]),
+
     KVs = props:filter_undefined(
             [{<<"SIP-Refer-To">>, <<"<sip:", TransferTo/binary, "@", Realm/binary>>}
             ,{<<"SIP-Referred-By">>, transfer_referred(UUID, TransferLeg)}
@@ -1648,8 +1654,11 @@ transfer(Node, UUID, <<"blind">>, TransferTo, JObj) ->
 -spec transfer_realm(kz_term:ne_binary()) -> kz_term:ne_binary().
 transfer_realm(UUID) ->
     case ecallmgr_fs_channel:fetch(UUID, 'record') of
+        {'ok', #channel{realm='undefined'}} ->
+            lager:info("channel.realm is undefined for ~s", [UUID]),
+            ?DEFAULT_REALM;
         {'ok', #channel{realm=Realm}} -> Realm;
-        _Else -> <<"norealm">>
+        {'error', 'not_found'} -> ?DEFAULT_REALM
     end.
 
 -spec transfer_set_callid(kz_term:ne_binary(), binary()) -> kz_term:ne_binary().
@@ -1664,14 +1673,18 @@ transfer_set_callid(UUID, _) -> UUID.
 -spec transfer_referred(kz_term:ne_binary(), binary()) -> kz_term:api_binary().
 transfer_referred(UUID, <<"-bleg">>) ->
     case ecallmgr_fs_channel:fetch(UUID, 'record') of
-        {'ok', #channel{presence_id='undefined'}} -> 'undefined';
-        {'ok', #channel{presence_id=PresenceId}} -> <<"<sip:", PresenceId/binary, ">">>;
+        {'ok', #channel{username='undefined'}} -> 'undefined';
+        {'ok', #channel{username=Username
+                       ,realm=Realm
+                       }} -> <<"<sip:", Username/binary, "@", Realm/binary, ">">>;
         _Else -> 'undefined'
     end;
 transfer_referred(UUID, _) ->
     case ecallmgr_fs_channel:fetch_other_leg(UUID, 'record') of
-        {'ok', #channel{presence_id='undefined'}} -> 'undefined';
-        {'ok', #channel{presence_id=PresenceId}} -> <<"<sip:", PresenceId/binary, ">">>;
+        {'ok', #channel{username='undefined'}} -> 'undefined';
+        {'ok', #channel{username=Username
+                       ,realm=Realm
+                       }} -> <<"<sip:", Username/binary, "@", Realm/binary, ">">>;
         _Else -> 'undefined'
     end.
 
@@ -1684,9 +1697,13 @@ transfer_leg(JObj) ->
 
 -spec transfer_context(kz_json:object()) -> binary().
 transfer_context(JObj) ->
-    kz_json:get_binary_value(<<"Transfer-Context">>, JObj, ?DEFAULT_FREESWITCH_CONTEXT).
+    case kz_json:get_binary_value(<<"Transfer-Context">>, JObj) of
+        'undefined' -> ?DEFAULT_FREESWITCH_CONTEXT;
+        Context -> Context
+    end.
 
--spec sound_touch(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec sound_touch(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+                         {kz_term:ne_binary(), kz_term:ne_binary()}.
 sound_touch(UUID, <<"start">>, JObj) ->
     {<<"soundtouch">>, list_to_binary([UUID, " start ", sound_touch_options(JObj)])};
 sound_touch(UUID, <<"stop">>, _JObj) ->
