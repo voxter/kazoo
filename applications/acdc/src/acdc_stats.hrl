@@ -46,6 +46,7 @@
                    ,is_archived = 'false' :: boolean() | '$2' | '$3' | '_'
                    }).
 -type call_stat() :: #call_stat{}.
+-type call_stats() :: [call_stat()].
 
 -record(call_summary_stat, {id :: kz_term:api_binary() | '_'
                            ,account_id :: kz_term:api_binary() | '$1'
