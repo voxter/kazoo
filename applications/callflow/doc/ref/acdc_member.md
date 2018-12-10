@@ -4,7 +4,7 @@
 
 #### Schema
 
-Validator for the acdc_member callflow's data object
+Validator for the acdc_member callflow data object
 
 
 
@@ -14,6 +14,3 @@ Key | Description | Type | Default | Required
 `id` | ID of the ACDc Queue | `string()` |   | `false`
 `priority` | assign a priority to the caller | `integer()` |   | `false`
 `var` | Custom variable to check for queue ID | `string()` |   | `false`
-
-
-

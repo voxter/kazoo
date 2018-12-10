@@ -26,15 +26,15 @@ Key | Type | Description
 
 ```json
 {
-    "account_id": "63463bc16b7af744f88c05567219c839",
-    "agent_id": "0a1fde86ac5e801b57ae58510710b31f",
-    "agent_call_id": "72b893f06327393eaae2617282a9c4b3-0a1fde86ac5e801b57ae58510710b31f-e899509d",
-    "agent_username": "1001",
+    "account_id": "{ACCOUNT_ID}",
+    "agent_id": "{AGENT_ID}",
+    "agent_call_id": "{AGENT_CALL_ID}",
+    "agent_username": "{AGENT_USERNAME}",
     "call_state": "pickup",
-    "caller_id_name": "1003 Guy",
-    "caller_id_number": "1003",
-    "member_call_id": "6sIfYg-xQMw71l-6t5nJMkFu6Xxrbix8",
-    "now": 63702009674,
-    "queue_id": "f55a9c721180cb044c3a28239f47f460"
+    "caller_id_name": "{CID_NAME}",
+    "caller_id_number": "{CID_NUMBER}",
+    "member_call_id": "{MEMBER_CALL_ID}",
+    "now": {GREGORIAN_SECONDS},
+    "queue_id": "{QUEUE_ID}"
 }
 ```

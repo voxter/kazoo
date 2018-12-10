@@ -94,7 +94,7 @@ resource_exists(_) -> 'true'.
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /comments mights load a list of skel objects
+%% /comments might load a list of skel objects
 %% /comments/123 might load the skel object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
@@ -239,12 +239,21 @@ read(Context, Id) ->
 create(Context) ->
     Doc = cb_context:doc(Context),
     Comments = kz_json:get_value(?COMMENTS, Doc, []),
-
     ReqData = cb_context:req_data(Context),
     NewComments = kz_json:get_value(?COMMENTS, ReqData, []),
-
     Doc1 = kz_json:set_value(?COMMENTS, Comments ++ NewComments, Doc),
-    crossbar_doc:save(cb_context:set_doc(Context, Doc1)).
+    maybe_save(Context, Doc1, NewComments, cb_context:fetch(Context, 'resource')).
+
+-spec maybe_save(cb_context:context(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binaries()) -> cb_context:context().
+maybe_save(Context, Doc, Comments, {<<"port_requests">>, _}) ->
+    case phonebook:maybe_add_comment(Context, Comments) of
+        {'ok', _} ->
+            crossbar_doc:save(cb_context:set_doc(Context, Doc));
+        {'error', _} ->
+            cb_context:add_system_error('datastore_fault', <<"unable to submit comment to carrier">>, Context)
+    end;
+maybe_save(Context, Doc, _, _) ->
+    crossbar_doc:save(cb_context:set_doc(Context, Doc)).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -265,7 +274,7 @@ update(Context, Id) ->
                          ,lists:append([Head1, [Comment], Tail])
                          ,Doc
                          ),
-    crossbar_doc:save(cb_context:set_doc(Context, Doc1)).
+    maybe_save(Context, Doc1, lists:flatten([Comment]), cb_context:fetch(Context, 'resource')).
 
 %%------------------------------------------------------------------------------
 %% @doc

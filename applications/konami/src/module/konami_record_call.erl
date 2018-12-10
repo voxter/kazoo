@@ -27,16 +27,24 @@ handle(Data, Call) ->
 
 -spec handle(kz_json:object(), kapps_call:call(), kz_term:ne_binary()) ->
                     kapps_call:call().
+handle(_Data, Call, <<"mask">>) ->
+    lager:debug("masking recording, see you on the other side"),
+    kapps_call:mask_recording(Call);
+handle(_Data, Call, <<"unmask">>) ->
+    lager:debug("unmasking recording, see you on the other side"),
+    kapps_call:unmask_recording(Call);
 handle(Data, Call, <<"start">>) ->
     lager:debug("starting recording, see you on the other side"),
     kapps_call:start_recording(Data, Call);
 handle(_Data, Call, <<"stop">>) ->
-    kapps_call:stop_recording(Call),
+    _ = kapps_call:stop_recording(Call),
     lager:debug("sent command to stop recording call"),
     Call.
 
 -spec get_action(kz_term:api_ne_binary()) -> kz_term:ne_binary().
 get_action('undefined') -> <<"start">>;
+get_action(<<"mask">>) -> <<"mask">>;
+get_action(<<"unmask">>) -> <<"unmask">>;
 get_action(<<"stop">>) -> <<"stop">>;
 get_action(_) -> <<"start">>.
 

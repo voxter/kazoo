@@ -26,7 +26,7 @@ handle_req(ApiJObj, _Props) ->
     Default = kz_json:get_value(<<"Default">>, ApiJObj),
     Node = kz_json:get_binary_value(<<"Node">>, ApiJObj),
 
-    lager:debug("received sysconf get for ~s:~s from ~s", [Category, Key, Node]),
+    lager:debug("received sysconf get for ~s:~p from ~s", [Category, Key, Node]),
 
     Value = get_value(Category, Key, Default, Node),
     RespQ = kz_json:get_value(<<"Server-ID">>, ApiJObj),
@@ -50,13 +50,10 @@ format_key(Keys)
     kz_binary:join(Keys, <<".">>).
 
 -spec get_value(kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries(), any(), kz_term:ne_binary()) -> any().
-get_value(_, <<"acls">>, _, Node) ->
-    sysconf_acls:build(Node);
-get_value(_, <<"gateways">>, _, Node) ->
-    sysconf_gateways:build(Node);
 get_value(Category, Key, Default, Node) ->
     kapps_config:get_current(Category, Key, Default, Node).
 
 -spec maybe_fix_undefined(any()) -> any().
 maybe_fix_undefined('undefined') -> <<"undefined">>;
+maybe_fix_undefined([]) -> <<"undefined">>;
 maybe_fix_undefined(Value) -> Value.

@@ -106,7 +106,7 @@
 %%% Defines for different functionality
 %%%=============================================================================
 
-%% On init, an aget process sends a sync_req and waits SYNC_TIMER_TIMEOUT ms
+%% On init, an agent process sends a sync_req and waits SYNC_TIMER_TIMEOUT ms
 %% The agent process checks its list of received
 -define(SYNC_TIMER_MESSAGE, 'sync_timeout').
 -define(SYNC_TIMER_TIMEOUT, 5000).
@@ -968,7 +968,7 @@ handle_cast('call_status_req', #state{call=Call, my_q=Q}=State) ->
                | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
               ],
 
-    kapi_call:publish_channel_status_req(CallId, Command),
+    _ = kapi_call:publish_channel_status_req(Command),
     {'noreply', State};
 
 handle_cast({'call_status_req', CallId}, #state{my_q=Q}=State) when is_binary(CallId) ->
@@ -976,7 +976,7 @@ handle_cast({'call_status_req', CallId}, #state{my_q=Q}=State) when is_binary(Ca
               ,{<<"Server-ID">>, Q}
                | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
               ],
-    kapi_call:publish_channel_status_req(CallId, Command),
+    _ = kapi_call:publish_channel_status_req(Command),
     {'noreply', State};
 handle_cast({'call_status_req', Call}, State) ->
     handle_cast({'call_status_req', kapps_call:call_id(Call)}, State);

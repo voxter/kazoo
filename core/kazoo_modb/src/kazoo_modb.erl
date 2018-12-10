@@ -26,8 +26,9 @@
 
 -type view_option() :: {'year', kz_time:year()} |
                        {'month', kz_time:month()} |
-                       {'create_db', boolean()} |
-                       {'allow_old_modb_creation', boolean()} |
+                       {'create_db', boolean()} | 'create_db' |
+                       {'allow_old_modb_creation', boolean()} | 'allow_old_modb_creation' |
+                       {'missing_as_error', boolean()} | 'missing_as_error' |
                        kz_datamgr:view_option().
 -type view_options() :: [view_option()].
 
@@ -41,14 +42,14 @@
 %%------------------------------------------------------------------------------
 
 -spec get_results(kz_term:ne_binary(), kz_term:ne_binary(), view_options()) ->
-                         {'ok', kz_json:objects()} |
+                         {'ok', kz_json:json_terms()} |
                          {'error', atom()}.
 get_results(Account, View, ViewOptions) ->
     MaxRetries = props:get_integer_value('max_retries', ViewOptions, ?MAX_RETRIES),
     get_results(Account, View, ViewOptions, 'first_try', MaxRetries).
 
 -spec get_results(kz_term:ne_binary(), kz_term:ne_binary(), view_options(), atom(), non_neg_integer()) ->
-                         {'ok', kz_json:objects()} |
+                         {'ok', kz_json:json_terms()} |
                          {'error', atom()}.
 get_results(_Account, _View, _ViewOptions, Reason, Retry) when Retry =< 0 ->
     lager:debug("max retries to get view ~s/~s results: ~p", [_Account, _View, Reason]),
@@ -74,9 +75,13 @@ strip_modb_options(ViewOptions) ->
 is_modb_option({'year', _}) -> 'true';
 is_modb_option({'month', _}) -> 'true';
 is_modb_option({'create_db', _}) -> 'true';
+is_modb_option('create_db') -> 'true';
 is_modb_option({'allow_old_modb_creation', _}) -> 'true';
+is_modb_option('allow_old_modb_creation') -> 'true';
 is_modb_option({'ensure_saved', _}) -> 'true';
 is_modb_option({'max_retries', _}) -> 'true';
+is_modb_option({'missing_as_error', _}) -> 'true';
+is_modb_option('missing_as_error') -> 'true';
 is_modb_option(_) -> 'false'.
 
 -spec get_results_missing_db(kz_term:ne_binary(), kz_term:ne_binary(), view_options(), integer()) ->
@@ -84,16 +89,21 @@ is_modb_option(_) -> 'false'.
 get_results_missing_db(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
     ShouldCreate = props:get_is_true('create_db', ViewOptions, 'true'),
+    MissingAsError = props:get_is_true('missing_as_error', ViewOptions, 'false'),
     lager:info("modb ~p not found, maybe creating...", [AccountMODb]),
     case ShouldCreate
         andalso maybe_create_current_modb(AccountMODb, ViewOptions)
     of
         'true' -> get_results(Account, View, ViewOptions, 'not_found', Retry-1);
+        'too_old' when MissingAsError ->
+            {'error', 'db_not_found'};
         'too_old' ->
             {'ok', []};
         'false' when ShouldCreate ->
             lager:info("modb ~s creation failed, maybe due to race condition, re-trying get_results", [AccountMODb]),
             get_results(Account, View, ViewOptions, 'not_found', Retry-1);
+        'false' when MissingAsError ->
+            {'error', 'db_not_found'};
         'false' ->
             lager:info("create_db is false, not creating modb ~s ...", [AccountMODb]),
             {'ok', []}
@@ -476,8 +486,13 @@ run_routines(AccountMODb) ->
 
 -spec run_routine(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
 run_routine(AccountMODb, Routine) ->
-    Module = kz_term:to_atom(Routine),
-    _ = Module:modb(AccountMODb).
+    case kz_module:is_exported(Routine, 'modb', 1) of
+        'false' ->
+            lager:info("skipping routine ~s, doesn't export modb/1", [Routine]);
+        'true' ->
+            Module = kz_term:to_atom(Routine),
+            _ = Module:modb(AccountMODb)
+    end.
 
 -spec add_routine(kz_term:ne_binary() | atom()) -> 'ok'.
 add_routine(Module) ->
@@ -486,13 +501,13 @@ add_routine(Module) ->
     case add_migrate_routines(Routines, Routine) of
         Routines -> 'ok';
         NewRoutines ->
-            kapps_config:set_default(?CONFIG_CAT, <<"routines">>, NewRoutines),
+            _ = kapps_config:set_default(?CONFIG_CAT, <<"routines">>, NewRoutines),
             'ok'
     end.
 
 -spec add_migrate_routines(kz_term:ne_binaries(), kz_term:ne_binary()) -> kz_term:ne_binaries().
 add_migrate_routines(Routines, Module) ->
-    lists:usort([Module | migrate_routines(Routines, [])] ++ [<<"wht_util">>]).
+    lists:usort([Module | migrate_routines(Routines, [])] ++ [<<"kz_currency">>]).
 
 -spec migrate_routines(kz_term:ne_binaries(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 migrate_routines([], Acc) -> Acc;

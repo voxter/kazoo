@@ -85,7 +85,7 @@ get_allotment_seconds(BillingSeconds, Allotment) ->
     Increment = kz_json:get_integer_value(<<"increment">>, Allotment, 1),
     Minimum = kz_json:get_integer_value(<<"minimum">>, Allotment, 0),
     case BillingSeconds > NoConsumeTime of
-        'true' -> wht_util:calculate_cost(60, Increment, Minimum, 0, BillingSeconds);
+        'true' -> kapps_call_util:calculate_cost(60, Increment, Minimum, 0, BillingSeconds);
         'false' -> 0
     end.
 
@@ -186,7 +186,8 @@ allotment_consumed_so_far(CycleStart, CycleEnd, Classification, Limits, Attempts
     case kz_datamgr:get_results(LedgerDb, <<"allotments/consumed">>, ViewOptions) of
         {'ok', JObjs} -> sum_allotment_consumed_so_far(JObjs, CycleStart);
         {'error', 'not_found'} ->
-            add_transactions_view(LedgerDb, CycleStart, CycleEnd, Classification, Limits, Attempts);
+            kazoo_modb:refresh_views(LedgerDb),
+            allotment_consumed_so_far(CycleStart, CycleEnd, Classification, Limits, Attempts + 1);
         {'error', _R}=Error ->
             lager:debug("unable to get consumed quantity for ~s allotment from ~s: ~p"
                        ,[Classification, LedgerDb, _R]
@@ -209,13 +210,6 @@ sum_allotment_consumed_so_far([JObj|JObjs], CycleStart, Seconds) ->
         'false' ->
             sum_allotment_consumed_so_far(JObjs, CycleStart, Seconds + (Timestamp - CycleStart))
     end.
-
--spec add_transactions_view(kz_term:ne_binary(), non_neg_integer(), non_neg_integer(), kz_term:ne_binary(), j5_limits:limits(), 0..3) ->
-                                   integer() |
-                                   {'error', any()}.
-add_transactions_view(LedgerDb, CycleStart, CycleEnd, Classification, Limits, Attempts) ->
-    _ = kz_datamgr:revise_views_from_folder(LedgerDb, 'jonny5'),
-    allotment_consumed_so_far(CycleStart, CycleEnd, Classification, Limits, Attempts + 1).
 
 %%------------------------------------------------------------------------------
 %% @doc

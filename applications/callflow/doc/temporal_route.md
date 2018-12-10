@@ -2,9 +2,11 @@
 
 ### About Temporal Route
 
+Branch the callflow based on the current date and time when compared to the temporal rule(s) associated with the action.
+
 #### Schema
 
-Validator for the temporal_route callflow's data object
+Validator for the temporal_route callflow data object
 
 
 
@@ -30,4 +32,4 @@ To use  a Rule Set in a callflow:
 2. Set your first children to be the catch all (using `_` for the key).
 3. Set the second one using `rule_set`.
 
-If one (or more) of the rule in the rule set is satified it will got to the children using the `rule_set` key. If not to the catch all.
+If one (or more) of the rule in the rule set is satisfied it will got to the children using the `rule_set` key. If not to the catch all.

@@ -680,7 +680,7 @@ queue_stats(QueueId, AcctId) ->
             ,{<<"Queue-ID">>, QueueId}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    kapps_util:amqp_pool_request(
+    kz_amqp_worker:call(
       Req,
       fun kapi_acdc_stats:publish_current_calls_req/1,
       fun kapi_acdc_stats:current_calls_resp_v/1
@@ -963,7 +963,7 @@ originate(<<"ChanSpy">>, Props) ->
                                                      ]), kz_json:new()),
 
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
-    case kapps_util:amqp_pool_collect(Prop
+    case kz_amqp_worker:call_collect(Prop
                                      ,fun kapi_resource:publish_originate_req/1
                                      ,fun until_callback/1
                                      ,5000
@@ -1483,7 +1483,7 @@ conf_details(ConfId) ->
                                   {<<"Conference-ID">>, ConfId}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    case kapps_util:amqp_pool_collect(
+    case kz_amqp_worker:call_collect(
            Req,
            fun kapi_conference:publish_search_req/1,
            {'ecallmgr', 'true'}

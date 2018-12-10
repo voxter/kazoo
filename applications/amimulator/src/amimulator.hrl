@@ -2,7 +2,7 @@
 
 %% Typical includes needed
 -include_lib("kazoo_amqp/include/kz_amqp.hrl").
--include_lib("kazoo_apps/include/kz_hooks.hrl").
+-include_lib("kazoo_events/include/kz_hooks.hrl").
 -include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo_stdlib/include/kz_log.hrl").
 -include_lib("kazoo_stdlib/include/kz_types.hrl").

@@ -17,7 +17,6 @@
         ,move_doc/4
         ]).
 
-
 -include("kz_data.hrl").
 
 -type copy_function() :: fun((map(), kz_term:ne_binary(), kz_json:object(), kz_term:proplist()) ->
@@ -38,9 +37,9 @@ open_doc(#{server := {App, Conn}}, DbName, DocId, Options) ->
                                {'ok', kz_json:object()} | data_error().
 handle_opened_doc({'error', _}=Error, _Options) -> Error;
 handle_opened_doc({'ok', Doc}, Options) ->
-    handle_opened_doc(Doc, kz_doc:is_soft_deleted(Doc), props:get_is_true('deleted', Options, false)).
+    handle_opened_doc(Doc, kz_doc:is_soft_deleted(Doc), props:get_is_true('deleted', Options, 'false')).
 
--spec handle_opened_doc({'ok', kz_json:object()}|data_error(), boolean(), boolean()) ->
+-spec handle_opened_doc(kz_json:object(), boolean(), boolean()) ->
                                {'ok', kz_json:object()} |
                                {'error', 'not_found'}.
 handle_opened_doc(Doc, 'false',  _ReturnDeleted) -> {'ok', Doc};

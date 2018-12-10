@@ -209,7 +209,7 @@ get_agent_login_timestamp(AccountId, AgentId, Default) ->
                 ,{<<"Status">>, <<"logged_in">>}
                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
-    case kapps_util:amqp_pool_request(Request, fun kapi_acdc_stats:publish_status_req/1, fun kapi_acdc_stats:status_resp_v/1) of
+    case kz_amqp_worker:call(Request, fun kapi_acdc_stats:publish_status_req/1, fun kapi_acdc_stats:status_resp_v/1) of
         {'ok', Result} ->
             lager:debug("got agent logged in status response: ~p", [Result]),
             Keys = kz_json:get_keys(kz_json:get_value([<<"Agents">>, AgentId], Result)),

@@ -211,14 +211,14 @@ content_types_provided_for_fax(Context) ->
         [AttachmentId|_] ->
             CT = kz_doc:attachment_content_type(cb_context:doc(Context), AttachmentId),
             [Type, SubType] = binary:split(CT, <<"/">>),
-            lager:debug("found attachement of content type: ~s/~s~n", [Type, SubType]),
+            lager:debug("found attachment of content type: ~s/~s~n", [Type, SubType]),
             cb_context:set_content_types_provided(Context, [{'to_binary', [{Type, SubType}]}])
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /faxes mights load a list of fax objects
+%% /faxes might load a list of fax objects
 %% /faxes/123 might load the fax object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
@@ -444,10 +444,10 @@ get_execution_status(Id, JObj) ->
 -spec get_fax_running_status(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 get_fax_running_status(Id, Q) ->
     Api = [{<<"Job-ID">>, Id} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
-    case kapps_util:amqp_pool_request(Api
-                                     ,fun(A) -> kapi_fax:publish_query_status(Q, A) end
-                                     ,fun kapi_fax:status_v/1
-                                     )
+    case kz_amqp_worker:call(Api
+                            ,fun(A) -> kapi_fax:publish_query_status(Q, A) end
+                            ,fun kapi_fax:status_v/1
+                            )
     of
         {'ok', JObj } -> kz_json:get_value(<<"Status">>, JObj);
         _ -> <<"not available">>
@@ -512,7 +512,8 @@ on_success(Context) ->
                                           ,{<<"pvt_account_id">>, cb_context:account_id(Context)}
                                           ,{<<"pvt_account_db">>, AccountDb}
                                           ,{<<"pvt_reseller_id">>, ResellerId}
-                                          ] ++ maybe_add_timezone(Context)
+                                           | maybe_add_timezone(Context)
+                                          ]
                                          ,cb_context:doc(Context)
                                          )
                       ).
@@ -645,7 +646,7 @@ set_fax_binary(Context, Content, ContentType, Filename) ->
 
 -spec get_file_name(cb_context:context(), kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binary().
 get_file_name(Context, Doc, ContentType) ->
-    Time = kz_json:get_integer_value(<<"pvt_created">>, Doc, 0),
+    Time = kz_doc:created(Doc, 0),
     Timestamp = get_timestamp(Context, calendar:gregorian_seconds_to_datetime(Time)),
     Ext = kz_mime:to_extension(ContentType),
     list_to_binary([<<"fax_document_">>, Timestamp, ".", Ext]).
@@ -661,9 +662,7 @@ get_timestamp(Context, UtcTime) ->
                         lager:debug("bad TZ: ~p", [Timezone]),
                         UtcTime
                 end,
-    TimeString = kz_time:pretty_print_datetime(LocalTime),
-    re:replace(kz_term:to_lower_binary(TimeString), <<"\\s+">>, <<"_">>, [{'return', 'binary'}, 'global']).
-
+    kz_time:pretty_print_datetime(LocalTime).
 
 -spec get_timezone(cb_context:context()) -> kz_term:ne_binary().
 get_timezone(Context) ->
@@ -752,7 +751,8 @@ do_put_action(Context, ?OUTBOX, ?OUTBOX_ACTION_RESUBMIT, Id) ->
     case kz_datamgr:copy_doc(FromDB, {?FAX_TYPE, Id}, ?KZ_FAXES_DB, NewId, Options) of
         {'ok', _Doc} ->
             Updates = [{<<"pvt_job_status">>, <<"pending">>}],
-            {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, Updates),
+            UpdateOptions = [{'update', Updates}],
+            {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, UpdateOptions),
             cb_context:set_resp_data(Context, kz_doc:public_fields(UpdatedDoc));
         {'error', Error} ->
             lager:error("error resubmitting fax : ~p", [Error]),
@@ -768,7 +768,8 @@ do_put_action(Context, ?INBOX, ?INBOX_ACTION_FORWARD, Id) ->
     case kz_datamgr:copy_doc(FromDB, {?FAX_TYPE, Id}, ?KZ_FAXES_DB, NewId, Options) of
         {'ok', _Doc} ->
             Updates = [{<<"pvt_job_status">>, <<"pending">>}],
-            {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, Updates),
+            UpdateOptions = [{'update', Updates}],
+            {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, UpdateOptions),
             cb_context:set_resp_data(Context, kz_doc:public_fields(UpdatedDoc));
         {'error', Error} ->
             lager:error("error resubmitting fax : ~p", [Error]),

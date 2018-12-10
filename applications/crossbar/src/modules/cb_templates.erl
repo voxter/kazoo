@@ -187,8 +187,8 @@ create_template_db(TemplateName, Context) ->
             cb_context:add_system_error('datastore_fault', Context);
         'true' ->
             lager:debug("created DB for template ~s", [TemplateName]),
-            kz_datamgr:revise_docs_from_folder(TemplateDb, ?APP, "account", 'false'),
-            _ = kz_datamgr:revise_doc_from_file(TemplateDb, ?APP, ?MAINTENANCE_VIEW_FILE),
+            kz_datamgr:revise_docs_from_folder(TemplateDb, 'kazoo_apps', "account", 'false'),
+            _ = kz_datamgr:revise_doc_from_file(TemplateDb, 'kazoo_apps', <<"views/maintenance.json">>),
             cb_context:set_resp_status(Context, 'success')
     end.
 
@@ -229,22 +229,36 @@ import_template_docs([Id|Ids], TemplateDb, AccountId, AccountDb) ->
     case kz_datamgr:open_doc(TemplateDb, Id) of
         {'error', _} -> import_template_docs(Ids, TemplateDb, AccountId, AccountDb);
         {'ok', JObj} ->
-            Routines = [fun(J) -> kz_doc:set_account_id(J, AccountId) end
-                       ,fun(J) -> kz_doc:set_account_db(J, AccountDb) end
-                       ,fun kz_doc:delete_revision/1
-                       ,fun kz_doc:delete_attachments/1
-                       ],
-            _ = kz_datamgr:ensure_saved(AccountDb, lists:foldr(fun(F, J) -> F(J) end, JObj, Routines)),
-            Attachments = kz_doc:attachment_names(JObj),
-            _ = import_template_attachments(Attachments, JObj, TemplateDb, AccountDb, Id),
+            import_template_doc(Id, TemplateDb, AccountId, AccountDb, JObj),
             import_template_docs(Ids, TemplateDb, AccountId, AccountDb)
     end.
+
+-spec import_template_doc(kz_term:ne_binaries(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+import_template_doc(Id, TemplateDb, AccountId, AccountDb, JObj) ->
+    AttachmentNames = kz_doc:attachment_names(JObj),
+    Updates = [{kz_doc:path_account_id(), AccountId}
+              ,{kz_doc:path_account_db(), AccountDb}
+               | [{Key, 'null'} || Key <- AttachmentNames]
+              ],
+
+    UpdateOptions = [{'update', Updates}
+                    ,{'create', kz_json:to_proplist(kz_json:flatten(JObj))}
+                    ,{'ensure_saved', 'true'}
+                    ],
+    _ = kz_datamgr:update_doc(AccountDb, Id, UpdateOptions),
+
+    import_template_attachments(AttachmentNames, JObj, TemplateDb, AccountDb, Id).
 
 -spec import_template_attachments(kz_term:ne_binaries(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 import_template_attachments([], _, _, _, _) -> 'ok';
 import_template_attachments([Attachment|Attachments], JObj, TemplateDb, AccountDb, Id) ->
+    import_template_attachment(Attachment, JObj, TemplateDb, AccountDb, Id),
+    import_template_attachments(Attachments, JObj, TemplateDb, AccountDb, Id).
+
+-spec import_template_attachment(kz_term:ne_binary(), kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+import_template_attachment(Attachment, JObj, TemplateDb, AccountDb, Id) ->
     {'ok', Bin} = kz_datamgr:fetch_attachment(TemplateDb, Id, Attachment),
     ContentType = kz_doc:attachment_content_type(JObj, Attachment),
     Opts = [{'content_type', ContentType}],
     _ = kz_datamgr:put_attachment(AccountDb, Id, Attachment, Bin, Opts),
-    import_template_attachments(Attachments, JObj, TemplateDb, AccountDb, Id).
+    'ok'.

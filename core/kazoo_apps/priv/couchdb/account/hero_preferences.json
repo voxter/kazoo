@@ -1,0 +1,16 @@
+{
+    "_id": "_design/hero_preferences",
+    "kazoo": {
+        "view_map": [
+            {
+                "classification": "account"
+            }
+        ]
+    },
+    "language": "javascript",
+    "views": {
+        "by_user": {
+            "map": "function(doc) { if (doc.pvt_type != 'hero_preference' || doc.pvt_deleted) return; emit(doc.pvt_user_id, doc);}"
+        }
+    }
+}

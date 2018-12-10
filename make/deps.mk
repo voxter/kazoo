@@ -26,7 +26,6 @@ DEPS = amqp_client \
 	inet_cidr \
 	jesse \
 	jiffy \
-	jsx \
 	lager \
 	lager_syslog \
 	meck \
@@ -53,7 +52,7 @@ ifeq ($(USER),travis)
     DEPS += proper
 endif
 
-dep_amqp_client_commit = rabbitmq_v3_6_0
+dep_amqp_client = hex 3.7.3
 dep_apns = git https://github.com/inaka/apns4erl.git 2.2.1
 dep_certifi = hex 0.3.0
 dep_chatterbox = hex 0.7.0
@@ -63,7 +62,7 @@ dep_eflame = git https://github.com/slfritchie/eflame 7b0bb1a7e8c8482a59421a3a50
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
 dep_exml = git https://github.com/paulgray/exml 2.2.1
-dep_jiffy = git https://github.com/fenollp/jiffy patch-1  ## See https://github.com/davisp/jiffy/pull/152
+dep_jiffy = git https://github.com/lazedo/jiffy utf8  ## utf8 decode
 dep_meck = git https://github.com/eproxus/meck
 dep_nklib = git https://github.com/NetComposer/nklib
 dep_plists = hex 1.0.0
@@ -111,3 +110,5 @@ dep_proper = git https://github.com/manopapad/proper v1.2
 ### Hero additions
 dep_gm = git https://github.com/nuex/erl_gm.git
 dep_fcm = git https://github.com/softwarejoint/fcm-erlang.git
+
+dep_syslog = git https://github.com/2600hz/erlang-syslog bbad537a1cb5e4f37e672d2e2665659e850662d0

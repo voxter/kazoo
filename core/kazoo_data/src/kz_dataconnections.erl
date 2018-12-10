@@ -94,11 +94,16 @@ get_server(Tag) ->
                  ,[]
                  ,[{{'$1', '$2'}}]
                  }],
-    case ets:select(?MODULE, MatchSpec, 1) of
+    try ets:select(?MODULE, MatchSpec, 1) of
         {[{App, Server}], _} -> {App, Server};
         _ -> 'undefined'
+    catch
+        _E:_R ->
+            case ets:info(?MODULE) of
+                'undefined' -> lager:info("ETS table is gone, probably shutting down");
+                _ -> lager:error("error querying data connections ETS: ~s: ~p", [_E, _R])
+            end
     end.
-
 
 -spec test_conn() -> {'ok', kz_json:object()} |
                      {'error', any()}.
@@ -152,7 +157,7 @@ handle_cast({'update_connection', #data_connection{}=Connection}, State) ->
     'true' = ets:insert(?MODULE, Connection),
     {'noreply', State};
 handle_cast(_Msg, State) ->
-    lager:info("unhandle connection"),
+    lager:info("unhandled connection"),
     {'noreply', State}.
 
 %%------------------------------------------------------------------------------

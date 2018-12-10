@@ -12,6 +12,8 @@
         ,create/5
         ]).
 
+-export([decode/4]).
+
 -export([cache_time_ms/0
         ,default_provider/0, default_provider/1, set_default_provider/1
         ,default_language/0, set_default_language/1
@@ -45,7 +47,17 @@ create(<<"flite">>, _Text, _Voice, _Format, _Options) ->
     {'error', 'tts_provider_failure', <<"flite is not available to create TTS media">>};
 create(Provider, Text, Voice, Format, Options) ->
     lager:debug("using provider ~s to create tts", [Provider]),
-    (provider_module(Provider)):create(Text, Voice, Format, Options).
+    Module = provider_module(Provider),
+    Module:create(Text, Voice, Format, Options).
+
+-spec decode(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), any()) -> decode_resp().
+decode(Provider, Contents, Metadata, ProviderData) ->
+    lager:debug("using provider ~s to decode response", [Provider]),
+    Module = provider_module(Provider),
+    case kz_module:is_exported(Module, 'decode', 3) of
+        'true' -> Module:decode(Contents, Metadata, ProviderData);
+        'false' -> {Contents, Metadata}
+    end.
 
 -spec provider_module(kz_term:ne_binary()) -> atom().
 provider_module(Provider) ->
@@ -62,7 +74,11 @@ default_provider() ->
 -spec default_provider(kapps_call:call()) -> kz_term:ne_binary().
 default_provider(Call) ->
     Default = default_provider(),
-    kapps_account_config:get_global(Call, ?MOD_CONFIG_CAT, <<"tts_provider">>, Default).
+    kapps_account_config:get_global(kapps_call:account_id(Call)
+                                   ,?MOD_CONFIG_CAT
+                                   ,<<"tts_provider">>
+                                   ,Default
+                                   ).
 
 -spec set_default_provider(kz_term:ne_binary()) -> 'ok'.
 set_default_provider(Provider) ->

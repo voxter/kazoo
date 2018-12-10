@@ -20,14 +20,14 @@
         ,post/2, post/3
         ,delete/2, delete/3
         ,patch/2
-
-        ,replicate_account_definition/1
         ]).
 
 -export([notify_new_account/1]).
 -export([is_unique_realm/2
         ,is_unique_account_name/2
         ]).
+
+-export([delete_account/1]).
 
 %% needed for API docs in cb_api_endpoints
 -export([allowed_methods_on_account/2]).
@@ -304,12 +304,9 @@ post(Context, AccountId) ->
             _ = kz_util:spawn(fun notification_util:maybe_notify_account_change/2, [Existing, Context]),
             _ = kz_util:spawn(fun provisioner_util:maybe_update_account/1, [Context1]),
 
-            JObj = cb_context:doc(Context1),
-            _ = replicate_account_definition(JObj),
-            support_depreciated_billing_id(kz_json:get_value(<<"billing_id">>, JObj)
-                                          ,AccountId
-                                          ,leak_pvt_fields(AccountId, Context1)
-                                          );
+            {'ok', SavedAccount} = kzd_accounts:save(cb_context:doc(Context1)),
+
+            leak_pvt_fields(AccountId, cb_context:set_doc(Context1, SavedAccount));
         _Status -> Context1
     end.
 
@@ -337,6 +334,8 @@ put(Context) ->
 put(Context, PathAccountId) ->
     JObj = cb_context:doc(Context),
     NewAccountId = kz_doc:id(JObj, kz_datamgr:get_uuid()),
+
+    lager:info("creating new account with id ~s", [NewAccountId]),
     try create_new_account_db(prepare_context(NewAccountId, Context)) of
         C ->
             Tree = kzd_accounts:tree(JObj),
@@ -373,7 +372,7 @@ put(Context, _AccountId, ?API_KEY) ->
         _ -> C1
     end;
 put(Context, AccountId, ?RESELLER) ->
-    case whs_account_conversion:promote(AccountId) of
+    case kz_services_reseller:promote(AccountId) of
         {'error', 'master_account'} -> cb_context:add_system_error('forbidden', Context);
         {'error', 'reseller_descendants'} -> cb_context:add_system_error('account_has_descendants', Context);
         'ok' -> load_account(AccountId, Context)
@@ -383,6 +382,19 @@ put(Context, AccountId, ?RESELLER) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
+-spec delete_account(kz_term:ne_binary()) -> 'ok' | 'error'.
+delete_account(?MATCH_ACCOUNT_RAW(AccountId)) ->
+    Context = prepare_context(AccountId, cb_context:new()),
+    lager:info("attempting to delete ~s(~s)", [cb_context:account_id(Context)
+                                              ,cb_context:account_db(Context)
+                                              ]),
+    Context1 = delete(Context, AccountId),
+    case cb_context:resp_status(Context1) of
+        'success' -> lager:info("deleted account ~s", [AccountId]);
+        _Resp ->
+            lager:info("failed to delete account ~s", [AccountId]),
+            'error'
+    end.
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, Account) ->
@@ -399,7 +411,7 @@ delete(Context, Account) ->
 
 -spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 delete(Context, AccountId, ?RESELLER) ->
-    case whs_account_conversion:demote(AccountId) of
+    case kz_services_reseller:demote(AccountId) of
         {'error', 'master_account'} -> cb_context:add_system_error('forbidden', Context);
         {'error', 'reseller_descendants'} -> cb_context:add_system_error('account_has_descendants', Context);
         'ok' -> load_account(AccountId, Context)
@@ -432,7 +444,7 @@ create_apps_store_doc(AccountId) ->
 validate_move(<<"superduper_admin">>, Context, _, _) ->
     lager:debug("using superduper_admin flag to allow move account"),
     AuthId = kz_json:get_value(<<"account_id">>, cb_context:auth_doc(Context)),
-    kz_util:is_system_admin(AuthId);
+    kzd_accounts:is_superduper_admin(AuthId);
 validate_move(<<"tree">>, Context, MoveAccount, ToAccount) ->
     lager:debug("using tree to allow move account"),
     AuthId = kz_doc:account_id(cb_context:auth_doc(Context)),
@@ -656,9 +668,9 @@ maybe_disallow_direct_clients(_AccountId, Context, 'true') ->
 maybe_disallow_direct_clients(_AccountId, Context, 'false') ->
     {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
     AuthAccountId = cb_context:auth_account_id(Context),
-    AuthUserReseller = kz_services:get_reseller_id(AuthAccountId),
+    AuthUserReseller = kz_services_reseller:get_id(AuthAccountId),
     case AuthUserReseller =/= MasterAccountId
-        orelse kz_services:is_reseller(AuthAccountId)
+        orelse kz_services_reseller:is_reseller(AuthAccountId)
     of
         'true' -> Context;
         'false' ->
@@ -714,7 +726,7 @@ validate_delete_request(AccountId, Context) ->
             case knm_port_request:account_has_active_port(AccountId) of
                 'false' -> cb_context:set_resp_status(Context, 'success');
                 'true' ->
-                    lager:debug("pervent deleting account ~s due to has active port request", [AccountId]),
+                    lager:debug("prevent deleting account ~s due to has active port request", [AccountId]),
                     Msg = kz_json:from_list(
                             [{<<"message">>, <<"Account has active port request">>}
                             ]),
@@ -826,7 +838,7 @@ leak_reseller_id(Context, PathAccountId) ->
 
 -spec leak_is_reseller(cb_context:context()) -> cb_context:context().
 leak_is_reseller(Context) ->
-    IsReseller = kz_services:is_reseller(cb_context:account_id(Context)),
+    IsReseller = kz_services_reseller:is_reseller(cb_context:account_id(Context)),
     cb_context:set_resp_data(Context
                             ,kz_json:set_value(<<"is_reseller">>
                                               ,IsReseller
@@ -860,7 +872,7 @@ find_reseller_id(Context, 'undefined') ->
     cb_context:reseller_id(Context);
 find_reseller_id(Context, PathAccountId) ->
     IsNotSelf = PathAccountId =/= cb_context:account_id(Context),
-    case kz_services:is_reseller(PathAccountId) of
+    case kz_services_reseller:is_reseller(PathAccountId) of
         'true' when IsNotSelf -> PathAccountId;
         'true' -> cb_context:reseller_id(Context);
         'false' -> cb_context:reseller_id(Context)
@@ -971,12 +983,12 @@ load_paginated_descendants(AccountId, Context) ->
      ).
 
 %%------------------------------------------------------------------------------
-%% @doc Load a summary of the siblngs of this account
+%% @doc Load a summary of the siblings of this account
 %% @end
 %%------------------------------------------------------------------------------
 -spec load_siblings(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 load_siblings(AccountId, Context) ->
-    case kz_util:is_system_admin(cb_context:auth_account_id(Context))
+    case kzd_accounts:is_superduper_admin(cb_context:auth_account_id(Context))
         orelse
         (AccountId =/= cb_context:auth_account_id(Context)
          andalso kapps_config:get_is_true(?ACCOUNTS_CONFIG_CAT, <<"allow_sibling_listing">>, 'true')
@@ -1280,7 +1292,7 @@ load_account_db(Context, AccountId) when is_binary(AccountId) ->
         {'ok', JObj} ->
             AccountDb = kz_util:format_account_db(AccountId),
             lager:debug("account ~s db exists, setting operating database as ~s", [AccountId, AccountDb]),
-            ResellerId = kz_services:find_reseller_id(AccountId),
+            ResellerId = kz_services_reseller:find_id(AccountId),
             cb_context:setters(Context
                               ,[{fun cb_context:set_resp_status/2, 'success'}
                                ,{fun cb_context:set_account_db/2, AccountDb}
@@ -1304,7 +1316,6 @@ load_account_db(Context, AccountId) when is_binary(AccountId) ->
 -spec create_new_account_db(cb_context:context()) -> cb_context:context().
 create_new_account_db(Context) ->
     AccountDb = cb_context:account_db(Context),
-    _ = ensure_accounts_db_exists(),
     case kapps_util:is_account_db(AccountDb)
         andalso kz_datamgr:db_create(AccountDb)
     of
@@ -1325,7 +1336,7 @@ create_new_account_db(Context) ->
             _ = create_account_mod(cb_context:account_id(C)),
             lager:debug("created this month's MODb for account"),
 
-            _ = kz_services:reconcile(AccountDb),
+            _ = crossbar_services:reconcile(AccountDb),
             lager:debug("performed initial services reconcile"),
 
             _ = create_first_transaction(cb_context:account_id(C)),
@@ -1344,7 +1355,7 @@ create_new_account_db(Context) ->
 -spec maybe_set_notification_preference(cb_context:context()) -> 'ok'.
 maybe_set_notification_preference(Context) ->
     AccountId = cb_context:account_id(Context),
-    ResellerId = kz_services:find_reseller_id(AccountId),
+    ResellerId = kz_services_reseller:find_id(AccountId),
     case kzd_accounts:fetch(ResellerId) of
         {'error', _E} ->
             lager:error("failed to open reseller '~s': ~p", [ResellerId, _E]);
@@ -1359,13 +1370,11 @@ maybe_set_notification_preference(Context) ->
 
 -spec set_notification_preference(cb_context:context(), kz_term:ne_binary()) -> 'ok'.
 set_notification_preference(Context, Preference) ->
-    AccountDb = cb_context:account_db(Context),
     AccountDefinition = kzd_accounts:set_notification_preference(cb_context:doc(Context), Preference),
-    case kz_datamgr:save_doc(AccountDb, AccountDefinition) of
+    case kzd_accounts:save(AccountDefinition) of
         {'error', _R} ->
             lager:error("failed to update account definition: ~p", [_R]);
-        {'ok', AccountDef} ->
-            _ = replicate_account_definition(AccountDef),
+        {'ok', _AccountDef} ->
             lager:info("notification_preference set to '~s'", [Preference])
     end.
 
@@ -1376,26 +1385,17 @@ create_account_mod(AccountId) ->
 
 -spec create_first_transaction(kz_term:ne_binary()) -> any().
 create_first_transaction(AccountId) ->
-    AccountMODb = kazoo_modb:get_modb(AccountId),
-    wht_util:rollup(AccountMODb, 0).
-
--spec ensure_accounts_db_exists() -> 'ok'.
-ensure_accounts_db_exists() ->
-    case kz_datamgr:db_exists(?KZ_ACCOUNTS_DB) of
-        'true' -> 'ok';
-        'false' ->
-            _ = kapps_maintenance:refresh(?KZ_ACCOUNTS_DB),
-            'ok'
-    end.
+    {Year, Month, _} = erlang:date(),
+    kz_currency:rollover(AccountId, Year, Month, 0).
 
 -spec create_account_definition(cb_context:context()) -> cb_context:context().
 create_account_definition(Context) ->
     Doc = crossbar_doc:update_pvt_parameters(cb_context:doc(Context), Context),
     JObj = maybe_set_trial_expires(kz_doc:set_id(Doc, cb_context:account_id(Context))),
 
-    case kz_datamgr:save_doc(cb_context:account_db(Context), JObj) of
-        {'ok', AccountDef}->
-            _ = replicate_account_definition(AccountDef),
+    case kzd_accounts:save(JObj) of
+        {'ok', AccountDef} ->
+            lager:debug("account definition created: ~s", [kz_doc:revision(AccountDef)]),
             cb_context:setters(Context
                               ,[{fun cb_context:set_doc/2, AccountDef}
                                ,{fun cb_context:set_resp_data/2, kz_doc:public_fields(AccountDef)}
@@ -1419,28 +1419,10 @@ set_trial_expires(JObj) ->
     Expires = kz_time:now_s() + TrialTime,
     kzd_accounts:set_trial_expiration(JObj, Expires).
 
-
 -spec load_initial_views(cb_context:context()) -> 'ok'.
 load_initial_views(Context)->
-    kz_datamgr:refresh_views(cb_context:account_db(Context)),
-    _ = kazoo_number_manager_maintenance:update_number_services_view(cb_context:account_db(Context)),
+    _ = kz_datamgr:refresh_views(cb_context:account_db(Context)),
     'ok'.
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
--spec replicate_account_definition(kz_json:object()) ->
-                                          {'ok', kz_json:object()} |
-                                          {'error', any()}.
-replicate_account_definition(JObj) ->
-    AccountId = kz_doc:id(JObj),
-    case kz_datamgr:lookup_doc_rev(?KZ_ACCOUNTS_DB, AccountId) of
-        {'ok', Rev} ->
-            kz_datamgr:ensure_saved(?KZ_ACCOUNTS_DB, kz_doc:set_revision(JObj, Rev));
-        _Else ->
-            kz_datamgr:ensure_saved(?KZ_ACCOUNTS_DB, kz_doc:delete_revision(JObj))
-    end.
 
 %%------------------------------------------------------------------------------
 %% @doc This function will determine if the realm in the request is
@@ -1470,7 +1452,7 @@ maybe_is_unique_account_name(AccountId, Name) ->
 
 -spec is_unique_account_name(kz_term:api_ne_binary(), kz_term:ne_binary()) -> boolean().
 is_unique_account_name(AccountId, Name) ->
-    AccountName = kz_util:normalize_account_name(Name),
+    AccountName = kzd_accounts:normalize_name(Name),
     ViewOptions = [{'key', AccountName}],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ?AGG_VIEW_NAME, ViewOptions) of
         {'ok', []} -> 'true';
@@ -1507,38 +1489,16 @@ notify_new_account(Context, _AuthDoc) ->
     kapps_notify_publisher:cast(Notify, fun kapi_notifications:publish_new_account/1).
 
 %%------------------------------------------------------------------------------
-%% @doc Support the depreciated billing id on the account definition, will
-%% be phased out shortly
-%% @end
-%%------------------------------------------------------------------------------
--spec support_depreciated_billing_id(kz_term:api_binary(), kz_term:api_binary(), cb_context:context()) ->
-                                            cb_context:context().
-support_depreciated_billing_id('undefined', _, Context) -> Context;
-support_depreciated_billing_id(BillingId, AccountId, Context) ->
-    try kz_services:set_billing_id(BillingId, AccountId) of
-        'undefined' -> Context;
-        Services ->
-            _ = kz_services:save(Services),
-            Context
-    catch
-        'throw':{Error, Reason} ->
-            Msg = kz_json:from_list(
-                    [{<<"message">>, kz_term:to_binary(Error)}
-                    ,{<<"cause">>, AccountId}
-                    ]),
-            cb_context:add_validation_error(<<"billing_id">>, <<"not_found">>, Msg, Reason)
-    end.
-
-%%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_remove_services(cb_context:context()) -> cb_context:context() | boolean().
 delete_remove_services(Context) ->
-    case kz_services:delete(cb_context:account_id(Context)) of
-        {'ok', _} -> delete_free_numbers(Context);
-        _Err ->
-            lager:error("failed to delete services: ~p", [_Err]),
+    try kz_services:delete(cb_context:account_id(Context)) of
+        _S -> delete_free_numbers(Context)
+    catch
+        _E:_R ->
+            lager:error("failed to delete services: ~s: ~p", [_E, _R]),
             crossbar_util:response('error', <<"unable to cancel services">>, 500, Context)
     end.
 
@@ -1572,7 +1532,7 @@ delete_remove_db(Context) ->
                       delete_mod_dbs(Context);
                   {'error', 'not_found'} -> 'true';
                   {'error', _R} ->
-                      lager:debug("failed to open account defintion ~s: ~p", [cb_context:account_id(Context), _R]),
+                      lager:debug("failed to open account definition ~s: ~p", [cb_context:account_id(Context), _R]),
                       'false'
               end,
     case Removed of

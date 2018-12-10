@@ -1,9 +1,85 @@
-### Conferences
+# Configuring Conferences
 
-#### About Conferences
+## About Conferences
 
-Conferences documents are enriched with realtime information, namely: number of members, number of moderators, duration of the conference,
-conference locked status. The realtime information is added to conference document under _read_only key (to avoid accident document update).
+Conference documents are enriched with real-time information along side their configuration, namely showing the number of members, number of moderators, duration of the conference, conference locked status.
+
+The real-time information (if available) is added to conference document under `_read_only` key (to avoid accident document update).
+
+### Schema
+
+Schema for conferences
+
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`bridge_password` | the password used for a conference bridge | `string()` |   | `false` |
+`bridge_username` | the username used for a conference bridge | `string()` |   | `false` |
+`caller_controls` | caller controls (config settings) | `string()` |   | `false` |
+`conference_numbers.[]` |   | `string()` |   | `false` |
+`conference_numbers` | Defines conference numbers that can be used by members or moderators | `array(string())` | `[]` | `false` |
+`controls` | controls | `object()` |   | `false` |
+`domain` | domain | `string()` |   | `false` |
+`focus` | This is a read-only property indicating the media server hosting the conference | `string()` |   | `false` |
+`language` | Prompt language to play in the conference | `string()` |   | `false` |
+`max_members_media` | Media to play when the conference is full | `string()` |   | `false` |
+`max_participants` | The maximum number of participants that can join | `integer()` |   | `false` |
+`member.join_deaf` | Determines if a member will join deaf | `boolean()` | `false` | `false` | `supported`
+`member.join_muted` | Determines if a member will join muted | `boolean()` | `true` | `false` | `supported`
+`member.numbers.[]` |   | `string()` |   | `false` |
+`member.numbers` | Defines the conference (call in) number(s) for members | `array(string())` | `[]` | `false` |
+`member.pins.[]` |   | `string()` |   | `false` |
+`member.pins` | Defines the pin number(s) for members | `array(string())` | `[]` | `false` |
+`member.play_entry_prompt` | Whether to play the entry prompt on member join | `boolean()` |   | `false` |
+`member` | Defines the discovery (call in) properties for a member | `object()` | `{}` | `false` |
+`moderator.join_deaf` | Determines if a moderator will join deaf | `boolean()` | `false` | `false` |
+`moderator.join_muted` | Determines if a moderator will join muted | `boolean()` | `false` | `false` |
+`moderator.numbers.[]` |   | `string()` |   | `false` |
+`moderator.numbers` | Defines the conference (call in) number(s) for moderators | `array(string())` | `[]` | `false` |
+`moderator.pins.[]` |   | `string()` |   | `false` |
+`moderator.pins` | Defines the pin number(s) for moderators | `array(string())` | `[]` | `false` |
+`moderator` | Defines the discovery (call in) properties for a moderator | `object()` | `{}` | `false` |
+`moderator_controls` | profile on the switch for controlling the conference as a moderator | `string()` |   | `false` |
+`name` | A friendly name for the conference | `string(1..128)` |   | `false` | `supported`
+`owner_id` | The user ID who manages this conference | `string(32)` |   | `false` | `supported`
+`play_entry_tone` | Whether to play an entry tone, or the entry tone to play | `boolean() | string()` |   | `false` | `supported`
+`play_exit_tone` | Whether to play an exit tone, or the exit tone to play | `boolean() | string()` |   | `false` | `supported`
+`play_name` | Do we need to announce new conference members? | `boolean()` | `false` | `false` |
+`play_welcome` | Whether to play the welcome prompt | `boolean()` |   | `false` |
+`profile` | Profile configuration | `object()` |   | `false` |
+`profile_name` | conference profile name | `string()` |   | `false` |
+`require_moderator` | does the conference require a moderator | `boolean()` |   | `false` |
+`wait_for_moderator` | should members wait for a moderator before joining the conference | `boolean()` |   | `false` |
+
+
+
+### Keys under development
+
+- `require_moderator`
+- `wait_for_moderator`
+
+## Perform an action on a conference
+
+> PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
+
+```shell
+curl -v -X PUT \
+    -d '{"action": "{CONFERENCE_ACTION}", "data": {"ACTION":"DATA"}}' \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
+```
+
+ Action | Description
+ ------ | -----------
+ `lock` | Lock the conference; no new participants may join
+ `unlock` | Unlock the conference; new participants may join
+ `dial` | Dial an endpoint (user/device/DID)
+ `play` | Play media to the conference (all participants)
+
+### Dialing an endpoint
+
+Sometimes you want to dial out from a conference to an endpoint (versus waiting for the caller to dial into the conference). Similar to how the `group` callflow works, you can include device and user IDs; unlike groups, you can include DIDs as well (similar to quickcall/click2call).
 
 #### Schema
 
@@ -24,8 +100,8 @@ Key | Description | Type | Default | Required | Support Level
 `language` | Prompt language to play in the conference | `string()` |   | `false` |  
 `max_members_media` | Media to play when the conference is full | `string()` |   | `false` |  
 `max_participants` | The maximum number of participants that can join | `integer()` |   | `false` |  
-`member.join_deaf` | Determines if a member will join deaf | `boolean()` | `false` | `false` |  
-`member.join_muted` | Determines if a member will join muted | `boolean()` | `true` | `false` |  
+`member.join_deaf` | Determines if a member will join deaf | `boolean()` | `false` | `false` | `supported`
+`member.join_muted` | Determines if a member will join muted | `boolean()` | `true` | `false` | `supported`
 `member.numbers.[]` |   | `string()` |   | `false` |  
 `member.numbers` | Defines the conference (call in) number(s) for members | `array(string())` | `[]` | `false` |  
 `member.pins.[]` |   | `string()` |   | `false` |  
@@ -40,10 +116,10 @@ Key | Description | Type | Default | Required | Support Level
 `moderator.pins` | Defines the pin number(s) for moderators | `array(string())` | `[]` | `false` |  
 `moderator` | Defines the discovery (call in) properties for a moderator | `object()` | `{}` | `false` |  
 `moderator_controls` | profile on the switch for controlling the conference as a moderator | `string()` |   | `false` |  
-`name` | A friendly name for the conference | `string(1..128)` |   | `false` |  
-`owner_id` | The user ID who manages this conference | `string(32)` |   | `false` |  
-`play_entry_tone` | Whether to play an entry tone, or the entry tone to play | `boolean() | string()` |   | `false` |  
-`play_exit_tone` | Whether to play an exit tone, or the exit tone to play | `boolean() | string()` |   | `false` |  
+`name` | A friendly name for the conference | `string(1..128)` |   | `false` | `supported`
+`owner_id` | The user ID who manages this conference | `string(32)` |   | `false` | `supported`
+`play_entry_tone` | Whether to play an entry tone, or the entry tone to play | `boolean() | string()` |   | `false` | `supported`
+`play_exit_tone` | Whether to play an exit tone, or the exit tone to play | `boolean() | string()` |   | `false` | `supported`
 `play_name` | Do we need to announce new conference members? | `boolean()` | `false` | `false` |  
 `play_welcome` | Whether to play the welcome prompt | `boolean()` |   | `false` |  
 `profile` | Profile configuration | `object()` |   | `false` |  
@@ -52,7 +128,7 @@ Key | Description | Type | Default | Required | Support Level
 `reuse_pronounced_name` | Force re-using previous name recordings for known users calling into the conference | `boolean()` |   | `false` |  
 `wait_for_moderator` | should members wait for a moderator before joining the conference | `boolean()` |   | `false` |  
 
-##### conferences.profile
+### conferences.profile
 
 Schema for conference profiles
 
@@ -78,55 +154,10 @@ Key | Description | Type | Default | Required | Support Level
 
 
 
-##### Keys under development
-
-- `require_moderator`
-- `wait_for_moderator`
-
-#### Perform an action on a conference
-
-> PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
-
-```shell
-curl -v -X PUT \
-    -d '{"action": "{CONFERENCE_ACTION}", "data": {"ACTION":"DATA"}}' \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
-```
-
- Action | Description
- ------ | -----------
- `lock` | Lock the conference; no new participants may join
- `unlock` | Unlock the conference; new participants may join
- `dial` | Dial an endpoint (user/device/DID)
- `play` | Play media to the conference (all participants)
-
-#### Dialing an endpoint
-
-Sometimes you want to dial out from a conference to an endpoint (versus waiting for the caller to dial into the conference). Similar to how the `group` callflow works, you can include device and user IDs; unlike groups, you can include DIDs as well (similar to quickcall/click2call).
-
-##### Schema
-
-Schema for conference dial API command
-
-
-
-Key | Description | Type | Default | Required | Support Level
---- | ----------- | ---- | ------- | -------- | -------------
-`caller_id_name` | Caller ID Name to use when dialing out to endpoints | `string()` |   | `false` |
-`caller_id_number` | Caller ID Number to use when dialing out to endpoints | `string()` |   | `false` |
-`endpoints.[]` |   | `string()|[./devices.md#schema](#devices)` |   |   |
-`endpoints` | Endpoints to dial out to and join to the conference | `array()` |   | `true` |
-`participant_flags.[]` |   | `string('mute' | 'deaf' | 'distribute_dtmf' | 'is_moderator' | 'disable_moh' | 'ghost' | 'join_existing' | 'video_mute')()` |   | `false` |
-`participant_flags` | Participant flags applied to each endpoint when it joins the conference | `array(string('mute' | 'deaf' | 'distribute_dtmf' | 'is_moderator' | 'disable_moh' | 'ghost' | 'join_existing' | 'video_mute'))` |   | `false` |
-`target_call_id` | Existing UUID to use as a hint for where to start the conference | `string()` |   | `false` |
-`timeout` | How long to try to reach the endpoint(s) | `integer()` |   | `false` |
-
-
-
-##### Endpoints
+#### Endpoints
 
 Dial-able endpoints are
+
 1. Devices (by device id or [device JSON](./devices.md))
 2. Users (by user id)
 3. Phone Numbers
@@ -134,7 +165,7 @@ Dial-able endpoints are
 
 Note: Phone numbers will involve some internal legs being generated (loopback legs) to process the number as if it was a call coming in for the desired number. This means billing and limits will be applied just the same as if a user dialed the number from their device.
 
-##### Examples
+**Examples**
 
 ```json
 {
@@ -149,7 +180,7 @@ Note: Phone numbers will involve some internal legs being generated (loopback le
 }
 ```
 
-As when making [quickcalls](./quickcall.md), you can include `custom_application_vars`:
+As when making [QuickCalls](./quickcall.md), you can include `custom_application_vars`:
 
 ```json
 {
@@ -186,7 +217,7 @@ You can also include the outbound call id you'd like the leg to use:
 }
 ```
 
-##### Participant Flags
+#### Participant Flags
 
 You can specify how a participant will enter a conference with a list of attributes:
 
@@ -201,7 +232,21 @@ Value | Description
 `mute` | Participant joins muted
 `video_mute` | Participant joins with video stream muted
 
-##### Dialing out to a dynamic conference
+```json
+{
+    "action":"dial"
+    ,"data":{
+        "data":{
+            "endpoints":["{DEVICE_ID}","{USER_ID}","{NUMBER}","sip:{URI}"],
+            "caller_id_name":"Conference XYZ",
+            "caller_id_number":"5551212",
+            "participant_flags":["deaf", "mute"]
+        }
+    }
+}
+```
+
+### Dialing out to a dynamic conference
 
 Sometimes you want to create ad-hoc conferences and put a participant in there. You can `PUT` a conference and the endpoints to dial out to create a temporary conference. The `{CONFERENCE_ID}` you supply will be used to name the conference and any conference schema parameters in the request will be used when creating the conference. For example:
 
@@ -223,7 +268,7 @@ Sometimes you want to create ad-hoc conferences and put a participant in there. 
 
 These properties will be merged into a "default" conference document and then executed the same as if the conference was preconfigured.
 
-##### The API response
+#### The API response
 
 ```json
 {
@@ -242,14 +287,14 @@ These properties will be merged into a "default" conference document and then ex
 }
 ```
 
-##### Playing media to a conference
+#### Playing media to a conference
 
 Playing a media file to everyone in a conference:
 
 ```json
 {
-    "action":"play"
-    ,"data"{
+    "action":"play",
+    "data": {
         "data":{"media_id":"{MEDIA_ID}"}
     }
 }
@@ -257,7 +302,7 @@ Playing a media file to everyone in a conference:
 
 `{MEDIA_ID}` can be a pre-uploaded media ID or a URL to fetch media from.
 
-#### Perform an action on participants
+## Perform an action on participants
 
 > PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants
 
@@ -277,7 +322,7 @@ curl -v -X PUT \
  `kick` | Kick all the participants from the conference
  `relate` | Relate two participants
 
-##### Relate participants
+### Relate participants
 
  The `relate` action takes a `data` object:
 
@@ -320,7 +365,7 @@ curl -v -X PUT \
 }
 ```
 
-#### Perform an action on participant
+### Perform an action on participant
 
 > PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
 
@@ -331,7 +376,7 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
 ```
 
-Sometimes you may get a HTTP/1.1 304 Not Modified response from crossbar for simliar API calls. If you do, add a random string filter to the end of the call to ensure the request is viewed as 'unique'. For example:
+Sometimes you may get a HTTP/1.1 304 Not Modified response from crossbar for similar API calls. If you do, add a random string filter to the end of the call to ensure the request is viewed as 'unique'. For example:
 
 ```shell
 curl -v -X PUT \
@@ -349,7 +394,7 @@ curl -v -X PUT \
  `kick` | Kick the participant from the conference
  `play` | Play media to a single participant
 
-##### Playing media to a conference
+### Playing media to a conference
 
 Playing a media file to everyone in a conference:
 
@@ -361,9 +406,9 @@ Playing a media file to everyone in a conference:
 }
 ```
 
-`{MEDIA_ID}` can be a pre-uploaded media ID or a URL to fetch media from.
+`{MEDIA_ID}` can be a pare-uploaded media ID or a URL to fetch media from.
 
-#### List of conferences example
+### List of conferences example
 
 ```json
 [
@@ -392,7 +437,7 @@ Playing a media file to everyone in a conference:
 ]
 ```
 
-#### Conference document
+### Conference document
 
 ```json
 {
@@ -459,7 +504,7 @@ The last field, `play_entry_tone`, is at the root of the document: meaning this 
 * **play_entry_tone** and **play_exit_tone**: can be either a boolean or a non-empty string.
     * `true` means play the default tone when someone joins (or leaves) the conference
     * `false` disables the tone from being played
-    * A string like a *tone string* or a *URI to a media file* can be inputed.
+    * A string like a *tone string* or a *URI to a media file* can be inputted.
 
 #### Actions
 

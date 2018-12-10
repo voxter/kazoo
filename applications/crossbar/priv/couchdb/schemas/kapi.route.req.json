@@ -21,6 +21,9 @@
         "Codecs": {
             "type": "string"
         },
+        "Context": {
+            "type": "string"
+        },
         "Cost-Parameters": {
             "properties": {
                 "Max-Incremental-Cost": {
@@ -98,6 +101,9 @@
             "type": "string"
         },
         "Orig-Port": {
+            "type": "string"
+        },
+        "Origination-Call-ID": {
             "type": "string"
         },
         "Prepend-CID-Name": {

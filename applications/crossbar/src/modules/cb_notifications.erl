@@ -222,7 +222,7 @@ content_types_accepted_for_upload(Context, _Verb) ->
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /notifications mights load a list of skel objects
+%% /notifications might load a list of skel objects
 %% /notifications/123 might load the skel object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
@@ -476,7 +476,7 @@ build_preview_payload(Context, Notification) ->
 handle_preview_response(Context, Resp) ->
     case kz_json:get_value(<<"Status">>, Resp) of
         <<"failed">> ->
-            lager:debug("failed notificaiton preview: ~p", [Resp]),
+            lager:debug("failed notification preview: ~p", [Resp]),
             CleansedResp = kz_json:normalize(kz_api:remove_defaults(Resp)),
             crossbar_util:response_invalid_data(CleansedResp, Context);
         _Status ->
@@ -505,6 +505,8 @@ maybe_add_extra_data(<<"fax_inbound_error_to_email_filtered">>, API) ->
     props:set_value(<<"Fax-Result-Code">>, <<"49">>, API);
 maybe_add_extra_data(<<"fax_outbound_smtp_error_to_email">>, API) ->
     props:set_value(<<"Errors">>, [<<"Not Deliverable">>], API);
+maybe_add_extra_data(<<"service_added">>, API) ->
+    props:set_value(<<"Items">>, [kz_json:new()], API);
 maybe_add_extra_data(<<"transaction">>, API) ->
     props:set_value(<<"Success">>, 'true', API);
 maybe_add_extra_data(<<"transaction_failed">>, API) ->
@@ -747,14 +749,10 @@ read_system(Context, Id) ->
                                 ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
                                 ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())
                                 ),
-    case {cb_context:resp_error_code(Context1)
-         ,cb_context:resp_status(Context1)
-         }
-    of
-        {404, 'error'} -> Context1;
-        {_Code, 'success'} ->
+    case cb_context:resp_status(Context1) of
+        'success' ->
             cb_context:store(Context1, 'attachments_db', ?KZ_CONFIG_DB);
-        {_Code, _status} -> Context1
+        _Status -> Context1
     end.
 
 -spec read_account(cb_context:context(), kz_term:ne_binary(), load_from()) -> cb_context:context().
@@ -778,17 +776,17 @@ read_account(Context, Id, LoadFrom) ->
 
 -spec maybe_read_from_parent(cb_context:context(), kz_term:ne_binary(), load_from(), kz_term:api_binary()) -> cb_context:context().
 maybe_read_from_parent(Context, Id, LoadFrom, 'undefined') ->
-    lager:debug("~s not found in account and reseller is undefined, reading from master", [Id]),
+    lager:debug("~s not found in account and reseller is undefined, reading from system_config", [Id]),
     read_system_for_account(Context, Id, LoadFrom);
 maybe_read_from_parent(Context, Id, LoadFrom, ResellerId) ->
     AccountId = kz_util:format_account_id(cb_context:account_db(Context)),
     case AccountId =/= ResellerId
         andalso get_parent_account_id(AccountId) of
         'false' ->
-            lager:debug("~s not found in account and reached to reseller, reading from master", [Id]),
+            lager:debug("~s not found in account and reached to reseller, reading from system_config", [Id]),
             read_system_for_account(Context, Id, LoadFrom);
         'undefined' ->
-            lager:debug("~s not found in account and parent is undefined, reading from master", [Id]),
+            lager:debug("~s not found in account and parent is undefined, reading from system_config", [Id]),
             read_system_for_account(Context, Id, LoadFrom);
         ParentId ->
             ParentDb = kz_util:format_account_db(ParentId),
@@ -802,14 +800,14 @@ read_system_for_account(Context, Id, LoadFrom) ->
     Context1 = read_system(Context, Id),
     case cb_context:resp_status(Context1) of
         'success' when LoadFrom =:= 'system' ->
-            lager:debug("read template ~s from master account", [Id]),
+            lager:debug("read template ~s from system_config", [Id]),
             revert_context_to_account(Context, Context1);
         'success' when LoadFrom =:= 'system_migrate' ->
-            lager:debug("read template ~s from master account, now migrating it", [Id]),
+            lager:debug("read template ~s from system_config account, now migrating it", [Id]),
             migrate_template_to_account(revert_context_to_account(Context, Context1), Id);
         _Status ->
-            lager:debug("failed to read master db for ~s", [Id]),
-            Context1
+            lager:debug("failed to read system_config db for ~s", [Id]),
+            revert_context_to_account(Context, Context1)
     end.
 
 -spec get_parent_account_id(kz_term:ne_binary()) -> kz_term:api_binary().
@@ -833,13 +831,9 @@ migrate_template_to_account(Context, Id) ->
     lager:debug("saving template ~s from system config to account ~s", [Id, cb_context:account_id(Context)]),
 
     Template = cb_context:fetch(Context, 'db_doc'),
+    Updates = kz_notification:base_properties(kz_doc:public_fields(Template), Id),
 
-    Context1 =
-        crossbar_doc:ensure_saved(
-          cb_context:set_doc(Context
-                            ,kz_notification:set_base_properties(kz_doc:public_fields(Template), Id)
-                            )
-         ),
+    Context1 = crossbar_doc:update(Context, Id, Updates),
     case cb_context:resp_status(Context1) of
         'success' ->
             lager:debug("saved template ~s to account ~s", [Id, cb_context:account_db(Context1)]),
@@ -934,27 +928,29 @@ masquerade(Context, AccountId) ->
 
 -spec maybe_set_teletype_as_default(cb_context:context()) -> 'ok'.
 maybe_set_teletype_as_default(Context) ->
-    AccountDb = cb_context:account_db(Context),
-    case kzd_accounts:fetch(AccountDb) of
+    AccountId = cb_context:account_id(Context),
+    case kzd_accounts:fetch(AccountId) of
         {'error', _E} -> lager:debug("failed to note preference: ~p", [_E]);
-        {'ok', AccountJObj} ->
-            maybe_set_teletype_as_default(Context, AccountDb, AccountJObj)
+        {'ok', AccountDoc} ->
+            maybe_set_teletype_as_default(Context, AccountDoc)
     end.
 
--spec maybe_set_teletype_as_default(cb_context:context(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
-maybe_set_teletype_as_default(Context, AccountDb, AccountJObj) ->
-    case kzd_accounts:notification_preference(AccountJObj) of
-        'undefined' -> set_teletype_as_default(Context, AccountDb, AccountJObj);
+-spec maybe_set_teletype_as_default(cb_context:context(), kzd_accounts:doc()) -> 'ok'.
+maybe_set_teletype_as_default(Context, AccountDoc) ->
+    case kzd_accounts:notification_preference(AccountDoc) of
+        'undefined' -> set_teletype_as_default(Context, AccountDoc);
         <<"teletype">> -> lager:debug("account already prefers teletype");
-        _Pref -> set_teletype_as_default(Context, AccountDb, AccountJObj)
+        _Pref -> set_teletype_as_default(Context, AccountDoc)
     end.
 
--spec set_teletype_as_default(cb_context:context(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
-set_teletype_as_default(Context, AccountDb, AccountJObj) ->
-    JObj = kzd_accounts:set_notification_preference(AccountJObj, <<"teletype">>),
-    case kz_datamgr:save_doc(AccountDb, crossbar_doc:update_pvt_parameters(JObj, Context)) of
-        {'ok', UpdatedAccountJObj} ->
-            _ = cb_accounts:replicate_account_definition(UpdatedAccountJObj),
+-spec set_teletype_as_default(cb_context:context(), kzd_accounts:doc()) -> 'ok'.
+set_teletype_as_default(Context, AccountDoc) ->
+    Updates = [{kzd_accounts:path_notification_preference(), <<"teletype">>}
+               | crossbar_doc:pvt_updates(AccountDoc, Context)
+              ],
+
+    case kzd_accounts:update(cb_context:account_id(Context), Updates) of
+        {'ok', _UpdatedAccountJObj} ->
             lager:debug("updated pref for account");
         {'error', _E} ->
             lager:debug("failed to note preference: ~p", [_E])
@@ -1076,9 +1072,21 @@ maybe_update(Context, Id) ->
 
 -spec update_notification(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 update_notification(Context, Id) ->
-    Context1 = maybe_inherit_defaults(Context, cb_context:doc(read(Context, Id))),
-    OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
-    cb_context:validate_request_data(<<"notifications">>, Context1, OnSuccess).
+    Context1 = read(Context, Id),
+    IsPreview = is_preview(cb_context:req_nouns(Context)),
+    case {cb_context:resp_error_code(Context1)
+         ,cb_context:resp_status(Context1)
+         }
+    of
+        {_, 'success'} ->
+            Context2 = maybe_inherit_defaults(Context, cb_context:doc(Context1)),
+            OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
+            cb_context:validate_request_data(<<"notifications">>, Context2, OnSuccess);
+        {404, 'error'} when IsPreview ->
+            OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
+            cb_context:validate_request_data(<<"notifications">>, Context1, OnSuccess);
+        {_Code, _Status} -> Context1
+    end.
 
 -spec maybe_inherit_defaults(cb_context:context(), kz_term:api_object()) ->
                                     cb_context:context().
@@ -1155,14 +1163,19 @@ summary_available(Context) ->
 
 -spec fetch_summary_available(cb_context:context()) -> cb_context:context().
 fetch_summary_available(Context) ->
-    Context1 =
-        crossbar_doc:load_view(?CB_LIST
-                              ,[]
-                              ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
-                              ,select_normalize_fun(Context)
-                              ),
-    cache_available(Context1),
-    Context1.
+    ViewOptions = [{'databases', [?KZ_CONFIG_DB]}
+                  ,{'mapper', select_normalize_fun(Context)}
+                  ,{'should_paginate', 'false'}
+                  ,{'unchunkable', 'true'}
+                  ],
+    Context1 = crossbar_view:load(Context, ?CB_LIST, ViewOptions),
+    case cb_context:resp_status(Context1) of
+        'success' ->
+            cache_available(Context1),
+            Context1;
+        _ ->
+            Context1
+    end.
 
 -spec cache_available(cb_context:context()) -> 'ok'.
 cache_available(Context) ->
@@ -1198,10 +1211,16 @@ summary_account(Context) ->
 
 -spec summary_account(cb_context:context(), kz_json:objects()) -> cb_context:context().
 summary_account(Context, AccountAvailable) ->
-    Available = filter_available(summary_available(Context)),
-    lager:debug("loaded system available"),
-    JObj = merge_available(AccountAvailable, Available),
-    crossbar_doc:handle_json_success(JObj, Context).
+    Context1 = summary_available(Context),
+    case cb_context:resp_status(Context1) of
+        'success' ->
+            Available = filter_available(Context1),
+            lager:debug("loaded system available"),
+            JObj = merge_available(AccountAvailable, Available),
+            crossbar_doc:handle_json_success(JObj, Context);
+        _ ->
+            Context1
+    end.
 
 -spec filter_available(cb_context:context()) -> kz_json:objects().
 filter_available(Context) ->
@@ -1266,7 +1285,7 @@ normalize_available_port(Value, Acc, Context) ->
     AccountId = cb_context:account_id(Context),
     AuthAccountId = cb_context:auth_account_id(Context),
 
-    case kz_services:is_reseller(AuthAccountId)
+    case kz_services_reseller:is_reseller(AuthAccountId)
         andalso cb_port_requests:authority(AccountId)
     of
         'false' -> Acc;
@@ -1321,22 +1340,29 @@ on_successful_validation(Id, Context) ->
     of
         {'error', 404} ->
             lager:debug("load/merge of ~s failed with a 404", [Id]),
-            handle_missing_account_notification(CleanedContext, Id, cb_context:req_nouns(CleanedContext));
+            handle_missing_account_notification(CleanedContext, Id, is_preview(cb_context:req_nouns(CleanedContext)));
         {'success', _} -> Context1;
         {_Status, _Code} ->
             lager:debug("load/merge of ~s failed with ~p / ~p", [Id, _Status, _Code]),
             Context1
     end.
 
--spec handle_missing_account_notification(cb_context:context(), kz_term:ne_binary(), kz_term:proplist()) ->
+-spec is_preview(req_nouns()) -> boolean().
+is_preview([{<<"notifications">>, [_Id, ?PREVIEW]}|_]) -> 'true';
+is_preview(_) -> 'false'.
+
+-spec handle_missing_account_notification(cb_context:context(), kz_term:ne_binary(), boolean()) ->
                                                  cb_context:context().
-handle_missing_account_notification(Context, Id, [{<<"notifications">>, [_Id, ?PREVIEW]}|_]) ->
+handle_missing_account_notification(Context, Id, 'true') ->
     lager:debug("preview request, ignoring if notification ~s is missing", [Id]),
     Context;
-handle_missing_account_notification(Context, Id, _ReqNouns) ->
+handle_missing_account_notification(Context, Id, 'false') ->
     _ = maybe_hard_delete(Context, Id),
-    _Context = read_system_for_account(Context, Id, 'system_migrate'),
-    on_successful_validation(Id, Context).
+    Context1 = read_system_for_account(Context, Id, 'system_migrate'),
+    case cb_context:resp_status(Context1) of
+        'success' -> on_successful_validation(Id, Context);
+        _Status -> Context1
+    end.
 
 -spec handle_missing_system_config_notification(cb_context:context(), kz_term:ne_binary(), kz_json:object()) ->
                                                        cb_context:context().

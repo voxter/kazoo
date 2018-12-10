@@ -76,7 +76,7 @@ handle_call(_Request, _From, State) ->
 %%------------------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast('bind_to_dialplan', #state{node=Node}=State) ->
-    Bindings = ecallmgr_config:get_ne_binaries(?BINDINGS_CFG_KEY, ?DEFAULT_BINDINGS, Node),
+    Bindings = kapps_config:get_ne_binaries(?APP_NAME, ?BINDINGS_CFG_KEY, ?DEFAULT_BINDINGS, Node),
     case ecallmgr_fs_router_util:register_bindings(Node, ?FETCH_SECTION, Bindings) of
         'true' -> {'noreply', State};
         'false' ->
@@ -182,10 +182,7 @@ do_process_route_req(Section, Node, FetchId, CallId, Props) ->
 
 -spec maybe_start_call_handling(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
 maybe_start_call_handling(Node, FetchId, CallId, JObj) ->
-    case ecallmgr_fs_channel:exists(CallId)
-        andalso kz_json:get_value(<<"Method">>, JObj)
-    of
-        'false' -> lager:debug("call is not up anymore on ~s, not starting call handling", [Node]);
+    case kz_json:get_value(<<"Method">>, JObj) of
         <<"error">> -> lager:debug("sent error response to ~s, not starting call handling", [Node]);
         _Else -> start_call_handling(Node, FetchId, CallId, JObj)
     end.
@@ -200,7 +197,7 @@ start_call_handling(Node, FetchId, CallId, JObj) ->
                           ,kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())
                           ),
     _Evt = ecallmgr_call_sup:start_event_process(Node, CallId),
-    _Ctl = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, ServerQ, CCVs, []),
+    _Ctl = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, ServerQ, CCVs),
 
     lager:debug("started event ~p and control ~p processes", [_Evt, _Ctl]),
 

@@ -22,7 +22,7 @@
 -define(DEFAULT_PUBLISHER_ENABLED,
         kapps_config:get_is_true(?NOTIFY_CAT, <<"notify_persist_enabled">>, true)
        ).
--define(ACCOUNT_SHOULD_PRESIST(AccountId),
+-define(ACCOUNT_SHOULD_PERSIST(AccountId),
         kapps_account_config:get_global(AccountId, ?NOTIFY_CAT, <<"should_persist_for_retry">>, true)
        ).
 
@@ -158,9 +158,6 @@ save_pending_notification(NotifyType, JObj, Loop) ->
     case kz_datamgr:save_doc(?KZ_PENDING_NOTIFY_DB, JObj) of
         {'ok', _SavedJObj} ->
             lager:warning("payload for notification ~s is saved to ~s", [NotifyType, kz_doc:id(_SavedJObj)]);
-        {'error', 'not_found'} ->
-            kapps_maintenance:refresh(?KZ_PENDING_NOTIFY_DB),
-            save_pending_notification(NotifyType, JObj, Loop - 1);
         {'error', 'timeout'} ->
             save_pending_notification(NotifyType, JObj, Loop - 1);
         {'error', 'conflict'} ->
@@ -228,7 +225,7 @@ should_ignore_failure(<<"validation_failed">>) -> 'true';
 should_ignore_failure(<<"missing_data:", _/binary>>) -> 'true';
 should_ignore_failure(<<"failed_template:", _/binary>>) -> 'true'; %% rendering problems
 should_ignore_failure(<<"template_error:", _/binary>>) -> 'true'; %% rendering problems
-should_ignore_failure(<<"no teletype template modules responded">>) -> 'true'; %% no module is binded?
+should_ignore_failure(<<"no teletype template modules responded">>) -> 'true'; %% no module is bound?
 should_ignore_failure(<<"unknown error throw-ed">>) -> 'true';
 
 %% explicitly not ignoring these below:
@@ -332,7 +329,7 @@ notify_type(PublishFun) ->
 -spec should_persist_notify(kz_term:api_binary()) -> boolean().
 should_persist_notify(AccountId) ->
     ?DEFAULT_PUBLISHER_ENABLED
-        andalso ?ACCOUNT_SHOULD_PRESIST(AccountId).
+        andalso ?ACCOUNT_SHOULD_PERSIST(AccountId).
 
 -spec should_handle_notify_type(kz_term:ne_binary(), kz_term:api_binary()) -> boolean().
 should_handle_notify_type(NotifyType, AccountId) ->

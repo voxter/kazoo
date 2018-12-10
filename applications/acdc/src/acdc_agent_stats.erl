@@ -70,9 +70,9 @@ agent_ready(AccountId, AgentId) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_ready/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_ready/1
+                       ).
 
 -spec agent_logged_in(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_logged_in(AccountId, AgentId) ->
@@ -84,9 +84,9 @@ agent_logged_in(AccountId, AgentId) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_logged_in/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_logged_in/1
+                       ).
 
 -spec agent_logged_out(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_logged_out(AccountId, AgentId) ->
@@ -98,9 +98,9 @@ agent_logged_out(AccountId, AgentId) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_logged_out/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_logged_out/1
+                       ).
 
 -spec agent_pending_logged_out(kz_term:ne_binary(), kz_term:ne_binary()) ->
                                       'ok'.
@@ -113,9 +113,9 @@ agent_pending_logged_out(AccountId, AgentId) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_pending_logged_out/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_pending_logged_out/1
+                       ).
 
 -spec agent_connecting(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                               'ok'.
@@ -136,9 +136,9 @@ agent_connecting(AccountId, AgentId, CallId, CallerIDName, CallerIDNumber, Queue
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_connecting/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_connecting/1
+                       ).
 
 -spec agent_connected(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                              'ok'.
@@ -159,9 +159,9 @@ agent_connected(AccountId, AgentId, CallId, CallerIDName, CallerIDNumber, QueueI
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_connected/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_connected/1
+                       ).
 
 -spec agent_wrapup(kz_term:ne_binary(), kz_term:ne_binary(), integer()) -> 'ok'.
 agent_wrapup(AccountId, AgentId, WaitTime) ->
@@ -174,9 +174,9 @@ agent_wrapup(AccountId, AgentId, WaitTime) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_wrapup/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_wrapup/1
+                       ).
 
 -spec agent_paused(kz_term:ne_binary(), kz_term:ne_binary(), timeout() | 'undefined', kz_term:api_binary()) -> 'ok'.
 agent_paused(AccountId, AgentId, 'undefined', _) ->
@@ -192,9 +192,9 @@ agent_paused(AccountId, AgentId, PauseTime, Alias) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_paused/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_paused/1
+                       ).
 
 -spec agent_outbound(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_outbound(AccountId, AgentId, CallId) ->
@@ -207,9 +207,9 @@ agent_outbound(AccountId, AgentId, CallId) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     log_status_change(AccountId, Prop),
-    kapps_util:amqp_pool_send(Prop
-                             ,fun kapi_acdc_stats:publish_status_outbound/1
-                             ).
+    kz_amqp_worker:cast(Prop
+                       ,fun kapi_acdc_stats:publish_status_outbound/1
+                       ).
 
 -spec handle_status_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_status_stat(JObj, Props) ->

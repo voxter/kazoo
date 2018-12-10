@@ -7,6 +7,8 @@
             "default": "toggle",
             "description": "Whether to start/stop the recording",
             "enum": [
+                "mask",
+                "unmask",
                 "start",
                 "stop",
                 "toggle"
@@ -42,7 +44,7 @@
             "type": "string"
         },
         "record_min_sec": {
-            "description": "Miniumum number of seconds recorded to consider it a valid recording",
+            "description": "Minimum number of seconds recorded to consider it a valid recording",
             "type": "integer"
         },
         "record_on_answer": {

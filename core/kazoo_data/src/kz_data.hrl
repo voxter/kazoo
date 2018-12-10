@@ -57,6 +57,7 @@
                        'unknown_req_id' |
                        'worker_is_dead' |
                        'resource_not_available' |
+                       kz_term:ne_binary() |
                        integer() |
                        {'EXIT', _} |
                        {'conn_failed', _} |
@@ -121,7 +122,7 @@
 -type docid() :: kz_term:ne_binary() | {kz_term:ne_binary(), kz_term:ne_binary()}.
 -type docids() :: [docid()].
 
--type get_results_return() :: {'ok', kz_json:objects() | kz_json:path()} |
+-type get_results_return() :: {'ok', kz_json:json_terms()} |
                               data_error().
 
 -define(DEFAULT_DATA_SECTION, [{'local', 'bigcouch'}]).

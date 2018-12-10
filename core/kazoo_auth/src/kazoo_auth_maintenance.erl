@@ -15,7 +15,10 @@
 -export([register_common_providers/0]).
 -export([register_auth_app_key/2]).
 
--export([refresh/0, flush/0]).
+-export([refresh/0
+        ,register_views/0
+        ,flush/0
+        ]).
 
 -export([ensure_secret/0]).
 
@@ -42,17 +45,34 @@ register_auth_app(AccountId, OAuthId, Secret, Provider) ->
         {'error', _} -> kz_datamgr:save_doc(?KZ_AUTH_DB, Doc)
     end.
 
--spec register_auth_app_key(kz_term:ne_binary(), kz_term:ne_binary()) -> any().
+-spec register_auth_app_key(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                                   {'ok', kz_json:object()} |
+                                   kz_datamgr:data_error().
 register_auth_app_key(AppId, PemFile) ->
     Pem = kz_auth_keys:get_private_key_from_file(PemFile),
     KeyId = kz_binary:rand_hex(16),
-    {ok, _Key} = kz_auth_keys:new_private_key(KeyId, Pem),
-    Props = [{<<"pvt_server_key">>, KeyId}],
-    kz_datamgr:update_doc(?KZ_AUTH_DB, AppId, Props).
+    {'ok', _Key} = kz_auth_keys:new_private_key(KeyId, Pem),
+    Updates = [{<<"pvt_server_key">>, KeyId}],
+    UpdateOptions = [{'update', Updates}],
+    kz_datamgr:update_doc(?KZ_AUTH_DB, AppId, UpdateOptions).
 
 -spec refresh() -> 'ok'.
 refresh() ->
-    kz_datamgr:revise_views_from_folder(?KZ_AUTH_DB, 'kazoo_auth').
+    case kz_datamgr:db_exists(?KZ_AUTH_DB) of
+        'false' ->
+            init_db(kz_datamgr:db_create(?KZ_AUTH_DB));
+        'true' -> init_db('true')
+    end.
+
+-spec init_db(boolean()) -> 'ok'.
+init_db('false') ->
+    lager:error("error trying to create auth database");
+init_db('true') ->
+    kapps_maintenance:refresh(?KZ_AUTH_DB).
+
+-spec register_views() -> 'ok'.
+register_views() ->
+    kz_datamgr:register_views_from_folder('kazoo_auth').
 
 -spec register_common_providers() -> 'ok'.
 register_common_providers() ->

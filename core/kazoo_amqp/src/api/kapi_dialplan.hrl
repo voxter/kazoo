@@ -624,7 +624,7 @@
 -define(RECORD_CALL_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                                 ,{<<"Event-Name">>, <<"command">>}
                                 ,{<<"Application-Name">>, <<"record_call">>}
-                                ,{<<"Record-Action">>, [<<"start">>, <<"stop">>]}
+                                ,{<<"Record-Action">>, [<<"start">>, <<"stop">>, <<"mask">>, <<"unmask">>]}
                                 ,?INSERT_AT_TUPLE
                                 ]).
 -define(RECORD_CALL_REQ_TYPES, [{<<"Record-Sample-Rate">>, fun is_integer/1}]).
@@ -848,8 +848,10 @@
                             ]).
 
 %% Transfer
--define(TRANSFER_HEADERS, [<<"Application-Name">>, <<"Call-ID">>
-                          ,<<"Transfer-Type">>, <<"Transfer-To">>
+-define(TRANSFER_HEADERS, [<<"Application-Name">>
+                          ,<<"Call-ID">>
+                          ,<<"Transfer-To">>
+                          ,<<"Transfer-Type">>
                           ]).
 -define(OPTIONAL_TRANSFER_HEADERS, [<<"Insert-At">>
                                    ,<<"Transfer-Leg">>

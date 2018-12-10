@@ -30,9 +30,10 @@ migrate() ->
     _ = process_flag('trap_exit', 'true'),
     {'ok', Pid} = kvm_migrate_crawler:start(self()),
     link(Pid),
+    io:format("started and linked to crawler at ~p~n", [Pid]),
     receive
-        'done' -> 'ok';
-        {'EXIT', Pid, 'normal'} -> 'ok';
+        'done' -> io:format("~nmigration finished~n");
+        {'EXIT', Pid, 'normal'} -> io:format("~nmigration finished~n");
         {'EXIT', Pid, _Reason} ->
             io:format("~n********** migration process died with reason:~n~p~n", [_Reason])
     end.
@@ -106,8 +107,7 @@ recover_missing_metadata(MODb) ->
             recover_missing_metadata(MODb, JObjs);
         {'error', 'not_found'} ->
             ?SUP_LOG_DEBUG("  adding view ~s", [?VIEW_MISSING_METADATA]),
-            _ = kapi_maintenance:refresh_database(MODb),
-            _ = kapi_maintenance:refresh_views(MODb),
+            _ = kazoo_modb:create(MODb),
             recover_missing_metadata(MODb);
         {'error', 'timeout'} ->
             timer:sleep(1000),

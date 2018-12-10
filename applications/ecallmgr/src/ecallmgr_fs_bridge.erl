@@ -15,7 +15,7 @@
 
 -include("ecallmgr.hrl").
 
--define(BYPASS_MEDIA_AFTER_BRIDGE, ecallmgr_config:get_boolean(<<"use_bypass_media_after_bridge">>, 'false')).
+-define(BYPASS_MEDIA_AFTER_BRIDGE, kapps_config:get_boolean(?APP_NAME, <<"use_bypass_media_after_bridge">>, 'false')).
 -define(CHANNEL_ACTIONS_KEY, [<<"Custom-Channel-Vars">>, <<"Channel-Actions">>]).
 
 -spec call_command(atom(), kz_term:ne_binary(), kz_json:object()) -> {'error', binary()} | {binary(), kz_term:proplist()}.
@@ -26,7 +26,7 @@ call_command(Node, UUID, JObj) ->
         'true' when Endpoints =:= [] -> {'error', <<"bridge request had no endpoints">>};
         'true' ->
             %% if we are intending to ring multiple device simultaneously then
-            %% execute ring_ready so we dont leave the caller hanging with dead air.
+            %% execute ring_ready so we don't leave the caller hanging with dead air.
             %% this does not test how many are ACTUALLY dialed (registered)
             %% since that is one of the things we want to be ringing during
 
@@ -53,7 +53,9 @@ call_command(Node, UUID, JObj) ->
             XferExt = lists:foldr(fun(F, DP) ->
                                           F(DP, Node, UUID, Channel, BridgeJObj)
                                   end
-                                 ,[], Routines),
+                                 ,[]
+                                 ,Routines
+                                 ),
             {<<"xferext">>, XferExt}
     end.
 
@@ -264,29 +266,67 @@ create_command(DP, _Node, _UUID, #channel{profile=ChannelProfile}, JObj) ->
     BridgeProfile = kz_term:to_binary(kz_json:get_value(<<"SIP-Interface">>, JObj, ?DEFAULT_FS_PROFILE)),
     EPs = kz_json:get_list_value(<<"Endpoints">>, JObj, []),
     Endpoints = maybe_bypass_after_bridge(BypassAfterBridge, BridgeProfile, ChannelProfile, EPs),
-    BridgeCmd = list_to_binary(["bridge "
-                               ,build_channels_vars(Endpoints, JObj)
-                               ,try_create_bridge_string(Endpoints, JObj)
+
+    {Common, UniqueEndpoints} = kz_json:lift_common_properties(Endpoints
+                                                              ,[<<"Endpoint-Type">>
+                                                               ,<<"Failover">>
+                                                               ,<<"Forward-IP">>
+                                                               ,<<"Invite-Format">>
+                                                               ,<<"Proxy-IP">>
+                                                               ,<<"Proxy-Zone">>
+                                                               ,<<"Route">>
+                                                               ,<<"SIP-Interface">>
+                                                               ,<<"SIP-Transport">>
+                                                               ,<<"To-DID">>
+                                                               ,<<"To-IP">>
+                                                               ,<<"To-Realm">>
+                                                               ,<<"To-User">>
+                                                               ,<<"To-Username">>
+
+                                                                    %% Per FS-3792, group confirm must be
+                                                                    %% set per-channel, not globally
+                                                                    %% otherwise double prompting
+                                                               ,<<"Confirm-Cancel-Timeout">>
+                                                               ,<<"Confirm-File">>
+                                                               ,<<"Confirm-Key">>
+                                                               ,<<"Confirm-Read-Timeout">>
+                                                               ,[<<"Custom-Channel-Vars">>, <<"Confirm-Cancel-Timeout">>]
+                                                               ,[<<"Custom-Channel-Vars">>, <<"Confirm-File">>]
+                                                               ,[<<"Custom-Channel-Vars">>, <<"Confirm-Key">>]
+                                                               ,[<<"Custom-Channel-Vars">>, <<"Confirm-Read-Timeout">>]
+                                                               ]),
+
+    lager:debug("lifting from leg to channel: ~s", [kz_json:encode(Common)]),
+    UpdatedJObj = kz_json:set_value(<<"Endpoints">>, UniqueEndpoints, kz_json:merge(JObj, Common)),
+
+    LiftedCmd = list_to_binary(["bridge "
+                               ,build_channels_vars(UniqueEndpoints, UpdatedJObj)
+                               ,try_create_bridge_string(UniqueEndpoints, UpdatedJObj)
                                ]),
-    [{"application", BridgeCmd}|DP].
+
+    [{"application", LiftedCmd}|DP].
 
 -spec maybe_bypass_after_bridge(boolean(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:objects()) -> kz_json:objects().
 maybe_bypass_after_bridge('false', _, _, Endpoints) ->
     [kz_json:delete_key(<<"Bypass-Media">>, Endpoint) || Endpoint <- Endpoints];
 maybe_bypass_after_bridge('true', BridgeProfile, ChannelProfile, Endpoints) ->
-    [begin
-         case kz_json:get_value(<<"SIP-Interface">>, Endpoint, BridgeProfile) of
-             ChannelProfile -> Endpoint;
-             _ -> kz_json:delete_key(<<"Bypass-Media">>, Endpoint)
-         end
-     end || Endpoint <- Endpoints].
+    [maybe_remove_endpoint_bypass(Endpoint, BridgeProfile, ChannelProfile)
+     || Endpoint <- Endpoints
+    ].
+
+-spec maybe_remove_endpoint_bypass(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().
+maybe_remove_endpoint_bypass(Endpoint, BridgeProfile, ChannelProfile) ->
+    case kz_json:get_ne_binary_value(<<"SIP-Interface">>, Endpoint, BridgeProfile) of
+        ChannelProfile -> Endpoint;
+        _ -> kz_json:delete_key(<<"Bypass-Media">>, Endpoint)
+    end.
 
 -spec try_create_bridge_string(kz_json:objects(), kz_json:object()) -> kz_term:ne_binary().
 try_create_bridge_string(Endpoints, JObj) ->
     DialSeparator = ecallmgr_util:get_dial_separator(JObj, Endpoints),
     case ecallmgr_util:build_bridge_string(Endpoints, DialSeparator) of
         <<>> ->
-            lager:warning("bridge string resulted in no enpoints"),
+            lager:warning("bridge string resulted in no endpoints"),
             throw(<<"registrar returned no endpoints">>);
         BridgeString -> BridgeString
     end.

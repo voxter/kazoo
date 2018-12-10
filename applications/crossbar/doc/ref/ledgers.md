@@ -1,6 +1,6 @@
-### Ledgers
+# Ledgers
 
-#### About Ledgers
+## About Ledgers
 
 #### Schema
 
@@ -29,7 +29,7 @@ Key | Description | Type | Default | Required | Support Level
 
 
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/ledgers
 
@@ -39,17 +39,17 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers
 ```
 
-#### Fetch
+## Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}
 ```
 
-#### Create
+## Create
 
 > PUT /v2/accounts/{ACCOUNT_ID}/ledgers/debit
 
@@ -59,7 +59,7 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/debit
 ```
 
-#### Create
+## Create
 
 > PUT /v2/accounts/{ACCOUNT_ID}/ledgers/credit
 
@@ -69,7 +69,7 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/credit
 ```
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/ledgers/available
 
@@ -79,13 +79,23 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/available
 ```
 
-#### Fetch
+## Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}/{LEDGER_ENTRY_ID}
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers/total
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}/{LEDGER_ENTRY_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/total
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}/{LEDGER_ID}
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}/{LEDGER_ID}
 ```
 

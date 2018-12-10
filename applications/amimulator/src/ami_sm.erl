@@ -550,7 +550,7 @@ initial_registrations(AccountId) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
 
-    ReqResp = kapps_util:amqp_pool_collect(
+    ReqResp = kz_amqp_worker:call_collect(
                 Req,
                 fun kapi_registration:publish_query_req/1,
                 {'ecallmgr', 'true'}

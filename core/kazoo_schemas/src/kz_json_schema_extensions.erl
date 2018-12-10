@@ -5,7 +5,7 @@
 %%%-----------------------------------------------------------------------------
 -module(kz_json_schema_extensions).
 
--export([extra_validator/2
+-export([extra_validator/3
         ]).
 
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
@@ -13,8 +13,34 @@
 -define(INVALID_STORAGE_ATTACHMENT_REFERENCE(R), <<"invalid reference '", R/binary, "' to attachments">>).
 -define(INVALID_STORAGE_CONNECTION_REFERENCE(R), <<"invalid reference '", R/binary, "' to connections">>).
 
--spec extra_validator(jesse:json_term(), jesse_state:state()) -> jesse_state:state().
-extra_validator(Value, State) ->
+-spec extra_validator(jesse:json_term(), jesse_state:state(), kz_json_schema:extra_validator_options()) -> jesse_state:state().
+extra_validator(Value, State, Options) ->
+    Routines = [fun stability_level/3
+               ,fun extended_validation/3
+               ,fun extended_regexp/3
+               ],
+    lists:foldl(fun(Fun, AccState) -> Fun(Value, AccState, Options) end, State, Routines).
+
+-spec extended_regexp(jesse:json_term(), jesse_state:state(), kz_json_schema:extra_validator_options()) -> jesse_state:state().
+extended_regexp(Value, State, _Options) ->
+    Schema = jesse_state:get_current_schema(State),
+    case kz_json:is_true(<<"kazoo-regexp">>, Schema, 'false') of
+        'true' -> regexp_validation(Value, State);
+        'false' -> State
+    end.
+
+-spec regexp_validation(jesse:json_term(), jesse_state:state()) -> jesse_state:state().
+regexp_validation(Value, State) ->
+    case re:compile(Value) of
+        {error, _Reason} ->
+            ErrMsg = <<"invalid regular expression: '", Value/binary,"'">>,
+            jesse_error:handle_data_invalid('external_error', ErrMsg, State);
+        _ ->
+            State
+    end.
+
+-spec extended_validation(jesse:json_term(), jesse_state:state(), kz_json_schema:extra_validator_options()) -> jesse_state:state().
+extended_validation(Value, State, _Options) ->
     Schema = jesse_state:get_current_schema(State),
     case kz_json:is_true(<<"kazoo-validation">>, Schema, 'false') of
         'true' -> extra_validation(Value, State);
@@ -115,3 +141,38 @@ validate_attachment_oauth_doc_id(Value, State) ->
             lager:debug("~s", [ErrorMsg]),
             jesse_error:handle_data_invalid('external_error', ErrorMsg, State)
     end.
+
+-spec stability_level(jesse:json_term(), jesse_state:state(), kz_json_schema:extra_validator_options()) -> jesse_state:state().
+stability_level(_Value, State, Options) ->
+    Schema = jesse_state:get_current_schema(State),
+    SystemSL = props:get_ne_binary_value('stability_level', Options),
+    ParamSL = kz_json:get_value(<<"stability_level">>, Schema),
+    maybe_check_param_stability_level(SystemSL, ParamSL, State).
+
+maybe_check_param_stability_level('undefined', _ParamSL, State) ->
+    State; %% SystemSL is undefined, skip checking
+maybe_check_param_stability_level(_SystemSL, 'undefined', State) ->
+    State; %% ParamSL is undefined, skip checking
+maybe_check_param_stability_level(SystemSL, ParamSL, State) ->
+    SystemSLInt = stability_level_to_int(SystemSL),
+    ParamSLInt = stability_level_to_int(ParamSL),
+    case check_param_stability_level(SystemSLInt, ParamSLInt) of
+        valid ->
+            State;
+        invalid ->
+            ErrorMsg = <<"Disallowed parameter, it has lower stability level (",
+                         ParamSL/binary, ") than system's stability level (",
+                         SystemSL/binary, ")">>,
+            lager:debug("~s", [ErrorMsg]),
+            jesse_error:handle_data_invalid('external_error', ErrorMsg, State)
+    end.
+
+check_param_stability_level(SystemSLInt, ParamSLInt) when ParamSLInt < SystemSLInt ->
+    invalid;
+check_param_stability_level(_SystemSLInt, _ParamSLInt) ->
+    valid.
+
+-spec stability_level_to_int(kz_term:ne_binary()) -> pos_integer().
+stability_level_to_int(<<"stable">>) -> 3;
+stability_level_to_int(<<"beta">>) -> 2;
+stability_level_to_int(<<"alpha">>) -> 1.

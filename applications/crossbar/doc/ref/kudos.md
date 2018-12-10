@@ -1,12 +1,12 @@
-### Kudos
+# Kudos
 
-#### About Kudos
+## About Kudos
 
-#### Schema
+## Schema
 
 
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/kudos
 

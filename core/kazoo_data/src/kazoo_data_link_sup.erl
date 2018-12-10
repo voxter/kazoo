@@ -22,11 +22,8 @@
 
 -else.
 
--define(ORIGIN_BINDINGS, [[]
-                         ]).
-
--define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}
-                     ]).
+-define(ORIGIN_BINDINGS, [[]]).
+-define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}]).
 
 -define(DP_ORIGIN_BINDINGS, [[{'db', ?KZ_DATA_DB}]]).
 -define(DP_CACHE_PROPS, [{'origin_bindings', ?DP_ORIGIN_BINDINGS}]).
@@ -37,7 +34,6 @@
                   ,?CACHE_ARGS(?KAZOO_DATA_PLAN_CACHE, ?DP_CACHE_PROPS)
                   ,?SUPER('kz_dataconnection_sup')
                   ,?WORKER('kz_dataconnections')
-                  ,?WORKER('kazoo_data_bootstrap')
                   ]).
 
 %%==============================================================================

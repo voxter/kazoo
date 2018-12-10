@@ -89,7 +89,7 @@ content_types_provided(Context) ->
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /channels mights load a list of channel objects
+%% /channels might load a list of channel objects
 %% /channels/123 might load the channel object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
@@ -137,7 +137,6 @@ put(Context, UUID) ->
           ],
     kz_amqp_worker:cast(API, fun kapi_metaflow:publish_flow/1),
     crossbar_util:response_202(<<"metaflow sent">>, Context).
-
 
 %%------------------------------------------------------------------------------
 %% @doc Load an instance from the database
@@ -459,7 +458,7 @@ transfer(Context, Transferor, _Transferee, Target) ->
           ,{<<"Action">>, <<"transfer">>}
           ,{<<"Data">>, kz_json:from_list(
                           [{<<"target">>, Target}
-                          ,{<<"Transfer-Type">>, TransferType}
+                          ,{<<"transfer-type">>, TransferType}
                           ,{<<"moh">>, cb_context:req_value(Context, <<"moh">>)}
                           ])
            }

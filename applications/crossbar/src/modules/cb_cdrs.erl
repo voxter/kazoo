@@ -22,12 +22,13 @@
         ,to_csv/1
         ]).
 
--export([fix_qs_filter_keys/1
-        ,normalize_cdr/3
-        ]).
 -ifdef(TEST).
 -export([handle_utc_time_offset/2]).
 -endif.
+
+-export([fix_qs_filter_keys/1
+        ,normalize_cdr/3
+        ]).
 
 -include("crossbar.hrl").
 
@@ -37,9 +38,9 @@
 
 -define(CB_LIST, <<"cdrs/crossbar_listing">>).
 -define(CB_LIST_BY_USER, <<"cdrs/listing_by_owner">>).
--define(CB_INTERACTION_LIST, <<"cdrs/interaction_listing">>).
--define(CB_INTERACTION_LIST_BY_USER, <<"cdrs/interaction_listing_by_owner">>).
--define(CB_INTERACTION_LIST_BY_ID, <<"cdrs/interaction_listing_by_id">>).
+-define(CB_INTERACTION_LIST, <<"interactions/interaction_listing">>).
+-define(CB_INTERACTION_LIST_BY_USER, <<"interactions/interaction_listing_by_owner">>).
+-define(CB_INTERACTION_LIST_BY_ID, <<"interactions/interaction_listing_by_id">>).
 -define(CB_SUMMARY_VIEW, <<"cdrs/summarize_cdrs">>).
 -define(CB_SUMMARY_LIST, <<"format_summary">>).
 
@@ -47,7 +48,7 @@
 -define(PATH_LEGS, <<"legs">>).
 -define(PATH_SUMMARY, <<"summary">>).
 
--define(KEY_UO, <<"utc_offset">>).
+-define(KEY_UTC_OFFSET, <<"utc_offset">>).
 -define(KEY_CCV, <<"custom_channel_vars">>).
 
 -define(COLUMNS
@@ -76,6 +77,7 @@
         ,{<<"unix_timestamp">>, fun col_unix_timestamp/3}
         ,{<<"rfc_1036">>, fun col_rfc1036/3}
         ,{<<"iso_8601">>, fun col_iso8601/3}
+        ,{<<"iso_8601_combined">>, fun col_iso8601_combined/3}
         ,{<<"call_type">>, fun col_account_call_type/3}
         ,{<<"rate">>, fun col_rate/3}
         ,{<<"rate_name">>, fun col_rate_name/3}
@@ -224,7 +226,7 @@ validate(Context, _, _) ->
 
 -spec validate_utc_offset(cb_context:context()) -> cb_context:context().
 validate_utc_offset(Context) ->
-    UTCSecondsOffset = cb_context:req_value(Context, ?KEY_UO),
+    UTCSecondsOffset = cb_context:req_value(Context, ?KEY_UTC_OFFSET),
     validate_utc_offset(Context, UTCSecondsOffset).
 
 -spec validate_utc_offset(cb_context:context(), kz_time:gregorian_seconds()) -> cb_context:context().
@@ -255,7 +257,7 @@ validate_chunk_view(Context) ->
 load_chunk_view(Context, ViewName, Options0) ->
     AuthAccountId = cb_context:auth_account_id(Context),
     Setters = [{fun cb_context:store/3, 'has_cdr_filter', crossbar_filter:is_defined(Context)}
-              ,{fun cb_context:store/3, 'is_reseller', kz_services:is_reseller(AuthAccountId)}
+              ,{fun cb_context:store/3, 'is_reseller', kz_services_reseller:is_reseller(AuthAccountId)}
               ],
     Options = [{'is_chunked', 'true'}
               ,{'chunk_size', ?MAX_BULK}
@@ -486,13 +488,14 @@ col_customer_cost(JObj, _Timestamp, _Context) -> kz_term:to_binary(customer_cost
 col_dialed_number(JObj, _Timestamp, _Context) -> dialed_number(JObj).
 col_calling_from(JObj, _Timestamp, _Context) -> calling_from(JObj).
 col_pretty_print(_JObj, Timestamp, Context) ->
-    UTCSecondsOffset = cb_context:req_value(Context, ?KEY_UO),
-    kz_time:pretty_print_datetime(handle_utc_time_offset(Timestamp, UTCSecondsOffset)).
+    UTCSecondsOffset = cb_context:req_value(Context, ?KEY_UTC_OFFSET),
+    pretty_print_datetime(handle_utc_time_offset(Timestamp, UTCSecondsOffset)).
 col_unix_timestamp(_JObj, Timestamp, _Context) -> kz_term:to_binary(kz_time:gregorian_seconds_to_unix_seconds(Timestamp)).
 col_rfc1036(_JObj, Timestamp, _Context) -> kz_time:rfc1036(Timestamp).
 col_iso8601(_JObj, Timestamp, _Context) -> kz_date:to_iso8601_extended(Timestamp).
+col_iso8601_combined(_JObj, Timestamp, _Context) -> kz_time:iso8601(Timestamp).
 col_account_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"account_billing">>], JObj, <<>>).
-col_rate(JObj, _Timestamp, _Context) -> kz_term:to_binary(wht_util:units_to_dollars(kz_json:get_value([?KEY_CCV, <<"rate">>], JObj, 0))).
+col_rate(JObj, _Timestamp, _Context) -> kz_term:to_binary(kz_currency:units_to_dollars(kz_json:get_value([?KEY_CCV, <<"rate">>], JObj, 0))).
 col_rate_name(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"rate_name">>], JObj, <<>>).
 col_bridge_id(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"bridge_id">>], JObj, <<>>).
 col_recording_url(JObj, _Timestamp, _Context) -> kz_json:get_value([<<"recording_url">>], JObj, <<>>).
@@ -503,7 +506,15 @@ col_call_priority(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<
 col_reseller_cost(JObj, _Timestamp, _Context) -> kz_term:to_binary(reseller_cost(JObj)).
 col_reseller_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"reseller_billing">>], JObj, <<>>).
 
--spec handle_utc_time_offset(kz_time:gregorian_seconds(), integer()) -> kz_time:gregorian_seconds().
+-spec pretty_print_datetime(kz_time:datetime() | kz_time:gregorian_second()) -> kz_term:ne_binary().
+pretty_print_datetime(Timestamp) when is_integer(Timestamp) ->
+    pretty_print_datetime(calendar:gregorian_seconds_to_datetime(Timestamp));
+pretty_print_datetime({{Y,Mo,D},{H,Mi,S}}) ->
+    iolist_to_binary(io_lib:format("~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w"
+                                  ,[Y, Mo, D, H, Mi, S]
+                                  )).
+
+-spec handle_utc_time_offset(kz_time:gregorian_seconds(), kz_term:api_integer()) -> kz_time:gregorian_seconds().
 handle_utc_time_offset(Timestamp, 'undefined') -> Timestamp;
 handle_utc_time_offset(Timestamp, UTCSecondsOffset) ->
     Timestamp + kz_term:to_number(UTCSecondsOffset).
@@ -538,14 +549,14 @@ calling_from(JObj) ->
 -spec customer_cost(kz_json:object()) -> pos_integer().
 customer_cost(JObj) ->
     case kz_json:get_value([?KEY_CCV, <<"account_billing">>], JObj) of
-        <<"per_minute">> -> wht_util:call_cost(JObj);
+        <<"per_minute">> -> kapps_call_util:call_cost(JObj);
         _ -> 0
     end.
 
 -spec reseller_cost(kz_json:object()) -> pos_integer().
 reseller_cost(JObj) ->
     case kz_json:get_value([?KEY_CCV, <<"reseller_billing">>], JObj) of
-        <<"per_minute">> -> wht_util:call_cost(JObj);
+        <<"per_minute">> -> kapps_call_util:call_cost(JObj);
         _ -> 0
     end.
 
@@ -554,7 +565,7 @@ reseller_cost(JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec load_cdr(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
-load_cdr(?MATCH_MODB_PREFIX(Year,Month,_) = CDRId, Context) ->
+load_cdr(?MATCH_MODB_PREFIX(Year, Month, _Day) = CDRId, Context) ->
     AccountId = cb_context:account_id(Context),
     AccountDb = kazoo_modb:get_modb(AccountId, kz_term:to_integer(Year), kz_term:to_integer(Month)),
     Context1 = cb_context:set_account_db(Context, AccountDb),

@@ -176,7 +176,7 @@ check_enter_when_empty(#member_call{call=Call
                                  ,{<<"Skills">>, kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, Call)}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    case kapps_util:amqp_pool_request(Req
+    case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_queue:publish_agents_available_req/1
                                      ,fun kapi_acdc_queue:agents_available_resp_v/1
                                      ) of

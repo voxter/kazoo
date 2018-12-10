@@ -6,9 +6,6 @@
 %%%-----------------------------------------------------------------------------
 -module(kapps_conference).
 
--include("kapps_call_command.hrl").
--include("kapps_conference.hrl").
-
 -export([new/0]).
 -export([from_conference_doc/1, from_conference_doc/2]).
 -export([to_json/1, from_json/1, from_json/2]).
@@ -76,6 +73,9 @@
 
 -export([flush/0, cache/1, cache/2, retrieve/1]).
 
+-include("kapps_call_command.hrl").
+-include("kapps_conference.hrl").
+
 -define(BRIDGE_USER, kapps_config:get_ne_binary(<<"conferences">>, <<"bridge_username">>, kz_binary:rand_hex(12))).
 -define(BRIDGE_PWD, kapps_config:get_ne_binary(<<"conferences">>, <<"bridge_password">>, kz_binary:rand_hex(12))).
 
@@ -107,7 +107,7 @@
 %%  conference_doc           the complete conference doc used to create the record (when and if)
 %%  app_name                 The application name used during kapps_conference_command
 %%  app_version              The application version used during kapps_conference_command
-%%  kvs                      allows conferences to set values that propogate to children
+%%  kvs                      allows conferences to set values that propagate to children
 %%  call                     kapps_call object
 %%  account_id               %% account id
 %%  moderator_controls       moderator controls (config settings)
@@ -170,20 +170,24 @@ from_json(JObj, Conference) ->
     case kz_json:get_json_value(<<"Conference-Doc">>, JObj) of
         'undefined' -> do_from_json(JObj, Conference);
         Doc ->
-            FromJObj = do_from_json(JObj, Conference),
-            from_conference_doc(Doc, FromJObj)
+            FromDoc = from_conference_doc(Doc, Conference),
+            do_from_json(JObj, FromDoc)
     end.
 
 -spec do_from_json(kz_json:object(), conference()) -> conference().
 do_from_json(JObj, Conference) ->
-    ConferenceName = kz_json:get_ne_binary_value(<<"Conference-Name">>, JObj, id(Conference)),
+    ConferenceName =
+        case kz_json:get_ne_binary_value(<<"Conference-Name">>, JObj, name(Conference)) of
+            'undefined' -> id(Conference);
+            Name -> Name
+        end,
     ConferenceId =
         case kz_json:get_ne_binary_value(<<"Conference-ID">>, JObj, id(Conference)) of
             'undefined' -> ConferenceName;
             Id -> Id
         end,
 
-    lager:debug("building conference ~s(id:~s) from JSON", [ConferenceName, ConferenceId]),
+    lager:debug("building conference name: ~s (id:~s) from JSON", [ConferenceName, ConferenceId]),
 
     KVS = orddict:from_list(kz_json:to_proplist(kz_json:get_value(<<"Key-Value-Store">>, JObj, kz_json:new()))),
     Conference#kapps_conference{id = ConferenceId
@@ -297,7 +301,7 @@ from_conference_doc(JObj, Conference) ->
     ConferenceName = kzd_conferences:name(JObj, name(Conference)),
     ConferenceId = kz_doc:id(JObj, ConferenceName),
 
-    lager:debug("building conference ~s(id:~s) from config", [ConferenceName, ConferenceId]),
+    lager:debug("building conference ~s (id:~s) from config", [ConferenceName, ConferenceId]),
 
     Conference#kapps_conference{id = ConferenceId
                                ,name = ConferenceName
@@ -356,7 +360,7 @@ set_id(Id, Conference) when is_binary(Id); Id =:= 'undefined' ->
 set_name(Name, Conference) when is_binary(Name) ->
     Conference#kapps_conference{name=Name}.
 
--spec name(conference()) -> kz_term:ne_binary().
+-spec name(conference()) -> kz_term:api_ne_binary().
 name(#kapps_conference{name=Name}) ->
     Name.
 
@@ -376,24 +380,24 @@ account_id(#kapps_conference{account_id='undefined'
 account_id(#kapps_conference{account_id=AccountId}) ->
     AccountId.
 
--spec controls(conference(), kz_term:ne_binary()) -> kz_json:object().
+-spec controls(conference(), kz_term:ne_binary()) -> kz_json:objects().
 controls(#kapps_conference{controls=Controls}, _) when Controls =/= 'undefined' -> Controls;
 controls(#kapps_conference{account_id='undefined'}, ?DEFAULT_PROFILE_NAME) ->
-    kapps_config:get_json(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?DEFAULT_PROFILE_NAME], ?DEFAULT_CONTROLS);
+    kapps_config:get(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?DEFAULT_PROFILE_NAME], ?DEFAULT_CONTROLS);
 controls(#kapps_conference{account_id=AccountId}=Conference, ?DEFAULT_PROFILE_NAME) ->
     case kapps_account_config:get_global(AccountId, ?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?DEFAULT_PROFILE_NAME]) of
         'undefined' -> controls(Conference#kapps_conference{account_id='undefined'}, ?DEFAULT_PROFILE_NAME);
         Controls -> Controls
     end;
 controls(#kapps_conference{account_id='undefined'}, ?PAGE_PROFILE_NAME) ->
-    kapps_config:get_json(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?PAGE_PROFILE_NAME]);
+    kapps_config:get(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?PAGE_PROFILE_NAME]);
 controls(#kapps_conference{account_id=AccountId}=Conference, ?PAGE_PROFILE_NAME) ->
     case kapps_account_config:get_global(AccountId, ?CONFERENCE_CONFIG_CAT, [<<"controls">>, ?PAGE_PROFILE_NAME]) of
         'undefined' -> controls(Conference#kapps_conference{account_id='undefined'}, ?PAGE_PROFILE_NAME);
         Controls -> Controls
     end;
 controls(#kapps_conference{account_id='undefined'}, ControlsName) ->
-    kapps_config:get_json(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ControlsName]);
+    kapps_config:get(?CONFERENCE_CONFIG_CAT, [<<"controls">>, ControlsName]);
 controls(#kapps_conference{account_id=AccountId}=Conference, ControlsName) ->
     case kapps_account_config:get_global(AccountId, ?CONFERENCE_CONFIG_CAT, [<<"controls">>, ControlsName]) of
         'undefined' -> controls(Conference#kapps_conference{account_id='undefined'}, ControlsName);
@@ -462,6 +466,7 @@ build_conference_profile(#kapps_conference{profile_name=?PAGE_PROFILE_NAME
                                           ,account_id=AccountId
                                           }=Conference) ->
     lager:debug("using account '~s' for page profile ~s", [AccountId, ?PAGE_PROFILE_NAME]),
+
     Language = language(Conference),
     DefaultPageProfile = default_page_profile(Language, AccountId),
     case kapps_account_config:get_global(AccountId, ?CONFERENCE_CONFIG_CAT, [<<"profiles">>, Language, ?PAGE_PROFILE_NAME]) of
@@ -474,6 +479,7 @@ build_conference_profile(#kapps_conference{profile_name=ProfileName
                                           ,account_id='undefined'
                                           }=Conference) ->
     lager:debug("no account id for profile ~s, building from defaults", [ProfileName]),
+
     Language = language(Conference),
     case kapps_config:get_json(?CONFERENCE_CONFIG_CAT, [<<"profiles">>, Language, ProfileName]) of
         'undefined' -> profile(Conference#kapps_conference{profile_name=?DEFAULT_PROFILE_NAME});

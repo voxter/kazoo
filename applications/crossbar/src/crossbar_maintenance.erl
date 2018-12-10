@@ -16,6 +16,7 @@
 -export([stop_module/1]).
 -export([running_modules/0]).
 -export([refresh/0, refresh/1
+        ,register_views/0
         ,flush/0
         ]).
 -export([find_account_by_number/1]).
@@ -46,7 +47,6 @@
         ]).
 
 -export([does_schema_exist/1]).
-
 -export([check_system_configs/0]).
 -export([update_schemas/0]).
 
@@ -137,12 +137,20 @@ add_missing_modules(Modules, MissingModules) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% @deprecated View refresh functionality is moved to {@link kz_datamgr} and
+%% reading from database now, please use {@link kapps_maintenance:refresh/0}.
 %% @end
 %%------------------------------------------------------------------------------
 -spec refresh() -> 'ok'.
 refresh() ->
     io:format("please use kapps_maintenance:refresh().").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @deprecated View refresh functionality is moved to {@link kz_datamgr} and
+%% reading from database now, please use {@link kapps_maintenance:refresh/1}.
+%% @end
+%%------------------------------------------------------------------------------
 -spec refresh(input_term()) -> 'ok'.
 refresh(Value) ->
     io:format("please use kapps_maintenance:refresh(~p).", [Value]).
@@ -294,9 +302,15 @@ find_account_by_id(Id) ->
 %%------------------------------------------------------------------------------
 -spec allow_account_number_additions(input_term()) -> 'ok' | 'failed'.
 allow_account_number_additions(AccountId) ->
-    case kz_util:set_allow_number_additions(AccountId, 'true') of
-        {'ok', _} -> 'ok';
-        {'error', _} -> 'failed'
+    Update = [{kzd_accounts:path_allow_number_additions(), 'true'}],
+    case kzd_accounts:update(AccountId, Update) of
+        {'ok', _A} ->
+            io:format("  account ~s allowed to add numbers: ~s~n", [AccountId, kz_json:encode(_A)]),
+            lager:debug("  account ~s allowed to add numbers: ~s", [AccountId, kz_json:encode(_A)]);
+        {'error', _R} ->
+            io:format("  failed to allow account ~s to add numbers: ~p~n", [AccountId, _R]),
+            lager:debug("  failed to allow account ~s to add numbers: ~p", [AccountId, _R]),
+            'failed'
     end.
 
 %%------------------------------------------------------------------------------
@@ -305,7 +319,8 @@ allow_account_number_additions(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec disallow_account_number_additions(input_term()) -> 'ok' | 'failed'.
 disallow_account_number_additions(AccountId) ->
-    case kz_util:set_allow_number_additions(AccountId, 'false') of
+    Update = [{kzd_accounts:path_allow_number_additions(), 'false'}],
+    case kzd_accounts:update(AccountId, Update) of
         {'ok', _} -> 'ok';
         {'error', _} -> 'failed'
     end.
@@ -316,7 +331,8 @@ disallow_account_number_additions(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec enable_account(input_term()) -> 'ok' | 'failed'.
 enable_account(AccountId) ->
-    case kz_util:enable_account(AccountId) of
+    Update = [{kzd_accounts:path_enabled(), 'true'}],
+    case kzd_accounts:update(AccountId, Update) of
         {'ok', _} -> 'ok';
         {'error', _} -> 'failed'
     end.
@@ -327,7 +343,8 @@ enable_account(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec disable_account(input_term()) -> 'ok' | 'failed'.
 disable_account(AccountId) ->
-    case kz_util:disable_account(AccountId) of
+    Update = [{kzd_accounts:path_enabled(), 'false'}],
+    case kzd_accounts:update(AccountId, Update) of
         {'ok', _} -> 'ok';
         {'error', _} -> 'failed'
     end.
@@ -338,9 +355,15 @@ disable_account(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec promote_account(input_term()) -> 'ok' | 'failed'.
 promote_account(AccountId) ->
-    case kz_util:set_superduper_admin(AccountId, 'true') of
-        {'ok', _} -> 'ok';
-        {'error', _} -> 'failed'
+    Update = [{kzd_accounts:path_superduper_admin(), 'true'}],
+    case kzd_accounts:update(AccountId, Update) of
+        {'ok', _A} ->
+            io:format("  account ~s is admin-ified: ~s~n", [AccountId, kz_json:encode(_A)]),
+            lager:debug("  account ~s is admin-ified: ~s~n", [AccountId, kz_json:encode(_A)]);
+        {'error', _R} ->
+            io:format("  failed to admin-ify account ~s: ~p~n", [AccountId, _R]),
+            lager:debug("  failed to admin-ify account ~s: ~p~n", [AccountId, _R]),
+            'failed'
     end.
 
 %%------------------------------------------------------------------------------
@@ -349,7 +372,8 @@ promote_account(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec demote_account(input_term()) -> 'ok' | 'failed'.
 demote_account(AccountId) ->
-    case kz_util:set_superduper_admin(AccountId, 'false') of
+    Update = [{kzd_accounts:path_superduper_admin(), 'false'}],
+    case kzd_accounts:update(AccountId, Update) of
         {'ok', _} -> 'ok';
         {'error', _} -> 'failed'
     end.
@@ -360,19 +384,26 @@ demote_account(AccountId) ->
 %%------------------------------------------------------------------------------
 -spec create_account(input_term(), input_term(), input_term(), input_term()) -> 'ok' | 'failed'.
 create_account(AccountName, Realm, Username, Password)
-  when is_binary(AccountName), is_binary(Realm), is_binary(Username), is_binary(Password) ->
-    Account = kz_json:from_list([{<<"_id">>, kz_datamgr:get_uuid()}
-                                ,{<<"name">>, AccountName}
-                                ,{<<"realm">>, Realm}
-                                ]),
+  when is_binary(AccountName),
+       is_binary(Realm),
+       is_binary(Username),
+       is_binary(Password) ->
+    Account = kz_json:set_values([{<<"_id">>, kz_datamgr:get_uuid()}
+                                 ,{<<"name">>, AccountName}
+                                 ,{<<"realm">>, Realm}
+                                 ]
+                                ,kzd_accounts:new()
+                                ),
 
-    User = kz_json:from_list([{<<"_id">>, kz_datamgr:get_uuid()}
-                             ,{<<"username">>, Username}
-                             ,{<<"password">>, Password}
-                             ,{<<"first_name">>, <<"Account">>}
-                             ,{<<"last_name">>, <<"Admin">>}
-                             ,{<<"priv_level">>, <<"admin">>}
-                             ]),
+    User = kz_json:set_values([{<<"_id">>, kz_datamgr:get_uuid()}
+                              ,{<<"username">>, Username}
+                              ,{<<"password">>, Password}
+                              ,{<<"first_name">>, <<"Account">>}
+                              ,{<<"last_name">>, <<"Admin">>}
+                              ,{<<"priv_level">>, <<"admin">>}
+                              ]
+                             ,kzd_users:new()
+                             ),
 
     try create_account_and_user(Account, User) of
         {'ok', _Context} -> 'ok'
@@ -403,12 +434,16 @@ maybe_promote_account(Context) ->
 
     case kapps_util:get_all_accounts() of
         [AccountDb] ->
+            lager:info("account ~s is the first, promoting it to sysadmin", [AccountId]),
             'ok' = promote_account(AccountId),
             'ok' = allow_account_number_additions(AccountId),
-            'ok' = whs_account_conversion:force_promote(AccountId),
+            'ok' = kz_services_reseller:force_promote(AccountId),
             'ok' = update_system_config(AccountId),
+            lager:info("finished promoting account"),
             {'ok', Context};
-        _Else -> {'ok', Context}
+        _Else ->
+            lager:debug("account ~s is not the first account in the system", [AccountId]),
+            {'ok', Context}
     end.
 
 -spec create_account_and_user(kz_json:object(), kz_json:object()) ->
@@ -433,8 +468,9 @@ create_fold(F, {'ok', C}) -> F(C).
 
 -spec update_system_config(kz_term:ne_binary()) -> 'ok'.
 update_system_config(AccountId) ->
-    kapps_config:set(?KZ_SYSTEM_CONFIG_ACCOUNT, <<"master_account_id">>, AccountId),
-    io:format("updated master account id in system_config.~s~n", [?KZ_SYSTEM_CONFIG_ACCOUNT]).
+    {'ok', _} = kapps_config:set(?KZ_SYSTEM_CONFIG_ACCOUNT, <<"master_account_id">>, AccountId),
+    io:format("updated master account id in system_config.~s~n", [?KZ_SYSTEM_CONFIG_ACCOUNT]),
+    lager:debug("updated master account id in system_config.~s~n", [?KZ_SYSTEM_CONFIG_ACCOUNT]).
 
 -spec prechecks(cb_context:context()) -> {'ok', cb_context:context()}.
 prechecks(Context) ->
@@ -463,6 +499,8 @@ start_crossbar() ->
             'false'
     end.
 
+%% technically we don't need to check if accounts db exists
+%% since kazoo always checks that during startup.
 -spec db_accounts_exists() -> 'true'.
 db_accounts_exists() ->
     db_exists(?KZ_ACCOUNTS_DB).
@@ -596,20 +634,26 @@ validate_user(JObj, Context) ->
 -spec create_account(cb_context:context()) -> {'ok', cb_context:context()}.
 create_account(Context) ->
     Context1 = crossbar_bindings:fold(<<"v2_resource.execute.put.accounts">>, [Context]),
+    AccountId = cb_context:account_id(Context1),
+    AccountDb = cb_context:account_db(Context1),
     case cb_context:resp_status(Context1) of
-        'success' ->
+        'success' when AccountId =/= 'undefined' ->
             io:format("created new account '~s' in db '~s'~n"
-                     ,[cb_context:account_id(Context1)
-                      ,cb_context:account_db(Context1)
-                      ]
+                     ,[AccountId, AccountDb]
                      ),
             {'ok', Context1};
+        'success' ->
+            AccountIdFromDb = kz_util:format_account_id(AccountDb),
+            io:format("created new account '~s' in db '~s'~n"
+                     ,[AccountIdFromDb, AccountDb]
+                     ),
+            {'ok', cb_context:set_account_id(Context1, AccountIdFromDb)};
         _Status ->
             {'error', {_Code, _Msg, Errors}} = cb_context:response(Context1),
-            AccountId = kz_doc:id(cb_context:req_data(Context)),
-            kz_datamgr:db_delete(kz_util:format_account_db(AccountId)),
+            DocAccountId = kz_doc:id(cb_context:req_data(Context)),
+            kz_datamgr:db_delete(kz_util:format_account_db(DocAccountId)),
 
-            io:format("failed to create the account: ~p ~s", [_Code, _Msg]),
+            io:format("failed to create the account ~s: ~p ~s", [DocAccountId, _Code, _Msg]),
             throw(Errors)
     end.
 
@@ -1130,8 +1174,10 @@ app(AppNameOrId) ->
             end
     end.
 
--spec find_app(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_datamgr:data_error() |
-                                                            {'error', 'multiple_results'}.
+-spec find_app(kz_term:ne_binary(), kz_term:ne_binary()) ->
+                      {'ok', kz_json:object()} |
+                      kz_datamgr:data_error() |
+                      {'error', 'multiple_results'}.
 find_app(Db, Name) ->
     ViewOptions = [{'key', Name}
                   ,'include_docs'
@@ -1150,71 +1196,73 @@ view_app(AppJObj) ->
 
 print_app(AppJObj) ->
     io:format("App ~s\n", [kz_json:get_ne_value(<<"key">>, AppJObj)]),
-    _ = put(pp_lvl, 1),
-    _ = print_k_v(kz_json:get_value(<<"value">>, AppJObj)),
+    _ = put('pp_lvl', 1),
+    _ = print_kvs(kz_json:get_json_value(<<"value">>, AppJObj)),
     io:format("\n"),
-    no_return.
+    'no_return'.
 
-print_k_v(JObj) -> kz_json:map(fun print_k_v/2, JObj).
-print_k_v(K, V) ->
-    Lvl = get(pp_lvl),
+print_kvs(JObj) -> kz_json:foreach(fun print_k_v/1, JObj).
+
+print_k_v({K, V}) ->
+    Lvl = get('pp_lvl'),
     Indent = string:copies("  ", Lvl),
     case kz_json:is_json_object(V) of
-        false -> io:format("~s~s: ~s\n", [Indent, K, kz_json:encode(V)]);
-        true ->
+        'false' -> io:format("~s~s: ~s\n", [Indent, K, kz_json:encode(V)]);
+        'true' ->
             io:format("~s~s:\n", [Indent, K]),
-            _ = put(pp_lvl, Lvl + 1),
-            print_k_v(V),
-            _ = put(pp_lvl, Lvl)
+            _ = put('pp_lvl', Lvl + 1),
+            _ = print_kvs(V),
+            _ = put('pp_lvl', Lvl)
     end.
 
 update_app(AppId, Path, Value) ->
     case lists:last(Path) of
-        <<"_id">> -> ok;
-        <<"pvt_", _/binary>> -> ok;
+        <<"_id">> -> 'ok';
+        <<"pvt_", _/binary>> -> 'ok';
         ?NE_BINARY ->
-            {ok, MA} = kapps_util:get_master_account_db(),
-            Update = [{Path, Value}],
-            case kz_datamgr:update_doc(MA, AppId, Update) of
-                {ok, _} -> app(AppId);
-                {error, _R} -> io:format("updating ~s failed: ~p\n", [AppId, _R])
+            {'ok', MA} = kapps_util:get_master_account_db(),
+            Updates = [{Path, Value}],
+            UpdateOptions = [{'update', Updates}],
+            case kz_datamgr:update_doc(MA, AppId, UpdateOptions) of
+                {'ok', _} -> app(AppId);
+                {'error', _R} -> io:format("updating ~s failed: ~p\n", [AppId, _R])
             end
     end,
-    no_return.
+    'no_return'.
 
--spec set_app_field(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_field(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_field(AppId, Field, Value) ->
     update_app(AppId, [Field], Value).
 
--spec set_app_label(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_label(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_label(AppId, Value) ->
     update_app(AppId, [<<"i18n">>, <<"en-US">>, <<"label">>], Value).
 
--spec set_app_description(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_description(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_description(AppId, Value) ->
     update_app(AppId, [<<"i18n">>, <<"en-US">>, <<"description">>], Value).
 
--spec set_app_extended_description(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_extended_description(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_extended_description(AppId, Value) ->
     update_app(AppId, [<<"i18n">>, <<"en-US">>, <<"extended_description">>], Value).
 
--spec set_app_features(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_features(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_features(AppId, Value) ->
-    Values = [V || V <- binary:split(Value, <<$@>>, [global]),
+    Values = [V || V <- binary:split(Value, <<$@>>, ['global']),
                    V =/= <<>>
              ],
     update_app(AppId, [<<"i18n">>, <<"en-US">>, <<"features">>], Values).
 
--spec set_app_icon(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_icon(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_icon(AppId, PathToPNGIcon) ->
-    {ok, MA} = kapps_util:get_master_account_db(),
+    {'ok', MA} = kapps_util:get_master_account_db(),
     io:format("Processing...\n"),
     Icon = {filename:basename(PathToPNGIcon), PathToPNGIcon},
     update_icon(AppId, MA, Icon).
 
--spec set_app_screenshots(kz_term:ne_binary(), kz_term:ne_binary()) -> no_return.
+-spec set_app_screenshots(kz_term:ne_binary(), kz_term:ne_binary()) -> 'no_return'.
 set_app_screenshots(AppId, PathToScreenshotsFolder) ->
-    {ok, MA} = kapps_util:get_master_account_db(),
+    {'ok', MA} = kapps_util:get_master_account_db(),
     io:format("Processing...\n"),
     SShots = [{filename:basename(SShot), SShot}
               || SShot <- filelib:wildcard(kz_term:to_list(PathToScreenshotsFolder) ++ "/*.png")
@@ -1229,9 +1277,11 @@ set_app_screenshots(AppId, PathToScreenshotsFolder) ->
 %%------------------------------------------------------------------------------
 -spec check_system_configs() -> 'ok'.
 check_system_configs() ->
+    lager:notice("starting system schemas validation"),
     _ = [lager:warning("System config ~s validation error:~p", [Config, Error])
          || {Config, Error} <- kapps_maintenance:validate_system_configs()
         ],
+    lager:notice("finished system schemas validation"),
     'ok'.
 
 %%------------------------------------------------------------------------------
@@ -1261,24 +1311,18 @@ update_schemas() ->
 db_init_schemas() ->
     kz_datamgr:suppress_change_notice(),
     update_schemas(),
+    kz_datamgr:enable_change_notice(),
     check_system_configs().
 
 %%------------------------------------------------------------------------------
-%% @doc Updating required database views and system schemas if they has been
-%% changed using view's definitions in database.
+%% @doc Updating system schemas.
 %%
-%% This is called as part of system/crossbar start up to update some databases
-%% views using their definitions stored in `system_data' database. The views
-%% will be updated if it is different from its own definitions.
-%%
-%% This is the same for system_schema, if any system schema is different from
-%% their counterpart in `crossbar/priv/couchdb/schemas/*' it will be updated.
+%% This is called as part of system/crossbar start up to update system_schema,
+%% if any system schema is different from their counterpart in
+%% `crossbar/priv/couchdb/schemas/*' it will be updated.
 %%
 %% Keep in mind that this function is only read from view definitions from
 %% `system_data' database only
-%%
-%% If you need to update view's definitions in runtime, e.g. during developing,
-%% use {@link kapps_maintenance:register_account_views/0}.
 %%
 %% If you only need to update system schemas in runtime, e.g. during developing,
 %% use {@link update_schemas/0}.
@@ -1289,20 +1333,9 @@ db_init_schemas() ->
 %%------------------------------------------------------------------------------
 -spec db_init() -> 'ok'.
 db_init() ->
-    kz_datamgr:suppress_change_notice(),
     _ = kz_util:spawn(fun db_init_schemas/0),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, ?APP, <<"views/system_configs.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_MEDIA_DB, ?APP, <<"account/media.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_RATES_DB, ?APP, <<"views/rates.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_SIP_DB, ?APP, <<"views/resources.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_PORT_REQUESTS_DB, ?APP, <<"views/port_requests.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_ACDC_DB, ?APP, <<"views/acdc.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_CCCPS_DB, ?APP, <<"views/cccps.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_TOKEN_DB, ?APP, <<"views/token_auth.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_ALERTS_DB, ?APP, <<"views/alerts.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_PENDING_NOTIFY_DB, ?APP, <<"views/pending_notify.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_WEBHOOKS_DB, ?APP, <<"views/webhooks.json">>),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_OFFNET_DB, ?APP, <<"views/resources.json">>),
-    _ = kz_datamgr:register_view('ratedeck', 'crossbar', <<"views/rates.json">>),
-    kz_datamgr:enable_change_notice(),
-    lager:debug("database views updated").
+    'ok'.
+
+-spec register_views() -> 'ok'.
+register_views() ->
+    kz_datamgr:register_views_from_folder('crossbar').

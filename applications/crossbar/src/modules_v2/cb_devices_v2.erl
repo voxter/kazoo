@@ -14,7 +14,6 @@
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
         ,resource_exists/0, resource_exists/1, resource_exists/2
         ,validate_resource/1, validate_resource/2
-        ,billing/1
         ,authenticate/1
         ,authorize/1
         ,validate/1, validate/2, validate/3
@@ -48,13 +47,12 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec init() -> ok.
+-spec init() -> 'ok'.
 init() ->
     Bindings = [{<<"v2_resource.allowed_methods.devices">>, 'allowed_methods'}
                ,{<<"v2_resource.resource_exists.devices">>, 'resource_exists'}
                ,{<<"v2_resource.authenticate">>, 'authenticate'}
                ,{<<"v2_resource.authorize">>, 'authorize'}
-               ,{<<"v2_resource.billing">>, 'billing'}
                ,{<<"v2_resource.validate_resource.devices">>, 'validate_resource'}
                ,{<<"v2_resource.validate.devices">>, 'validate'}
                ,{<<"v2_resource.execute.put.devices">>, 'put'}
@@ -63,11 +61,7 @@ init() ->
                ,{<<"v2_resource.execute.delete.devices">>, 'delete'}
                ],
     cb_modules_util:bind(?MODULE, Bindings),
-    _ = crossbar_bindings:bind(<<"v2_resource.finish_request.*.devices">>
-                              ,'crossbar_services'
-                              ,'reconcile'
-                              ),
-    ok.
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc This function determines the verbs that are appropriate for the
@@ -77,20 +71,17 @@ init() ->
 %% @end
 %%------------------------------------------------------------------------------
 
--spec allowed_methods() ->
-                             http_methods().
+-spec allowed_methods() -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
--spec allowed_methods(path_token()) ->
-                             http_methods().
+-spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?STATUS_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(_DeviceId) ->
     [?HTTP_GET, ?HTTP_PATCH, ?HTTP_POST, ?HTTP_PUT, ?HTTP_DELETE].
 
--spec allowed_methods(path_token(), path_token()) ->
-                             http_methods().
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
     [?HTTP_POST].
 
@@ -108,30 +99,6 @@ resource_exists(_DeviceId) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true'.
-
-%%------------------------------------------------------------------------------
-%% @doc Ensure we will be able to bill for devices.
-%% @end
-%%------------------------------------------------------------------------------
--spec billing(cb_context:context()) -> cb_context:context().
-billing(Context) ->
-    billing(Context, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
-
-billing(Context, ?HTTP_GET, [{<<"devices">>, _}|_]) ->
-    Context;
-billing(Context, _ReqVerb, [{<<"devices">>, _}|_Nouns]) ->
-    try kz_services:allow_updates(cb_context:account_id(Context)) of
-        'true' ->
-            lager:debug("allowing service updates"),
-            Context
-    catch
-        'throw':{Error, Reason} ->
-            lager:debug("account ~s is not allowed to make billing updates: ~s: ~p"
-                       ,[props:get_value(<<"accounts">>, _Nouns), Error, Reason]),
-            crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
-    end;
-billing(Context, _ReqVerb, _Nouns) ->
-    Context.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -286,14 +253,18 @@ patch(Context, Id) ->
 
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
-    Callback =
-        fun() ->
-                Context1 = crossbar_doc:save(Context),
-                _ = maybe_aggregate_device('undefined', Context1),
-                _ = kz_util:spawn(fun provisioner_util:maybe_provision/1, [Context1]),
-                maybe_add_mobile_mdn(Context1)
-        end,
-    crossbar_services:maybe_dry_run(Context, Callback).
+    Context1 = crossbar_doc:save(Context),
+
+    case cb_context:resp_status(Context1) of
+        'success' -> handle_new_device(Context1);
+        _Status -> Context1
+    end.
+
+-spec handle_new_device(cb_context:context()) -> cb_context:context().
+handle_new_device(Context) ->
+    _ = maybe_aggregate_device('undefined', Context),
+    _ = kz_util:spawn(fun provisioner_util:maybe_provision/1, [Context]),
+    maybe_add_mobile_mdn(Context).
 
 -spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context, DeviceId) ->
@@ -450,7 +421,7 @@ error_mdn_taken(MDN, Context) ->
 check_mdn_registered(DeviceId, Context) ->
     %%TODO: issue API request to TOP (if configured with URL) and validate
     %%   that the number is present in that system, if not stop the request
-    %%   and don't set handle_modible_mdn
+    %%   and don't set handle_mobile_mdn
     Context1 = cb_context:store(Context, 'add_mobile_mdn', 'true'),
     case DeviceId == 'undefined' of
         'true' -> check_mac_address(DeviceId, Context1);
@@ -713,10 +684,10 @@ lookup_regs(AccountRealm) ->
           ,{<<"Fields">>, [<<"Authorizing-ID">>]}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kapps_util:amqp_pool_collect(Req
-                                     ,fun kapi_registration:publish_query_req/1
-                                     ,{'ecallmgr', 'true'}
-                                     )
+    case kz_amqp_worker:call_collect(Req
+                                    ,fun kapi_registration:publish_query_req/1
+                                    ,{'ecallmgr', 'true'}
+                                    )
     of
         {'error', _E} ->
             lager:debug("error getting reg: ~p", [_E]),
@@ -784,23 +755,34 @@ is_creds_global_unique(Realm, Username, DeviceId) ->
 %% @end
 %%------------------------------------------------------------------------------
 
--spec maybe_aggregate_device(kz_term:api_binary(), cb_context:context()) -> boolean().
+-spec maybe_aggregate_device(kz_term:api_ne_binary(), cb_context:context()) -> boolean().
 maybe_aggregate_device(DeviceId, Context) ->
     maybe_aggregate_device(DeviceId, Context, cb_context:resp_status(Context)).
 
--spec maybe_aggregate_device(kz_term:api_binary(), cb_context:context(), crossbar_status()) -> boolean().
+-spec maybe_aggregate_device(kz_term:api_ne_binary(), cb_context:context(), crossbar_status()) -> boolean().
 maybe_aggregate_device(DeviceId, Context, 'success') ->
     case kz_term:is_true(cb_context:fetch(Context, 'aggregate_device'))
         andalso ?DEVICES_ALLOW_AGGREGATES
     of
         'false' -> maybe_remove_aggregate(DeviceId, Context);
         'true' ->
-            lager:debug("adding device to the sip auth aggregate"),
-            {'ok', _} = kz_datamgr:ensure_saved(?KZ_SIP_DB, kz_doc:delete_revision(cb_context:doc(Context))),
-            kapps_util:amqp_pool_send([], fun(_) -> kapi_switch:publish_reload_acls() end),
+            aggregate_device(cb_context:doc(Context)),
+            _ = kz_amqp_worker:cast([], fun(_) -> kapi_switch:publish_reload_acls() end),
             'true'
     end;
 maybe_aggregate_device(_, _, _) -> 'false'.
+
+-spec aggregate_device(kz_json:object()) -> 'ok'.
+aggregate_device(Device) ->
+    lager:debug("adding device to the sip auth aggregate"),
+    Doc = kz_doc:delete_revision(Device),
+    Update = kz_json:to_proplist(kz_json:flatten(Doc)),
+    UpdateOptions = [{'update', Update}
+                    ,{'create', []}
+                    ,{'ensure_saved', 'true'}
+                    ],
+    {'ok', _} = kz_datamgr:update_doc(?KZ_SIP_DB, kz_doc:id(Device), UpdateOptions),
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -814,11 +796,10 @@ maybe_remove_aggregate(DeviceId, Context) ->
 -spec maybe_remove_aggregate(kz_term:api_binary(), cb_context:context(), crossbar_status()) -> boolean().
 maybe_remove_aggregate('undefined', _Context, _RespStatus) -> 'false';
 maybe_remove_aggregate(DeviceId, _Context, 'success') ->
-    case kz_datamgr:open_doc(?KZ_SIP_DB, DeviceId) of
+    case kz_datamgr:del_doc(?KZ_SIP_DB, DeviceId) of
         {'error', 'not_found'} -> 'false';
-        {'ok', JObj} ->
-            _ = kz_datamgr:del_doc(?KZ_SIP_DB, JObj),
-            kapps_util:amqp_pool_send([], fun(_) -> kapi_switch:publish_reload_acls() end),
+        {'ok', _JObj} ->
+            _ = kz_amqp_worker:cast([], fun(_) -> kapi_switch:publish_reload_acls() end),
             'true'
     end;
 maybe_remove_aggregate(_, _, _) -> 'false'.
@@ -880,16 +861,16 @@ add_mobile_mdn(Context) ->
           ,{<<"device-id">>, kz_doc:id(cb_context:doc(Context))}
           ]),
     PublicFields = kz_json:from_list([{<<"mobile">>, MobileField}]),
-    Options = [{assign_to, cb_context:account_id(Context)}
+    Options = [{'assign_to', cb_context:account_id(Context)}
               ,{'public_fields', PublicFields}
               ,{'module_name', ?CARRIER_MDN}
                |knm_number_options:mdn_options()
               ],
     case knm_number:create(Normalized, Options) of
-        {error, _}=Error ->
+        {'error', _}=Error ->
             _ = crossbar_doc:delete(Context),
             cb_phone_numbers_v2:set_response(Error, Context);
-        {ok, _} ->
+        {'ok', _} ->
             lager:debug("created new mdn ~s with public fields set to ~s"
                        ,[Normalized, kz_json:encode(PublicFields)]
                        ),

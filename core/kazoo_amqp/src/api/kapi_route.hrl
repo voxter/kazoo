@@ -26,6 +26,7 @@
                                     ,<<"Custom-Channel-Vars">>
                                     ,<<"Custom-Routing-Headers">>
                                     ,<<"Custom-SIP-Headers">>
+                                    ,<<"Context">>
                                     ,<<"From-Network-Addr">>
                                     ,<<"From-Network-Port">>
                                     ,<<"From-Tag">>
@@ -35,6 +36,7 @@
                                     ,<<"Message-ID">>
                                     ,<<"Orig-IP">>
                                     ,<<"Orig-Port">>
+                                    ,<<"Origination-Call-ID">>
                                     ,<<"Prepend-CID-Name">>
                                     ,<<"Resource-Type">>
                                     ,<<"Ringback-Media">>

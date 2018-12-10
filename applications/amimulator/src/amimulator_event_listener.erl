@@ -109,7 +109,7 @@ publish_amqp_event({'publish', Events}=_Req, AccountId) ->
                          {<<"Events">>, amimulator_util:format_json_events(Events)} |
                          kz_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
                         [], fun amqp_event/1),
-    amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
+    kz_amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
 
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
 amqp_event(Prop) when is_list(Prop) ->
@@ -122,7 +122,7 @@ amqp_event(Prop) when is_list(Prop) ->
 -spec init([kz_term:ne_binary()]) -> {'ok', state()}.
 init([AccountId]) ->
     lager:debug("event listener started with pid ~p", [self()]),
-    amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
+    kz_amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
     ami_sm:init_state(AccountId),
 
     gen_listener:cast(self(), {'get_module_extra_props', AccountId}),
@@ -173,7 +173,7 @@ handle_cast({'unregister', Pid}, #state{account_id=AccountId
 handle_cast({'gen_listener', {'created_queue', QueueName}}, #state{account_id=AccountId
                                                                   ,pids=Pids
                                                                   }=State) ->
-    amqp_util:bind_q_to_exchange(?QUEUE_NAME(AccountId), <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
+    kz_amqp_util:bind_q_to_exchange(?QUEUE_NAME(AccountId), <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
 
     %% Send fully booted event to client
     Payload = [

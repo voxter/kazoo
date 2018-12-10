@@ -18,6 +18,7 @@
         ,stop_module/1
         ,list_templates_from_db/1
         ]).
+-export([register_views/0]).
 
 -include("teletype.hrl").
 
@@ -230,7 +231,7 @@ stop_module(Module) ->
                                 {'ok', module()} |
                                 {'error', 'invalid_mod'}.
 module_from_binary(<<"teletype_", _/binary>> = Template) ->
-    case kz_util:try_load_module(Template) of
+    case kz_module:ensure_loaded(Template) of
         'false' -> invalid_module(Template);
         Module -> {'ok', Module}
     end;
@@ -265,3 +266,7 @@ maybe_remove_module_from_autoload(Module) when is_binary(Module) ->
     end;
 maybe_remove_module_from_autoload(Module) ->
     maybe_remove_module_from_autoload(kz_term:to_binary(Module)).
+
+-spec register_views() -> 'ok'.
+register_views() ->
+    kz_datamgr:register_views_from_folder(?APP).

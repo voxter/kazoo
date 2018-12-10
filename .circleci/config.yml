@@ -58,7 +58,7 @@ jobs:
         # This branch if available
         - v1-dep-{{ .Branch }}-
         # Default branch if not
-        - v1-dep-4.2-
+        - v1-dep-master-
         # Any branch if there are none on the default branch - this should be unnecessary if you have your default branch configured correctly
         - v1-dep-
     # This is based on your 1.0 configuration file or project settings
@@ -79,7 +79,7 @@ jobs:
     # Test
     #   This would typically be a build job when using workflows, possibly combined with build
     # This is based on your 1.0 configuration file or project settings
-    - run: echo -e "\nexport CHANGED=\$(git --no-pager diff --name-only HEAD origin/4.2 -- applications core | xargs readlink -e)\nexport CHANGED_SWAGGER=`[[ ! -z $(git --no-pager diff --name-only HEAD origin/4.2 -- applications/crossbar/priv/api/swagger.json) ]] && echo $(readlink -e applications/crossbar/priv/api/swagger.json)`\n" >> $BASH_ENV
+    - run: echo -e "\nexport CHANGED=\$(git --no-pager diff --name-only HEAD origin/4.3 -- applications core | xargs readlink -e)\nexport CHANGED_SWAGGER=`[[ ! -z $(git --no-pager diff --name-only HEAD origin/4.3 -- applications/crossbar/priv/api/swagger.json) ]] && echo $(readlink -e applications/crossbar/priv/api/swagger.json)`\n" >> $BASH_ENV
     - run: echo $CHANGED
     - run: ./scripts/state-of-docs.sh || true
     - run: ./scripts/code_checks.bash $CHANGED
@@ -87,14 +87,21 @@ jobs:
     - run: JOBS="2" make
     - run: make code_checks
     - run: make app_applications
-    - run: ./scripts/validate-js.sh $CHANGED
+    - run: ./scripts/validate-js.sh $(find {core,applications}/*/priv/**/* -name *.json)
     - run: make apis
     - run: make docs
     - run: make validate-schemas
     - run: ./scripts/state-of-edoc.escript
     - run: make xref
     - run: make sup_completion
+    - restore_cache:
+        keys:
+          - plt-v1-{{ checksum "make/deps.mk" }}
     - run: TO_DIALYZE="$(echo $CHANGED)" make build-plt dialyze
+    - save_cache:
+        key: plt-v1-{{ checksum "make/deps.mk" }}
+        paths:
+          - .kazoo.plt
     - run: make elvis
     - run: make build-ci-release
     - run: ${PWD}/scripts/check-unstaged.bash
@@ -108,11 +115,3 @@ jobs:
           cat ${CIRCLE_ARTIFACTS}/log/error.log
           exit 1
         fi
-    # Teardown
-    #   If you break your build into multiple jobs with workflows, you will probably want to do the parts of this that are relevant in each
-    # Save test results
-    - store_test_results:
-        path: /tmp/circleci-test-results
-    # Save artifacts
-    - store_artifacts:
-        path: /tmp/circleci-test-results

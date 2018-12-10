@@ -19,7 +19,10 @@
 -endif.
 
 -include_lib("kazoo_ast/include/kz_ast.hrl").
--include_lib("crossbar/src/crossbar.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_web/include/kazoo_web.hrl").
+-include_lib("kazoo_documents/include/kazoo_documents.hrl").
+
 -include_lib("kazoo_ast/src/kz_ast.hrl").
 
 -define(REF_PATH
@@ -55,14 +58,14 @@ to_ref_doc(CBModule) ->
        ,[kz_binary:join([Filter, OperatesOn, Description], <<" | ">>), $\n]
        ).
 -define(FILTER_HEADER
-       ,["#### Available Filters\n\n"
+       ,["## Available Filters\n\n"
         ,?FILTER_ROW(<<"Filter">>, <<"Operates On">>, <<"Description">>)
         ,?FILTER_ROW(<<"------">>, <<"-----------">>, <<"-----------">>)
         ]
        ).
 -define(FILTER_DOC
-       ,["### Query String Filters\n\n"
-         "#### About Filters\n\n"
+       ,["# Query String Filters\n\n"
+         "## About Filters\n\n"
         ]).
 
 -spec filters_to_ref_doc(kz_json:object()) -> 'ok'.
@@ -103,7 +106,7 @@ api_path_to_section(_MOdule, _Paths, Acc) -> Acc.
 %%------------------------------------------------------------------------------
 %% @doc Creates a Markdown section for each API methods.
 %% ```
-%% #### Fetch/Create/Change
+%% ## Fetch/Create/Change
 %% > Verb Path
 %% ```shell
 %% curl -v http://{SERVER}:8000/Path
@@ -142,7 +145,7 @@ sort_methods(Methods, [Method | Ordering], Acc) ->
     end.
 
 method_to_section(Method, Acc, APIPath) ->
-    [[ "#### ", method_as_action(Method), "\n\n"
+    [[ "## ", method_as_action(Method), "\n\n"
      ,"> ", Method, " ", APIPath, "\n\n"
      , "```shell\ncurl -v -X ", Method, " \\\n"
        "    -H \"X-Auth-Token: {AUTH_TOKEN}\" \\\n"
@@ -163,8 +166,8 @@ method_as_action(?HTTP_PATCH) -> <<"Patch">>.
 ref_doc_header(BaseName) ->
     CleanedUpName = kz_ast_util:smash_snake(BaseName),
     [[maybe_add_schema(BaseName)]
-    ,["#### About ", CleanedUpName, "\n\n"]
-    ,["### ", CleanedUpName, "\n\n"]
+    ,["## About ", CleanedUpName, "\n\n"]
+    ,["# ", CleanedUpName, "\n\n"]
     ].
 
 -spec maybe_add_schema(kz_term:ne_binary()) -> iolist().
@@ -175,7 +178,7 @@ maybe_add_schema(BaseName) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc This looks for `#### Schema' in the doc file and adds the JSON schema
+%% @doc This looks for `## Schema' in the doc file and adds the JSON schema
 %% formatted as the markdown table.
 %% ```
 %% Schema = "vmboxes" or "devices"
@@ -185,10 +188,12 @@ maybe_add_schema(BaseName) ->
 %%------------------------------------------------------------------------------
 -spec schema_to_doc(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 schema_to_doc(Schema, Doc) ->
-    {'ok', SchemaJObj} = kz_json_schema:load(Schema),
+    SchemaJObj = kz_ast_util:load_ref_schema(Schema),
     DocFile = filename:join([code:lib_dir('crossbar'), "doc", Doc]),
     {'ok', DocContents} = file:read_file(DocFile),
-    case binary:split(DocContents, <<?SCHEMA_SECTION/binary, "\n">>) of
+    case SchemaJObj =/= 'undefined'
+        andalso binary:split(DocContents, <<?SCHEMA_SECTION/binary, "\n">>)
+    of
         [Before, After] ->
             Data = [Before, kz_ast_util:schema_to_table(SchemaJObj), After],
             ok = file:write_file(DocFile, Data);
@@ -600,6 +605,7 @@ process_api_ast(Module, {'raw_abstract_v1', Attributes}) ->
                    ],
     process_api_ast_functions(Module, APIFunctions).
 
+-type http_methods() :: kz_term:ne_binaries().
 -type path_with_methods() :: {iodata(), http_methods()}.
 -type paths_with_methods() :: [path_with_methods()].
 -type allowed_methods() :: {'allowed_methods', paths_with_methods()}.
@@ -929,6 +935,8 @@ def_path_param(<<"{VM_MSG_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{WHITELABEL_DOMAIN}">>=P) -> base_path_param(P);
 def_path_param(<<"{APP}">>=P) -> base_path_param(P);
 def_path_param(<<"{MOBILE_DEVICE_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{ERROR_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{HANDLER_ID}">>=P) -> base_path_param(P);
 
 %% For all the edge cases out there:
 def_path_param(<<"report-{REPORT_ID}">>) ->
@@ -991,11 +999,7 @@ def_path_param(<<"{TASK_ID}">>=P) ->
     ];
 
 def_path_param(<<"{ENDPOINT_ID}">>=P) ->
-    [{<<"minLength">>, 32}
-    ,{<<"maxLength">>, 32}
-    ,{<<"pattern">>, <<"^[0-9a-f]+\$">>}
-     | base_path_param(P)
-    ];
+    generic_id_path_param(P);
 def_path_param(<<"{ENDPOINT_TYPE}">>=P) ->
     [{<<"enum">>, [<<"users">>, <<"devices">>]}
      | base_path_param(P)
@@ -1009,9 +1013,16 @@ def_path_param(<<"{NUMBER}">> = P) ->
     [{<<"pattern">>, <<"^\\+?[0-9]+">>}
      | base_path_param(P)
     ];
+def_path_param(<<"{AUDIT_ID}">> = P) ->
+    generic_id_path_param(P);
+def_path_param(<<"{SOURCE_SERVICE}">> = P) ->
+    base_path_param(P);
 
 def_path_param(_Param) ->
-    io:format(standard_error, "No Swagger definition of path parameter '~s'.\n", [_Param]),
+    io:format('standard_error'
+             ,"~s/" ?FILE ":~p: No Swagger definition of path parameter '~s'.\n"
+             ,[code:lib_dir('kazoo_ast'), ?LINE, _Param]
+             ),
     halt(1).
 
 filters_from_module(Module) ->

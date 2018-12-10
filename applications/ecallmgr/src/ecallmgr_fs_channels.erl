@@ -324,7 +324,7 @@ handle_query_channels(JObj, _Props) ->
 handle_channel_status(JObj, _Props) ->
     'true' = kapi_call:channel_status_req_v(JObj),
     _ = kz_util:put_callid(JObj),
-    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_api:call_id(JObj),
     lager:debug("channel status request received"),
     case ecallmgr_fs_channel:fetch(CallId) of
         {'error', 'not_found'} ->
@@ -349,7 +349,7 @@ handle_channel_status(JObj, _Props) ->
                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                   ]
                  ),
-            kapi_call:publish_channel_status_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp)
+            kapi_call:publish_channel_status_resp(kz_api:server_id(JObj), Resp)
     end.
 
 -spec maybe_send_empty_channel_resp(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
@@ -367,7 +367,7 @@ send_empty_channel_resp(CallId, JObj) ->
            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    kapi_call:publish_channel_status_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp).
+    kapi_call:publish_channel_status_resp(kz_api:server_id(JObj), Resp).
 
 %%%=============================================================================
 %%% gen_server callbacks
@@ -390,7 +390,7 @@ init([]) ->
     {'ok', #state{max_channel_cleanup_ref=start_cleanup_ref()}}.
 
 -define(CLEANUP_TIMEOUT
-       ,ecallmgr_config:get_integer(<<"max_channel_cleanup_timeout_ms">>, ?MILLISECONDS_IN_MINUTE)
+       ,kapps_config:get_integer(?APP_NAME, <<"max_channel_cleanup_timeout_ms">>, ?MILLISECONDS_IN_MINUTE)
        ).
 
 -spec start_cleanup_ref() -> reference().
@@ -450,7 +450,7 @@ handle_cast({'sync_channels', Node, Channels}, State) ->
                  {'error', _R} -> lager:warning("failed to sync channel ~s: ~p", [UUID, _R]);
                  {'ok', C} ->
                      ets:insert(?CHANNELS_TBL, C),
-                     PublishReconect = ecallmgr_config:get_boolean(<<"publish_channel_reconnect">>, 'false'),
+                     PublishReconect = kapps_config:get_boolean(?APP_NAME, <<"publish_channel_reconnect">>, 'false'),
                      handle_channel_reconnected(C, PublishReconect)
              end
          end
@@ -472,7 +472,7 @@ handle_cast({'flush_node', Node}, State) ->
             lager:debug("no locally handled channels");
         LocalChannels ->
             _P = kz_util:spawn(fun handle_channels_disconnected/1, [LocalChannels]),
-            lager:debug("sending channel disconnecteds for local channels: ~p", [LocalChannels])
+            lager:debug("sending channel disconnects for local channels: ~p", [LocalChannels])
     end,
 
     MatchSpec = [{#channel{node = '$1', _ = '_'}
@@ -785,7 +785,7 @@ publish_channel_connection_event(#channel{uuid=UUID
             ,{<<"Channel-Call-State">>, channel_call_state(IsAnswered)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++ ChannelSpecific
             ],
-    kz_amqp_worker:cast(Event, fun kapi_call:publish_event/1),
+    _ = kz_amqp_worker:cast(Event, fun kapi_call:publish_event/1),
     lager:debug("published channel connection event for ~s", [UUID]).
 
 -spec channel_call_state(boolean()) -> kz_term:api_binary().
@@ -823,7 +823,7 @@ connection_cavs(#channel{}) -> 'undefined'.
 
 -spec max_channel_uptime() -> non_neg_integer().
 max_channel_uptime() ->
-    ecallmgr_config:get_integer(?MAX_CHANNEL_UPTIME_KEY, 0).
+    kapps_config:get_integer(?APP_NAME, ?MAX_CHANNEL_UPTIME_KEY, 0).
 
 -spec set_max_channel_uptime(non_neg_integer()) -> 'ok'.
 set_max_channel_uptime(MaxAge) ->
@@ -831,9 +831,9 @@ set_max_channel_uptime(MaxAge) ->
 
 -spec set_max_channel_uptime(non_neg_integer(), boolean()) -> 'ok'.
 set_max_channel_uptime(MaxAge, 'true') ->
-    ecallmgr_config:set_default(?MAX_CHANNEL_UPTIME_KEY, kz_term:to_integer(MaxAge));
+    kapps_config:set_default(?APP_NAME, ?MAX_CHANNEL_UPTIME_KEY, kz_term:to_integer(MaxAge));
 set_max_channel_uptime(MaxAge, 'false') ->
-    ecallmgr_config:set(?MAX_CHANNEL_UPTIME_KEY, kz_term:to_integer(MaxAge)).
+    kapps_config:set(?APP_NAME, ?MAX_CHANNEL_UPTIME_KEY, kz_term:to_integer(MaxAge)).
 
 -spec maybe_cleanup_old_channels() -> 'ok'.
 maybe_cleanup_old_channels() ->

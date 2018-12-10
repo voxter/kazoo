@@ -102,9 +102,6 @@
 %%------------------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
-    _ = kz_datamgr:db_create(?KZ_ACDC_DB),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_ACDC_DB, 'crossbar', <<"views/acdc.json">>),
-
     _ = kapi_acdc_agent:declare_exchanges(),
     _ = kapi_acdc_stats:declare_exchanges(),
 
@@ -412,7 +409,7 @@ is_valid_endpoint_type(Context, CallMeJObj) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc If the HTTP verib is PUT, execute the actual action, usually a db save.
+%% @doc If the HTTP verb is PUT, execute the actual action, usually a db save.
 %% @end
 %%------------------------------------------------------------------------------
 
@@ -453,11 +450,11 @@ default_eavesdrop_req(Context) ->
 
 -spec eavesdrop_req(cb_context:context(), kz_term:proplist()) -> cb_context:context().
 eavesdrop_req(Context, Prop) ->
-    case kapps_util:amqp_pool_request(props:filter_undefined(Prop)
-                                     ,fun kapi_resource:publish_eavesdrop_req/1
-                                     ,fun kapi_resource:eavesdrop_resp_v/1
-                                     ,2 * ?MILLISECONDS_IN_SECOND
-                                     )
+    case kz_amqp_worker:call(props:filter_undefined(Prop)
+                            ,fun kapi_resource:publish_eavesdrop_req/1
+                            ,fun kapi_resource:eavesdrop_resp_v/1
+                            ,2 * ?MILLISECONDS_IN_SECOND
+                            )
     of
         {'ok', Resp} -> crossbar_util:response(filter_response_fields(Resp), Context);
         {'error', 'timeout'} ->
@@ -482,7 +479,7 @@ filter_response_fields(JObj) ->
                      ).
 
 %%------------------------------------------------------------------------------
-%% @doc If the HTTP verib is POST, execute the actual action, usually a db save
+%% @doc If the HTTP verb is POST, execute the actual action, usually a db save
 %% (after a merge perhaps).
 %% @end
 %%------------------------------------------------------------------------------
@@ -505,7 +502,7 @@ post(Context, Id, ?ROSTER_PATH_TOKEN) ->
 patch(Context, Id) ->
     post(Context, Id).
 %%------------------------------------------------------------------------------
-%% @doc If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
 %% @end
 %%------------------------------------------------------------------------------
 
@@ -710,7 +707,7 @@ fetch_stats_summary(Context) ->
             ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case kapps_util:amqp_pool_request(Req
+    case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_call_summary_req/1
                                      ,fun kapi_acdc_stats:call_summary_resp_v/1
                                      )
@@ -798,10 +795,10 @@ fetch_ranged_queue_stats(Context, From, To, 'false') ->
 
 -spec fetch_from_amqp(cb_context:context(), kz_term:proplist()) -> cb_context:context().
 fetch_from_amqp(Context, Req) ->
-    case kapps_util:amqp_pool_request(Req
-                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
-                                     ,fun kapi_acdc_stats:current_calls_resp_v/1
-                                     )
+    case kz_amqp_worker:call(Req
+                            ,fun kapi_acdc_stats:publish_current_calls_req/1
+                            ,fun kapi_acdc_stats:current_calls_resp_v/1
+                            )
     of
         {'error', _E} ->
             lager:debug("failed to recv resp from AMQP: ~p", [_E]),
@@ -823,7 +820,7 @@ summary(Context) ->
                           ).
 
 %%------------------------------------------------------------------------------
-%% @doc Normalizes the resuts of a view
+%% @doc Normalizes the results of a view
 %% @end
 %%------------------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
@@ -845,7 +842,7 @@ list_members(Context, Id) ->
           ,{<<"Status">>, <<"waiting">>}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kapps_util:amqp_pool_request(Req
+    case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_current_calls_req/1
                                      ,fun kapi_acdc_stats:current_calls_resp_v/1
                                      )
@@ -959,7 +956,7 @@ publish_member_callback(Context, QueueId, Call, CallbackNumber) ->
              ,{<<"Member-Priority">>, cb_context:req_value(Context, <<"priority">>)}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_queue:publish_member_call/1).
+    kz_amqp_worker:cast(Prop, fun kapi_acdc_queue:publish_member_call/1).
 
 %%------------------------------------------------------------------------------
 %% @doc Creates an entry in the acdc db of the account's participation in acdc

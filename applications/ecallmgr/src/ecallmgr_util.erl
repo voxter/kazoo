@@ -57,9 +57,7 @@
 -include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo_sip/include/kzsip_uri.hrl").
 
--define(HTTP_GET_PREFIX, "http_cache://").
-
--define(FS_MULTI_VAR_SEP, ecallmgr_config:get_ne_binary(<<"multivar_separator">>, <<"~">>)).
+-define(FS_MULTI_VAR_SEP, kapps_config:get_ne_binary(?APP_NAME, <<"multivar_separator">>, <<"~">>)).
 -define(FS_MULTI_VAR_SEP_PREFIX, "^^").
 
 -type send_cmd_ret() :: fs_sendmsg_ret() | fs_api_ret().
@@ -135,7 +133,7 @@ send_cmd(Node, UUID, "conference", Args) ->
     lager:debug("starting conference on ~s: ~s", [Node, Args1]),
     freeswitch:api(Node, 'uuid_transfer', kz_term:to_list(Args1));
 send_cmd(Node, _UUID, "transfer", Args) ->
-    lager:debug("transfering on ~s: ~s", [Node, Args]),
+    lager:debug("transferring on ~s: ~s", [Node, Args]),
     freeswitch:api(Node, 'uuid_transfer', kz_term:to_list(Args));
 send_cmd(Node, _UUID, "uuid_" ++ _ = API, Args) ->
     lager:debug("using api for ~s command ~s: ~s", [API, Node, Args]),
@@ -321,7 +319,7 @@ get_orig_port(Prop) ->
 
 -spec get_sip_interface_from_db(kz_term:ne_binaries()) -> kz_term:ne_binary().
 get_sip_interface_from_db([FsPath]) ->
-    NetworkMap = ecallmgr_config:get_json(<<"network_map">>, kz_json:new()),
+    NetworkMap = kapps_config:get_json(?APP_NAME, <<"network_map">>, kz_json:new()),
     case map_fs_path_to_sip_profile(FsPath, NetworkMap) of
         'undefined' ->
             lager:debug("unable to find network map for ~s, using default interface '~s'"
@@ -388,15 +386,12 @@ channel_var_sort({A, _}, {B, _}) -> A =< B.
 
 -spec custom_channel_vars_fold({kz_term:ne_binary(), kz_term:ne_binary()}, kz_term:proplist()) -> kz_term:proplist().
 custom_channel_vars_fold({?GET_CCV(Key), V}, Acc) ->
-    [{Key, V} | Acc];
+    props:set_value(Key, V, Acc);
 custom_channel_vars_fold({?CCV(Key), V}, Acc) ->
-    [{Key, V} | Acc];
+    props:set_value(Key, V, Acc);
 custom_channel_vars_fold({?GET_CCV_HEADER(Key), V}, Acc) ->
-    case props:is_defined(Key, Acc) of
-        'true' -> Acc;
-        'false' -> [{Key, V} | Acc]
-    end;
-custom_channel_vars_fold(_, Acc) -> Acc.
+    props:insert_value(Key, V, Acc);
+custom_channel_vars_fold(_KV, Acc) -> Acc.
 
 -spec custom_application_vars(kzd_freeswitch:data()) -> kz_term:proplist().
 custom_application_vars(Props) ->
@@ -416,15 +411,12 @@ application_var_sort({A, _}, {B, _}) -> A =< B.
 
 -spec custom_application_vars_fold({kz_term:ne_binary(), kz_term:ne_binary()}, kz_term:proplist()) -> kz_term:proplist().
 custom_application_vars_fold({?GET_CAV(Key), V}, Acc) ->
-    [{Key, V} | Acc];
+    props:set_value(Key, V, Acc);
 custom_application_vars_fold({?CAV(Key), V}, Acc) ->
-    [{Key, V} | Acc];
+    props:set_value(Key, V, Acc);
 custom_application_vars_fold({?GET_CAV_HEADER(Key), V}, Acc) ->
-    case props:is_defined(Key, Acc) of
-        'true' -> Acc;
-        'false' -> [{Key, V} | Acc]
-    end;
-custom_application_vars_fold(_, Acc) -> Acc.
+    props:insert_value(Key, V, Acc);
+custom_application_vars_fold(_KV, Acc) -> Acc.
 
 -spec application_var_map({kz_term:ne_binary(), kz_term:ne_binary()}) -> {kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()}.
 application_var_map({Key, <<"ARRAY::", Serialized/binary>>}) ->
@@ -495,13 +487,13 @@ unserialize_fs_prop(KV) -> KV.
 varstr_to_proplist(VarStr) ->
     [to_kv(X, "=") || X <- string:tokens(kz_term:to_list(VarStr), ",")].
 
--spec get_setting(kz_json:path()) -> {'ok', any()}.
-get_setting(<<"default_ringback">>) ->
-    {'ok', ecallmgr_config:get(<<"default_ringback">>, <<"%(2000,4000,440,480)">>)};
-get_setting(Setting) -> {'ok', ecallmgr_config:get(Setting)}.
+-spec get_setting(kz_json:get_key()) -> {'ok', any()}.
+get_setting(<<"default_ringback">>=Key) ->
+    {'ok', kapps_config:get(?APP_NAME, Key, <<"%(2000,4000,440,480)">>)};
+get_setting(Setting) -> {'ok', kapps_config:get(?APP_NAME, Setting)}.
 
 -spec get_setting(kz_json:path(), Default) -> {'ok', Default | any()}.
-get_setting(Setting, Default) -> {'ok', ecallmgr_config:get(Setting, Default)}.
+get_setting(Setting, Default) -> {'ok', kapps_config:get(?APP_NAME, Setting, Default)}.
 
 -spec is_node_up(atom()) -> boolean().
 is_node_up(Node) -> ecallmgr_fs_nodes:is_node_up(Node).
@@ -556,6 +548,8 @@ fs_args_to_binary(Args, Sep, Prefix) ->
 
 -spec process_fs_kv(atom(), kz_term:ne_binary(), kz_term:proplist(), atom()) -> [binary()].
 process_fs_kv(_, _, [], _) -> [];
+process_fs_kv(Node, UUID, [{_K, 'undefined'} | KVs], Action) ->
+    process_fs_kv(Node, UUID, KVs, Action);
 process_fs_kv(Node, UUID, [{K, V}|KVs], Action) ->
     X1 = format_fs_kv(K, V, UUID, Action),
     lists:foldl(fun(Prop, Acc) ->
@@ -680,7 +674,7 @@ maybe_sanitize_fs_value(_, Val) -> Val.
 %% @doc takes endpoints (/sofia/foo/bar), and optionally a caller id name/num
 %% and create the dial string ([origination_caller_id_name=Name
 %%                              ,origination_caller_id_number=Num]Endpoint)
-%% joined by the optional seperator.  Saves time by not spawning
+%% joined by the optional separator.  Saves time by not spawning
 %% endpoints with the invite format of "route" (about 100ms per endpoint)
 %% @end
 %%------------------------------------------------------------------------------
@@ -695,13 +689,12 @@ build_bridge_string(Endpoints) ->
     build_bridge_string(Endpoints, ?SEPARATOR_SINGLE).
 
 -spec build_bridge_string(kz_json:objects(), kz_term:ne_binary()) -> kz_term:ne_binary().
-build_bridge_string(Endpoints, Seperator) ->
-    %% De-dup the bridge strings by matching those with the same
+build_bridge_string(Endpoints, Separator) ->
+    %% De-dupe the bridge strings by matching those with the same
     %%  Invite-Format, To-IP, To-User, To-realm, To-DID, and Route
     BridgeStrings = build_bridge_channels(Endpoints),
-    %% NOTE: dont use binary_join here as it will crash on an empty list...
-    kz_binary:join(lists:reverse(BridgeStrings), Seperator).
-
+    %% NOTE: don't use binary_join here as it will crash on an empty list...
+    kz_binary:join(lists:reverse(BridgeStrings), Separator).
 
 -spec endpoint_jobjs_to_records(kz_json:objects()) -> bridge_endpoints().
 endpoint_jobjs_to_records(Endpoints) ->
@@ -846,7 +839,7 @@ build_bridge_channels([#bridge_endpoint{invite_format = <<"loopback">>}=Endpoint
         {'error', _} -> build_bridge_channels(Endpoints, Channels);
         {'ok', Channel} -> build_bridge_channels(Endpoints, [Channel|Channels])
     end;
-%% If this does not have an explicted sip route and we have no ip address, lookup the registration
+%% If this does not have an explicit sip route and we have no ip address, lookup the registration
 build_bridge_channels([#bridge_endpoint{ip_address='undefined'}=Endpoint|Endpoints], Channels) ->
     S = self(),
     Pid = kz_util:spawn(fun() -> S ! {self(), build_channel(Endpoint)} end),
@@ -1194,9 +1187,9 @@ media_path(MediaName, Type, UUID, JObj) ->
 
 -spec fax_filename(kz_term:ne_binary()) -> file:filename_all().
 fax_filename(UUID) ->
-    Ext = ecallmgr_config:get_ne_binary(<<"default_fax_extension">>, <<".tiff">>),
-    filename:join([ecallmgr_config:get_ne_binary(<<"fax_file_path">>, <<"/tmp/">>)
-                  ,<<(amqp_util:encode(UUID))/binary, Ext/binary>>
+    Ext = kapps_config:get_ne_binary(?APP_NAME, <<"default_fax_extension">>, <<".tiff">>),
+    filename:join([kapps_config:get_ne_binary(?APP_NAME, <<"fax_file_path">>, <<"/tmp/">>)
+                  ,<<(kz_amqp_util:encode(UUID))/binary, Ext/binary>>
                   ]).
 
 -spec recording_filename(kz_term:ne_binary()) -> file:filename_all().
@@ -1206,7 +1199,7 @@ recording_filename(MediaName) ->
     RootName = filename:basename(MediaName, Ext),
     Directory = recording_directory(MediaName),
     RecordingName = filename:join([Directory
-                                  ,<<(amqp_util:encode(RootName))/binary, Ext/binary>>
+                                  ,<<(kz_amqp_util:encode(RootName))/binary, Ext/binary>>
                                   ]),
     _ = kz_cache:store_local(?ECALLMGR_UTIL_CACHE
                             ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
@@ -1216,19 +1209,19 @@ recording_filename(MediaName) ->
 
 -spec recording_directory(kz_term:ne_binary()) -> kz_term:ne_binary().
 recording_directory(<<"/", _/binary>> = FullPath) -> filename:dirname(FullPath);
-recording_directory(_RelativePath) -> ecallmgr_config:get_ne_binary(<<"recording_file_path">>, <<"/tmp/">>).
+recording_directory(_RelativePath) -> kapps_config:get_ne_binary(?APP_NAME, <<"recording_file_path">>, <<"/tmp/">>).
 
 -spec recording_extension(kz_term:ne_binary()) -> kz_term:ne_binary().
 recording_extension(MediaName) ->
     case filename:extension(MediaName) of
         Empty when Empty =:= <<>>;
                    Empty =:= [] ->
-            ecallmgr_config:get_ne_binary(<<"default_recording_extension">>, <<".mp3">>);
+            kapps_config:get_ne_binary(?APP_NAME, <<"default_recording_extension">>, <<".mp3">>);
         <<".mp3">> = MP3 -> MP3;
         <<".mp4">> = MP4 -> MP4;
         <<".wav">> = WAV -> WAV;
         _ ->
-            ecallmgr_config:get_ne_binary(<<"default_recording_extension">>, <<".mp3">>)
+            kapps_config:get_ne_binary(?APP_NAME, <<"default_recording_extension">>, <<".mp3">>)
     end.
 
 %%------------------------------------------------------------------------------
@@ -1241,7 +1234,7 @@ get_fs_playback(URI) -> maybe_playback_via_vlc(URI).
 
 -spec maybe_playback_via_vlc(kz_term:ne_binary()) -> kz_term:ne_binary().
 maybe_playback_via_vlc(URI) ->
-    case ecallmgr_config:is_true(<<"use_vlc">>, 'false') of
+    case kapps_config:is_true(?APP_NAME, <<"use_vlc">>, 'false') of
         'false' -> maybe_playback_via_shout(URI);
         'true' ->
             lager:debug("media is streamed via VLC, prepending ~s", [URI]),
@@ -1251,7 +1244,7 @@ maybe_playback_via_vlc(URI) ->
 -spec maybe_playback_via_shout(kz_term:ne_binary()) -> kz_term:ne_binary().
 maybe_playback_via_shout(URI) ->
     case filename:extension(URI) =:= <<".mp3">>
-        andalso ecallmgr_config:is_true(<<"use_shout">>, 'false')
+        andalso kapps_config:is_true(?APP_NAME, <<"use_shout">>, 'false')
     of
         'false' -> maybe_playback_via_http_cache(URI);
         'true' ->
@@ -1264,7 +1257,7 @@ maybe_playback_via_http_cache(<<?HTTP_GET_PREFIX, _/binary>> = URI) ->
     lager:debug("media is streamed via http_cache, using ~s", [URI]),
     URI;
 maybe_playback_via_http_cache(URI) ->
-    case ecallmgr_config:is_true(<<"use_http_cache">>, 'true') of
+    case kapps_config:is_true(?APP_NAME, <<"use_http_cache">>, 'true') of
         'false' ->
             lager:debug("using straight URI ~s", [URI]),
             URI;

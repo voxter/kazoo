@@ -94,7 +94,7 @@
         ,publish_originate_execute/2, publish_originate_execute/3
         ]).
 
--include("amqp_util.hrl").
+-include("kz_amqp_util.hrl").
 -include("kapi_dialplan.hrl").
 
 -spec optional_bridge_req_headers() -> kz_term:ne_binaries().
@@ -126,9 +126,9 @@ v(JObj) ->
 v(Prop, DPApp) ->
     try
         VFun = kz_term:to_atom(<<DPApp/binary, "_v">>),
-        case lists:keyfind(VFun, 1, ?MODULE:module_info('exports')) of
+        case kz_module:is_exported(?MODULE, VFun, 1) of
             'false' -> throw({'invalid_dialplan_object', Prop});
-            {_, 1} -> ?MODULE:VFun(Prop)
+            'true' -> ?MODULE:VFun(Prop)
         end
     catch
         _:R ->
@@ -149,7 +149,7 @@ bridge(Prop) when is_list(Prop) ->
            || EP <- props:get_value(<<"Endpoints">>, Prop, []),
               bridge_endpoint_v(EP)
           ],
-    Prop1 = [ {<<"Endpoints">>, EPs} | props:delete(<<"Endpoints">>, Prop)],
+    Prop1 = props:set_value(<<"Endpoints">>, EPs, Prop),
     case bridge_v(Prop1) of
         'true' -> kz_api:build_message(Prop1, ?BRIDGE_REQ_HEADERS, ?OPTIONAL_BRIDGE_REQ_HEADERS);
         'false' -> {'error', "Proplist failed validation for bridge_req"}
@@ -1106,7 +1106,7 @@ publish_command(CtrlQ, JObj) ->
 -spec publish_command(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_command(CtrlQ, Prop, DPApp) ->
     {'ok', Payload} = build_command(Prop, DPApp),
-    amqp_util:callctl_publish(CtrlQ, Payload, ?DEFAULT_CONTENT_TYPE).
+    kz_amqp_util:callctl_publish(CtrlQ, Payload, ?DEFAULT_CONTENT_TYPE).
 
 -spec build_command(kz_term:api_terms()) -> {'ok', kz_term:api_terms()}.
 build_command(Prop) when is_list(Prop) ->
@@ -1118,10 +1118,10 @@ build_command(JObj) ->
 build_command(Prop, DPApp) when is_list(Prop) ->
     try kz_term:to_atom(<<DPApp/binary>>) of
         BuildMsgFun ->
-            case lists:keyfind(BuildMsgFun, 1, ?MODULE:module_info('exports')) of
+            case kz_module:is_exported(?MODULE, BuildMsgFun, 1) of
                 'false' ->
                     {'error', 'invalid_dialplan_object'};
-                {_, 1} ->
+                'true' ->
                     ?MODULE:BuildMsgFun(kz_api:set_missing_values(Prop, ?DEFAULT_VALUES))
             end
     catch
@@ -1142,7 +1142,7 @@ publish_action(Queue, JSON) ->
 
 -spec publish_action(kz_term:ne_binary(), iodata(), kz_term:ne_binary()) -> 'ok'.
 publish_action(Queue, Payload, ContentType) ->
-    amqp_util:callctl_publish(Queue, Payload, ContentType).
+    kz_amqp_util:callctl_publish(Queue, Payload, ContentType).
 
 -spec publish_error(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_error(CallID, JObj) ->
@@ -1153,7 +1153,7 @@ publish_error(CallID, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, [{<<"Event-Name">>, <<"dialplan">>}
                                                        | ?ERROR_RESP_VALUES
                                                       ], fun error/1),
-    amqp_util:callevt_publish(kapi_call:event_routing_key(<<"dialplan">>, CallID), Payload, ContentType).
+    kz_amqp_util:callevt_publish(kapi_call:event_routing_key(<<"dialplan">>, CallID), Payload, ContentType).
 
 -spec publish_originate_ready(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_originate_ready(ServerId, JObj) ->
@@ -1162,7 +1162,7 @@ publish_originate_ready(ServerId, JObj) ->
 -spec publish_originate_ready(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_originate_ready(ServerId, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_READY_VALUES, fun originate_ready/1),
-    amqp_util:targeted_publish(ServerId, Payload, ContentType).
+    kz_amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_originate_execute(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
 publish_originate_execute(ServerId, JObj) ->
@@ -1171,7 +1171,7 @@ publish_originate_execute(ServerId, JObj) ->
 -spec publish_originate_execute(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_originate_execute(ServerId, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_EXECUTE_VALUES, fun originate_execute/1),
-    amqp_util:targeted_publish(ServerId, Payload, ContentType).
+    kz_amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec dial_method_single() -> kz_term:ne_binary().
 dial_method_single() -> ?DIAL_METHOD_SINGLE.
@@ -1181,11 +1181,11 @@ dial_method_simultaneous() -> ?DIAL_METHOD_SIMUL.
 
 -spec bind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 bind_q(Queue, _Props) ->
-    amqp_util:bind_q_to_callctl(Queue).
+    kz_amqp_util:bind_q_to_callctl(Queue).
 
 -spec unbind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 unbind_q(Queue, _Props) ->
-    amqp_util:unbind_q_from_callctl(Queue).
+    kz_amqp_util:unbind_q_from_callctl(Queue).
 
 %%------------------------------------------------------------------------------
 %% @doc Declare the exchanges used by this API.
@@ -1193,7 +1193,7 @@ unbind_q(Queue, _Props) ->
 %%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    amqp_util:callctl_exchange().
+    kz_amqp_util:callctl_exchange().
 
 -spec terminators(kz_term:api_binary()) -> kz_term:ne_binaries().
 terminators(Bin) when is_binary(Bin) ->

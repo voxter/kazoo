@@ -93,7 +93,7 @@ handle_nomatch_with_empty_referred_to(Data, Call, PresenceType, ParkedCalls, Slo
             direct_park(SlotNumber, Slot, ParkedCalls, Data, Call);
         <<"park">> ->
             lager:info("action is to park the call"),
-            Slot = create_slot(<<>>, PresenceType, SlotNumber, Data, 'true', Call),
+            Slot = create_slot('undefined', PresenceType, SlotNumber, Data, 'true', Call),
             park_call(SlotNumber, Slot, ParkedCalls, 'undefined', Data, Call);
         <<"retrieve">> ->
             lager:info("action is to retrieve a parked call"),
@@ -276,32 +276,32 @@ wait_for_hangup(Call) ->
 %% @doc Builds the json object representing the call in the parking slot
 %% @end
 %%------------------------------------------------------------------------------
--spec create_slot(kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), boolean(), kapps_call:call()) -> kz_json:object().
+-spec create_slot(kz_term:api_ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), boolean(), kapps_call:call()) -> kz_json:object().
 create_slot(ParkerCallId, PresenceType, SlotNumber, Data, Attended, Call) ->
     CallId = cf_exe:callid(Call),
     RingbackId = maybe_get_ringback_id(Call),
     SlotCallId = kz_binary:rand_hex(16),
     User = slot_presence_id(SlotNumber, Data, Call),
     Realm = kapps_call:account_realm(Call),
-    kz_json:from_list(
-      [{<<"Call-ID">>, CallId}
-      ,{<<"Attended">>, Attended}
-      ,{<<"Slot-Call-ID">>, SlotCallId}
-      ,{<<"Switch-URI">>, kapps_call:switch_uri(Call)}
-      ,{<<"From-Tag">>, kapps_call:from_tag(Call)}
-      ,{<<"To-Tag">>, kapps_call:to_tag(Call)}
-      ,{<<"Parker-Call-ID">>, ParkerCallId}
-      ,{<<"Ringback-ID">>, RingbackId}
-      ,{<<"Presence-User">>, User}
-      ,{<<"Presence-Realm">>, Realm}
-      ,{<<"Presence-ID">>, <<User/binary, "@", Realm/binary>>}
-      ,{<<"Node">>, kapps_call:switch_nodename(Call)}
-      ,{<<"CID-Number">>, kapps_call:caller_id_number(Call)}
-      ,{<<"CID-Name">>, kapps_call:caller_id_name(Call)}
-      ,{<<"CID-URI">>, kapps_call:from(Call)}
-      ,{<<"Hold-Media">>, kz_attributes:moh_attributes(RingbackId, <<"media_id">>, Call)}
-      ,{?PRESENCE_TYPE_KEY, PresenceType}
-      ]).
+    kz_json:from_list([{<<"Call-ID">>, CallId}
+                      ,{<<"Attended">>, Attended}
+                      ,{<<"Slot-Call-ID">>, SlotCallId}
+                      ,{<<"Switch-URI">>, kapps_call:switch_uri(Call)}
+                      ,{<<"From-Tag">>, kapps_call:from_tag(Call)}
+                      ,{<<"To-Tag">>, kapps_call:to_tag(Call)}
+                      ,{<<"Parker-Call-ID">>, ParkerCallId}
+                      ,{<<"Ringback-ID">>, RingbackId}
+                      ,{<<"Presence-User">>, User}
+                      ,{<<"Presence-Realm">>, Realm}
+                      ,{<<"Presence-ID">>, <<User/binary, "@", Realm/binary>>}
+                      ,{<<"Node">>, kapps_call:switch_nodename(Call)}
+                      ,{<<"CID-Number">>, kapps_call:caller_id_number(Call)}
+                      ,{<<"CID-Name">>, kapps_call:caller_id_name(Call)}
+                      ,{<<"CID-URI">>, kapps_call:from(Call)}
+                      ,{<<"Hold-Media">>, kz_attributes:moh_attributes(RingbackId, <<"media_id">>, Call)}
+                      ,{?PRESENCE_TYPE_KEY, PresenceType}
+                      ]
+                     ).
 
 -spec slot_presence_id(kz_term:ne_binary(), kz_json:object(), kapps_call:call()) -> kz_term:ne_binary().
 slot_presence_id(SlotNumber, Data, Call) ->
@@ -424,7 +424,7 @@ maybe_add_slot_doc_rev(JObj, AccountDb) ->
 %%------------------------------------------------------------------------------
 %% @doc After an attended transfer we need to find the callid that we stored
 %% because it was the "C-Leg" of a transfer and now we have the
-%% actuall "A-Leg".  Find the old callid and update it with the new one.
+%% actual "A-Leg".  Find the old callid and update it with the new one.
 %% @end
 %%------------------------------------------------------------------------------
 -spec update_call_id(kz_term:ne_binary(), kapps_call:call()) ->
@@ -929,12 +929,18 @@ publish_event(Call, SlotNumber, Event) ->
           ,{<<"Callee-ID-Number">>, kapps_call:callee_id_number(Call)}
           ,{<<"Caller-ID-Name">>, kapps_call:caller_id_name(Call)}
           ,{<<"Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
-          ,{<<"Custom-Channel-Vars">>, kapps_call:custom_channel_vars(Call)}
+          ,{<<"Custom-Channel-Vars">>, custom_channel_vars(Call)}
           ,{<<"Event-Name">>, Event}
           ,{<<"Parking-Slot">>, kz_term:to_binary(SlotNumber)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     kapi_call:publish_event(Cmd).
+
+-spec custom_channel_vars(kapps_call:call()) -> kz_json:object().
+custom_channel_vars(Call) ->
+    JObj = kapps_call:custom_channel_vars(Call),
+    Realm = kapps_call:account_realm(Call),
+    kz_json:set_value(<<"Realm">>, Realm, JObj).
 
 -spec get_slot(kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:object()} | {'error', any()}.
 get_slot(SlotNumber, AccountDb) ->
@@ -960,14 +966,14 @@ maybe_empty_slot(JObj) ->
 error_occupied_slot(Call) ->
     lager:info("selected slot is occupied"),
     %% Update screen with error that the slot is occupied
-    case kapps_call_command:b_answer(Call) of
-        {'error', 'timeout'} ->
-            lager:info("timed out waiting for the answer to complete");
-        {'error', 'channel_hungup'} ->
-            lager:info("channel hungup while answering");
-        _ ->
-            lager:debug("channel answered, prompting of the slot being in use"),
-            %% playback message that caller will have to try a different slot
-            kapps_call_command:b_prompt(<<"park-already_in_use">>, Call)
-    end,
+    _ = case kapps_call_command:b_answer(Call) of
+            {'error', 'timeout'} ->
+                lager:info("timed out waiting for the answer to complete");
+            {'error', 'channel_hungup'} ->
+                lager:info("channel hungup while answering");
+            _ ->
+                lager:debug("channel answered, prompting of the slot being in use"),
+                %% playback message that caller will have to try a different slot
+                kapps_call_command:b_prompt(<<"park-already_in_use">>, Call)
+        end,
     cf_exe:stop(Call).

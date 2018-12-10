@@ -1,7 +1,8 @@
 ROOT = $(shell cd "$(dirname '.')" && pwd -P)
 RELX = $(ROOT)/deps/relx
 ELVIS = $(ROOT)/deps/elvis
-FMT = $(ROOT)/make/erlang-formatter-master/fmt.sh
+FMT = $(ROOT)/make/erlang-formatter/fmt.sh
+TAGS = $(ROOT)/TAGS
 ERLANG_MK_COMMIT = d30dda39b08e6ed9e12b44533889eaf90aba86de
 
 # You can override this when calling make, e.g. make JOBS=1
@@ -10,7 +11,16 @@ JOBS ?= 1
 
 KAZOODIRS = core/Makefile applications/Makefile
 
-.PHONY: $(KAZOODIRS) deps core apps xref xref_release dialyze dialyze-it dialyze-apps dialyze-core dialyze-kazoo clean clean-test clean-release build-release build-ci-release tar-release release read-release-cookie elvis install ci diff fmt bump-copyright apis validate-swagger sdks coverage-report fs-headers docs validate-schemas circle circle-pre circle-fmt circle-codechecks circle-build circle-docs circle-schemas circle-dialyze circle-release circle-unstaged fixture_shell code_checks
+.PHONY: $(KAZOODIRS) kazoo deps core apps \
+	build-release build-ci-release tar-release release read-release-cookie \
+	bump-copyright apis validate-swagger sdks coverage-report fs-headers docs validate-schemas \
+	circle circle-pre circle-fmt circle-codechecks circle-build circle-docs circle-schemas circle-dialyze circle-release circle-unstaged \
+	clean clean-test clean-release \
+	dialyze dialyze-it dialyze-apps dialyze-core dialyze-kazoo dialyze-hard dialyze-changed \
+	elvis install ci diff \
+	fixture_shell code_checks \
+	fmt clean-fmt \
+	xref xref_release
 
 all: compile
 
@@ -58,9 +68,10 @@ check: compile-test eunit clean-kazoo kazoo
 clean-deps:
 	$(if $(wildcard deps/), $(MAKE) -C deps/ clean)
 	$(if $(wildcard deps/), rm -r deps/)
+	$(if $(wildcard .erlang.mk/), rm -r .erlang.mk/)
 
 .erlang.mk:
-	wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2017.07.06/erlang.mk' -O $(ROOT)/erlang.mk
+	wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ROOT)/erlang.mk
 	@ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f erlang.mk erlang-mk
 
 deps: deps/Makefile
@@ -76,7 +87,15 @@ core:
 apps: core
 	@$(MAKE) -j$(JOBS) -C applications/ all
 
-kazoo: apps
+kazoo: apps $(TAGS)
+
+tags: $(TAGS)
+
+$(TAGS):
+	ERL_LIBS=deps:core:applications ./scripts/tags.escript $(TAGS)
+
+clean-tags:
+	$(if $(wildcard $(TAGS)), rm $(TAGS))
 
 $(RELX):
 	wget 'https://github.com/erlware/relx/releases/download/v3.23.0/relx' -O $@
@@ -101,7 +120,7 @@ release: ACT ?= console # start | attach | stop | console | foreground
 release: REL ?= kazoo_apps # kazoo_apps | ecallmgr | …
 release: COOKIE ?= change_me
 release:
-	@NODE_NAME="$(REL)" COOKIE="$(COOKIE)" $(ROOT)/scripts/dev/kazoo.sh $(ACT) "$$@"
+	NODE_NAME="$(REL)" COOKIE="$(COOKIE)" $(ROOT)/scripts/dev/kazoo.sh $(ACT) "$$@"
 
 install: compile build-release
 	cp -a _rel/kazoo /opt
@@ -122,16 +141,20 @@ DIALYZER += --statistics --no_native
 PLT ?= .kazoo.plt
 
 OTP_APPS ?= erts kernel stdlib crypto public_key ssl asn1 inets xmerl
-$(PLT): DEPS_SRCS  ?= $(shell find $(ROOT)/deps -name src )
+EXCLUDE_DEPS = $(ROOT)/deps/erlang_localtime/ebin
+$(PLT): DEPS_EBIN ?= $(filter-out $(EXCLUDE_DEPS),$(wildcard $(ROOT)/deps/*/ebin))
 # $(PLT): CORE_EBINS ?= $(shell find $(ROOT)/core -name ebin)
 $(PLT):
-	@$(DIALYZER) --build_plt --output_plt $(PLT) \
-	    --apps $(OTP_APPS) \
-	    -r $(DEPS_SRCS)
+	@-$(DIALYZER) --build_plt --output_plt $(PLT) \
+	     --apps $(OTP_APPS) \
+	     -r $(DEPS_EBIN)
 	@for ebin in $(CORE_EBINS); do \
-	    $(DIALYZER) --add_to_plt --plt $(PLT) --output_plt $(PLT) -r $$ebin; \
-	done
+	     $(DIALYZER) --add_to_plt --plt $(PLT) --output_plt $(PLT) -r $$ebin; \
+	 done
 build-plt: $(PLT)
+
+clean-plt:
+	@rm -f $(PLT)
 
 dialyze-kazoo: TO_DIALYZE  = $(shell find $(ROOT)/applications $(ROOT)/core -name ebin)
 dialyze-kazoo: dialyze
@@ -142,11 +165,20 @@ dialyze-core: dialyze-it
 dialyze:       TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin)
 dialyze: dialyze-it
 
+dialyze-changed: TO_DIALYZE = $(CHANGED)
+dialyze-changed: dialyze-it-changed
+
+dialyze-hard: TO_DIALYZE = $(CHANGED)
+dialyze-hard: dialyze-it-hard
+
 dialyze-it: $(PLT)
-	@if [ -n "$(TO_DIALYZE)" ]; then \
-	export TO_DIALYZE="$(TO_DIALYZE)"; \
-	ERL_LIBS=deps:core:applications $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt; \
-	fi;
+	@ERL_LIBS=deps:core:applications $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
+
+dialyze-it-hard: $(PLT)
+	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --hard $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
+
+dialyze-it-changed: $(PLT)
+	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --bulk $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
 
 xref: TO_XREF ?= $(shell find $(ROOT)/applications $(ROOT)/core $(ROOT)/deps -name ebin)
 xref:
@@ -156,13 +188,11 @@ xref_release: TO_XREF = $(shell find $(ROOT)/_rel/kazoo/lib -name ebin)
 xref_release:
 	@$(ROOT)/scripts/check-xref.escript $(TO_XREF)
 
-
 sup_completion: sup_completion_file = $(ROOT)/sup.bash
-sup_completion: kazoo
+sup_completion:
 	@$(if $(wildcard $(sup_completion_file)), rm $(sup_completion_file))
 	@$(ROOT)/core/sup/priv/build-autocomplete.escript $(sup_completion_file) applications/ core/
 	@echo SUP Bash completion file written at $(sup_completion_file)
-
 
 $(ELVIS):
 	wget 'https://github.com/inaka/elvis/releases/download/0.2.12/elvis' -O $@
@@ -173,18 +203,26 @@ elvis: $(ELVIS)
 
 ci: clean compile xref build-plt diff sup_completion build-ci-release compile-test eunit elvis
 
-diff: export TO_DIALYZE = $(shell git diff --name-only 4.2... -- $(ROOT)/applications/ $(ROOT)/core/)
+diff: export TO_DIALYZE = $(shell git diff --name-only 4.3... -- $(ROOT)/applications/ $(ROOT)/core/)
 diff: dialyze-it
 
 bump-copyright:
 	@$(ROOT)/scripts/bump-copyright-year.sh $(shell find applications core -iname '*.erl' -or -iname '*.hrl')
 
+FMT_SHA = 237604a566879bda46d55d9e74e3e66daf1b557a
 $(FMT):
-	wget -qO - 'https://codeload.github.com/fenollp/erlang-formatter/tar.gz/master' | tar xz -C $(ROOT)/make/
+	wget -qO - 'https://codeload.github.com/fenollp/erlang-formatter/tar.gz/$(FMT_SHA)' | tar -vxz -C $(ROOT)/make/
+	mv $(ROOT)/make/erlang-formatter-$(FMT_SHA) $(ROOT)/make/erlang-formatter
 
-fmt: TO_FMT ?= $(shell git --no-pager diff --name-only HEAD origin/4.2 -- "*.erl" "*.hrl" "*.escript")
+fmt-all: $(FMT)
+	@$(FMT) $(shell find core applications scripts -name "*.erl" -or -name "*.hrl" -or -name "*.escript")
+
+fmt: TO_FMT ?= $(shell git --no-pager diff --name-only HEAD origin/4.3 -- "*.erl" "*.hrl" "*.escript")
 fmt: $(FMT)
 	@$(if $(TO_FMT), @$(FMT) $(TO_FMT))
+
+clean-fmt:
+	@$(if $(FMT), rm -rf $(shell dirname $(FMT)))
 
 app_applications:
 	ERL_LIBS=deps:core:applications $(ROOT)/scripts/apps_of_app.escript -a $(shell find applications -name *.app.src)
@@ -244,16 +282,16 @@ sdks:
 validate-schemas:
 	@$(ROOT)/scripts/validate-schemas.sh $(ROOT)/applications/crossbar/priv/couchdb/schemas
 
-CHANGED := $(shell git --no-pager diff --name-only HEAD origin/4.2 -- applications core scripts)
-CHANGED_SWAGGER := $(shell git --no-pager diff --name-only HEAD origin/4.2 -- applications/crossbar/priv/api/swagger.json)
+CHANGED := $(shell git --no-pager diff --name-only HEAD origin/4.3 -- applications core scripts)
+CHANGED_SWAGGER := $(shell git --no-pager diff --name-only HEAD origin/4.3 -- applications/crossbar/priv/api/swagger.json)
 PIP2 := $(shell { command -v pip || command -v pip2; } 2>/dev/null)
 
 circle-pre:
 ifneq ($(PIP2),)
 ## needs root access
 	@echo $(CHANGED)
-	@$(PIP2) install --upgrade pip
-	@$(PIP2) install PyYAML mkdocs pyembed-markdown jsonschema
+	@$(PIP2) install --user --upgrade pip
+	@$(PIP2) install --user PyYAML mkdocs pyembed-markdown jsonschema
 else
 	$(error "pip/pip2 is not available, please install python2-pip package")
 endif
@@ -268,14 +306,14 @@ circle-codechecks:
 	@./scripts/code_checks.bash $(CHANGED)
 	@$(MAKE) code_checks
 	@$(MAKE) app_applications
-	@./scripts/validate-js.sh $(CHANGED)
+	@./scripts/validate-js.sh $(find {core,applications}/*/priv/**/* -name *.json)
 
 circle-fmt:
 	@$(MAKE) fmt
 	@$(MAKE) elvis
 
 circle-build:
-	@$(MAKE) clean deps kazoo xref sup_completion
+	@$(MAKE) clean clean-deps deps kazoo xref sup_completion
 
 circle-schemas:
 	@$(MAKE) validate-schemas
@@ -300,3 +338,5 @@ circle-release:
 
 circle: circle-pre circle-fmt circle-build circle-codechecks circle-docs circle-schemas circle-dialyze circle-release
 	@$(if $(git status --porcelain | wc -l), $(MAKE) circle-unstaged)
+
+include make/splchk.mk

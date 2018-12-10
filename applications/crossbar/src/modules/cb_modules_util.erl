@@ -84,12 +84,7 @@ cavs_from_context(Context) ->
     QueryString = cb_context:query_string(Context),
     cavs_from_request(ReqData, QueryString).
 
--spec cavs_from_request(kz_term:api_object(), kz_term:api_object()) -> kz_term:proplist().
-cavs_from_request('undefined', 'undefined') -> [];
-cavs_from_request('undefined', QueryString) ->
-    kapps_call_util:filter_ccvs(QueryString);
-cavs_from_request(ReqData, 'undefined') ->
-    kapps_call_util:filter_ccvs(kz_json:get_json_value(<<"custom_application_vars">>, ReqData));
+-spec cavs_from_request(kz_json:object(), kz_json:object()) -> kz_term:proplist().
 cavs_from_request(ReqData, QueryString) ->
     CAVs = kz_json:get_json_value(<<"custom_application_vars">>, ReqData, kz_json:new()),
     kapps_call_util:filter_ccvs(kz_json:merge(CAVs, QueryString)).
@@ -166,7 +161,7 @@ token_cost(Context, Default) ->
 
 -spec token_cost(cb_context:context(), non_neg_integer(), kz_json:path()) -> non_neg_integer().
 token_cost(Context, Default, Suffix) when is_integer(Default), Default >= 0 ->
-    Costs = kapps_config:get_integer(?CONFIG_CAT, <<"token_costs">>, 1),
+    Costs = kapps_config:get(?CONFIG_CAT, <<"token_costs">>, 1),
     find_token_cost(Costs
                    ,Default
                    ,Suffix
@@ -481,7 +476,7 @@ used_mac_address_message(MacAddress, Context) ->
 used_mac_address_message(Prefix, JObj, Context) ->
     AccountId = kz_json:get_ne_binary_value(<<"account_id">>, JObj),
     AuthAccountId = cb_context:auth_account_id(Context),
-    case kz_util:is_in_account_hierarchy(AuthAccountId, AccountId, 'true') of
+    case kzd_accounts:is_in_account_hierarchy(AuthAccountId, AccountId, 'true') of
         'true' ->
             {'ok', Account} = kzd_accounts:fetch(AccountId),
             AccountName = kz_json:get_ne_binary_value(<<"name">>, Account),

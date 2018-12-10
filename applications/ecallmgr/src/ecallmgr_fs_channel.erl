@@ -480,7 +480,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%------------------------------------------------------------------------------
 -spec handle_channel_req_legacy(kz_term:ne_binary(), kz_term:ne_binary(), atom(), pid()) -> 'ok'.
 handle_channel_req_legacy(UUID, FetchId, Node, Pid) ->
-    kz_amqp_channel:consumer_pid(Pid),
+    _ = kz_amqp_channel:consumer_pid(Pid),
     case fetch_channel(UUID) of
         'undefined' -> channel_not_found(Node, FetchId);
         Channel ->
@@ -492,7 +492,7 @@ handle_channel_req_legacy(UUID, FetchId, Node, Pid) ->
 
 -spec handle_channel_req(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), atom(), pid()) -> 'ok'.
 handle_channel_req(UUID, FetchId, Props, Node, Pid) ->
-    kz_amqp_channel:consumer_pid(Pid),
+    _ = kz_amqp_channel:consumer_pid(Pid),
     ForUUID = props:get_value(<<"refer-for-channel-id">>, Props),
     {'ok', ForChannel} = fetch(ForUUID, 'proplist'),
     case fetch_channel(UUID) of
@@ -559,23 +559,26 @@ fetch_channel(UUID) ->
         {'ok', Channel} -> Channel
     end.
 
--spec fetch_remote(kz_term:ne_binary()) -> kz_term:api_object().
+-spec fetch_remote(kz_term:ne_binary()) -> kz_term:proplist() | 'undefined'.
 fetch_remote(UUID) ->
-    Command = [{<<"Call-ID">>, UUID}
-              ,{<<"Active-Only">>, <<"true">>}
-               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-              ],
-    case kz_amqp_worker:call(Command
-                            ,fun(C) -> kapi_call:publish_channel_status_req(UUID, C) end
-                            ,fun kapi_call:channel_status_resp_v/1
-                            )
-    of
+    case get_active_channel_status(UUID) of
         {'error', _} -> 'undefined';
         {'ok', JObj} ->
             Props = kz_json:recursive_to_proplist(kz_json:normalize(JObj)),
             CCVs = props:get_value(<<"custom_channel_vars">>, Props, []),
             Props ++ CCVs
     end.
+
+-spec get_active_channel_status(kz_term:ne_binary()) -> kz_amqp_worker:request_return().
+get_active_channel_status(UUID) ->
+    Command = [{<<"Call-ID">>, UUID}
+              ,{<<"Active-Only">>, <<"true">>}
+               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ],
+    kz_amqp_worker:call(Command
+                       ,fun kapi_call:publish_channel_status_req/1
+                       ,fun kapi_call:channel_status_resp_v/1
+                       ).
 
 -spec channel_not_found(atom(), kz_term:ne_binary()) -> 'ok'.
 channel_not_found(Node, FetchId) ->
@@ -589,7 +592,7 @@ process_event(UUID, Props, Node) ->
 -spec process_event(kz_term:api_binary(), kz_term:proplist(), atom(), pid()) -> any().
 process_event(UUID, Props, Node, Pid) ->
     kz_util:put_callid(UUID),
-    kz_amqp_channel:consumer_pid(Pid),
+    _ = kz_amqp_channel:consumer_pid(Pid),
     EventName = props:get_value(<<"Event-Subclass">>, Props, props:get_value(<<"Event-Name">>, Props)),
 
     process_specific_event(EventName, UUID, Props, Node).
@@ -644,14 +647,14 @@ process_specific_event(_EventName, _UUID, _Props, _Node) -> 'ok'.
 -spec maybe_publish_channel_state(kz_term:proplist(), atom()) -> 'ok'.
 maybe_publish_channel_state(Props, Node) ->
     %% NOTE: this will significantly reduce AMQP request however if a ecallmgr
-    %%   becomes disconnected any calls it previsouly controlled will not produce
+    %%   becomes disconnected any calls it previously controlled will not produce
     %%   CDRs.  The long-term strategy is to round-robin CDR events from mod_kazoo.
     Event = ecallmgr_call_events:get_event_name(Props),
     case props:is_true(<<"Publish-Channel-State">>, Props, 'true')
-        andalso ecallmgr_config:get_boolean(<<"publish_channel_state">>, 'true', Node) of
+        andalso kapps_config:get_boolean(?APP_NAME, <<"publish_channel_state">>, 'true', Node) of
         'false' -> lager:debug("not publishing channel state ~s", [Event]);
         'true' ->
-            case ecallmgr_config:get_boolean(<<"restrict_channel_state_publisher">>, 'false') of
+            case kapps_config:get_boolean(?APP_NAME, <<"restrict_channel_state_publisher">>, 'false') of
                 'false' -> ecallmgr_call_events:process_channel_event(Props);
                 'true' -> maybe_publish_restricted(Props)
             end
@@ -695,14 +698,14 @@ props_to_record(Props, Node) ->
             ,reseller_id=props:get_value(<<"Reseller-ID">>, CCVs)
             ,reseller_billing=props:get_value(<<"Reseller-Billing">>, CCVs)
             ,precedence=kz_term:to_integer(props:get_value(<<"Precedence">>, CCVs, 5))
-            ,realm=props:get_value(<<"Realm">>, CCVs, get_realm(Props))
+            ,realm=get_realm(Props, CCVs)
             ,username=props:get_value(<<"Username">>, CCVs, get_username(Props))
             ,import_moh=props:get_value(<<"variable_hold_music">>, Props) =:= 'undefined'
             ,answered=props:get_value(<<"Answer-State">>, Props) =:= <<"answered">>
             ,node=Node
             ,timestamp=kz_time:now_s()
             ,profile=props:get_value(<<"variable_sofia_profile_name">>, Props, ?DEFAULT_FS_PROFILE)
-            ,context=props:get_value(<<"Caller-Context">>, Props, ?DEFAULT_FREESWITCH_CONTEXT)
+            ,context=kzd_freeswitch:context(Props, ?DEFAULT_FREESWITCH_CONTEXT)
             ,dialplan=props:get_value(<<"Caller-Dialplan">>, Props, ?DEFAULT_FS_DIALPLAN)
             ,other_leg=OtherLeg
             ,handling_locally=handling_locally(Props, OtherLeg)
@@ -747,19 +750,29 @@ get_username(Props) ->
                                 ,Props
                                 )
     of
-        'undefined' -> 'undefined';
+        'undefined' ->
+            lager:debug("no username in CCVs or variable_user_name"),
+            'undefined';
         Username -> kz_term:to_lower_binary(Username)
     end.
 
--spec get_realm(kz_term:proplist()) -> kz_term:api_binary().
-get_realm(Props) ->
-    case props:get_first_defined([?GET_CCV(<<"Realm">>)
-                                 ,<<"variable_domain_name">>
-                                 ]
-                                ,Props
-                                )
-    of
-        'undefined' -> 'undefined';
+-spec get_realm(kzd_freeswitch:data(), kz_term:proplist()) ->
+                       kz_term:api_ne_binary().
+get_realm(Props, CCVs) ->
+    case props:get_value(<<"Realm">>, CCVs) of
+        'undefined' ->
+            lager:info("no 'Realm' in CCVs, checking FS props"),
+            get_realm_from_props(Props);
+        Realm -> Realm
+    end.
+
+-spec get_realm_from_props(kzd_freeswitch:data()) ->
+                                  kz_term:api_ne_binary().
+get_realm_from_props(Props) ->
+    case props:get_value(<<"variable_domain_name">>, Props) of
+        'undefined' ->
+            lager:info("no realm found in 'variable_domain_name' in FS props"),
+            'undefined';
         Realm -> kz_term:to_lower_binary(Realm)
     end.
 
@@ -778,7 +791,7 @@ props_to_update(Props) ->
       ,{#channel.bridge_id, props:get_value(<<"Bridge-ID">>, CCVs, UUID)}
       ,{#channel.callflow_id, props:get_value(<<"CallFlow-ID">>, CCVs)}
       ,{#channel.cavs, CAVs}
-      ,{#channel.context, props:get_value(<<"Caller-Context">>, Props)}
+      ,{#channel.context, kzd_freeswitch:context(Props)}
       ,{#channel.destination, props:get_value(<<"Caller-Destination-Number">>, Props)}
       ,{#channel.dialplan, props:get_value(<<"Caller-Dialplan">>, Props)}
       ,{#channel.direction, kzd_freeswitch:call_direction(Props)}
@@ -795,7 +808,7 @@ props_to_update(Props) ->
       ,{#channel.precedence, kz_term:to_integer(props:get_value(<<"Precedence">>, CCVs, 5))}
       ,{#channel.presence_id, props:get_value(<<"Channel-Presence-ID">>, CCVs, props:get_value(<<"variable_presence_id">>, Props))}
       ,{#channel.profile, props:get_value(<<"variable_sofia_profile_name">>, Props)}
-      ,{#channel.realm, props:get_value(<<"Realm">>, CCVs, get_realm(Props))}
+      ,{#channel.realm, get_realm(Props, CCVs)}
       ,{#channel.reseller_billing, props:get_value(<<"Reseller-Billing">>, CCVs)}
       ,{#channel.reseller_id, props:get_value(<<"Reseller-ID">>, CCVs)}
       ,{#channel.resource_id, props:get_value(<<"Resource-ID">>, CCVs)}

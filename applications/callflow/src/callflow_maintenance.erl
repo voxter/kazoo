@@ -30,7 +30,14 @@
         ]).
 -export([update_feature_codes/0, update_feature_codes/1]).
 
+-export([allow_authz_context/1, allow_authz_context/2
+        ,deny_authz_context/1
+        ,disable_authz_contexts/0, enable_authz_contexts/0
+        ]).
+
 -include("callflow.hrl").
+
+-define(DOLLAR_SIGN, 36). % = $\$ but makes fmt wonky atm
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -89,30 +96,27 @@ do_show_calls([Srv|Srvs], Total) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% @deprecated Refresh view functionality is moved to read and update views from
+%% database instead. Please use {@link kapps_maintenance:refresh()} instead.
 %% @end
 %%------------------------------------------------------------------------------
 -spec blocking_refresh() -> 'ok'.
 blocking_refresh() ->
-    lists:foreach(fun(AccountDb) ->
-                          refresh(AccountDb)
-                  end, kapps_util:get_all_accounts()).
+    io:format("This function is deprecated please use kapps_maintenance:refresh() instead.").
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% @deprecated Refresh view functionality is moved to read and update views from
+%% database instead. Please use {@link kapps_maintenance:refresh()} instead.
 %% @end
 %%------------------------------------------------------------------------------
--spec refresh() -> 'started'.
+-spec refresh() -> 'ok'.
 refresh() ->
-    _ = kz_util:spawn(fun blocking_refresh/0),
-    'started'.
+    io:format("This function is deprecated please use kapps_maintenance:refresh() instead.").
 
--spec refresh(binary() | string()) -> boolean().
-refresh(<<Account/binary>>) ->
-    AccountDb = kz_util:format_account_id(Account, 'encoded'),
-    Views = kapps_util:get_views_json('callflow', "views"),
-    kapps_util:update_views(AccountDb, Views);
+-spec refresh(binary() | string()) -> 'ok'.
 refresh(Account) ->
-    refresh(kz_term:to_binary(Account)).
+    io:format("This function is deprecated please use kapps_maintenance:refresh(~p) instead.", [Account]).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -148,7 +152,7 @@ do_recorded_name_migration(Db, VMBox) ->
         'undefined' -> lager:info("vm box ~s has no recorded name to migrate", [VMBoxId]);
         MediaId ->
             lager:info("vm box ~s has recorded name in doc ~s", [VMBoxId, MediaId]),
-            do_recorded_name_migration(Db, MediaId, kz_json:get_value(<<"owner_id">>, VMBox)),
+            _ = do_recorded_name_migration(Db, MediaId, kz_json:get_value(<<"owner_id">>, VMBox)),
             {'ok', _} = kz_datamgr:save_doc(Db, kz_json:delete_key(?RECORDED_NAME_KEY, VMBox))
     end.
 
@@ -264,12 +268,12 @@ update_doc(Key, Value, Id, Db) ->
 
 -spec account_set_classifier_inherit(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 account_set_classifier_inherit(Classifier, Account) ->
-    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
+    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kzd_accounts:normalize_name(Account)),
     set_account_classifier_action(<<"inherit">>, Classifier, AccountDb).
 
 -spec account_set_classifier_deny(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 account_set_classifier_deny(Classifier, Account) ->
-    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
+    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kzd_accounts:normalize_name(Account)),
     set_account_classifier_action(<<"deny">>, Classifier, AccountDb).
 
 -spec all_accounts_set_classifier_inherit(kz_term:ne_binary()) -> 'ok'.
@@ -290,13 +294,14 @@ set_account_classifier_action(Action, Classifier, AccountDb) ->
     io:format("found account: ~p", [kzd_accounts:fetch_name(AccountDb)]),
     AccountId = kz_util:format_account_id(AccountDb, 'raw'),
 
-    kz_datamgr:update_doc(AccountDb, AccountId, [{[<<"call_restriction">>, Classifier, <<"action">>], Action}]),
-    kz_datamgr:update_doc(<<"accounts">>, AccountId, [{[<<"call_restriction">>, Classifier, <<"action">>], Action}]),
+    Update = [{[<<"call_restriction">>, Classifier, <<"action">>], Action}],
+    {'ok', _} = kzd_accounts:update(AccountId, Update),
 
     kz_endpoint:flush_account(AccountDb),
 
     io:format("  ...  classifier '~s' switched to action '~s'\n", [Classifier, Action]).
 
+-spec all_accounts_set_classifier(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 all_accounts_set_classifier(Action, Classifier) ->
     'true' = is_classifier(Classifier),
     lists:foreach(fun(AccountDb) ->
@@ -304,14 +309,16 @@ all_accounts_set_classifier(Action, Classifier) ->
                           %% Not sure if this interruption is really needed.
                           %%  Keeping it as it was taken as an example from kapps_util:update_all_accounts/1
                           set_account_classifier_action(Action, Classifier, AccountDb)
-                  end, kapps_util:get_all_accounts()).
+                  end
+                 ,kapps_util:get_all_accounts()
+                 ).
 
 %%------------------------------------------------------------------------------
 %% @doc Set `call_restriction' flag on device level.
 %%
 %% Usage:
 %% ```
-%% sup callflow_maintenance device_classifier_inherit international  username@realm.tld
+%% sup callflow_maintenance device_classifier_inherit international username@realm.tld
 %% sup callflow_maintenance device_classifier_deny international username@realm.tld
 %% '''
 %% @end
@@ -334,10 +341,16 @@ set_device_classifier_action(Action, Classifier, Uri) ->
     'true' = is_classifier(Classifier),
     [User, Realm] = binary:split(Uri, <<"@">>),
     {'ok', AccountDb} = kapps_util:get_account_by_realm(Realm),
+
     Options = [{'key', User}],
     {'ok', [DeviceDoc]} = kz_datamgr:get_results(AccountDb, <<"devices/sip_credentials">>, Options),
     DeviceId = kz_doc:id(DeviceDoc),
-    kz_datamgr:update_doc(AccountDb, DeviceId, [{[<<"call_restriction">>, Classifier, <<"action">>], Action}]),
+
+    Update = [{[<<"call_restriction">>, Classifier, <<"action">>], Action}],
+    UpdateOptions = [{'update', Update}],
+
+    {'ok', _} = kz_datamgr:update_doc(AccountDb, DeviceId, UpdateOptions),
+
     kz_endpoint:flush(AccountDb, DeviceId).
 
 %%------------------------------------------------------------------------------
@@ -365,7 +378,7 @@ is_classifier(Classifier) ->
 %%------------------------------------------------------------------------------
 -spec list_account_restrictions(kz_term:ne_binary()) -> 'ok'.
 list_account_restrictions(Account) ->
-    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kz_util:normalize_account_name(Account)),
+    {'ok', AccountDb} = kapps_util:get_accounts_by_name(kzd_accounts:normalize_name(Account)),
     DbNameEncoded = kz_util:format_account_id(AccountDb,'encoded'),
     io:format("\nAccount level classifiers:\n\n"),
     print_call_restrictions(DbNameEncoded, kz_util:format_account_id(AccountDb,'raw')),
@@ -452,22 +465,97 @@ update_feature_codes(Account) ->
             maybe_update_feature_codes(AccountDb, Patterns)
     end.
 
-maybe_update_feature_codes(Db, []) ->
-    io:format("~s : feature codes up to date\n", [kz_util:format_account_id(Db, 'raw')]);
-maybe_update_feature_codes(Db, [Pattern|Patterns]) ->
+-spec maybe_update_feature_codes(kz_term:ne_binary(), kz_json:objects()) -> 'ok'.
+maybe_update_feature_codes(Db, Patterns) ->
+    lists:foreach(fun(Pattern) -> maybe_update_feature_code(Db, Pattern) end
+                 ,Patterns
+                 ),
+    io:format("~s : feature codes up to date\n", [kz_util:format_account_id(Db, 'raw')]).
+
+-spec maybe_update_feature_code(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+maybe_update_feature_code(Db, Pattern) ->
+    maybe_update_feature_code(Db, Pattern, kz_json:get_ne_binary_value(<<"key">>, Pattern)).
+
+maybe_update_feature_code(Db, Pattern, <<"^\\*5([0-9]*)", ?DOLLAR_SIGN>>=_Regex) ->
     DocId = kz_doc:id(Pattern),
-    Regex = kz_json:get_value(<<"key">>, Pattern),
-    case Regex of
-        <<"^\\*5([0-9]*)$">> ->
-            NewRegex = <<"^\\*5(|[0-9]{2,})$">>,
-            case kz_datamgr:update_doc(Db, DocId, [{<<"patterns">>, [NewRegex]}]) of
-                {'error', _Reason} ->
-                    io:format("failed to update doc ~s with new patterns\n", [DocId]);
-                {'ok', _} ->
-                    io:format("successfully updated patterns for doc ~s (~p -> ~p)\n",
-                              [DocId, Regex, NewRegex])
-            end;
-                         _OtherRegex ->
-                               io:format("skipping pattern ~p\n", [_OtherRegex])
-                       end,
-                         maybe_update_feature_codes(Db, Patterns).
+    NewRegex = <<"^\\*5(|[0-9]{2,})", ?DOLLAR_SIGN>>,
+    Update = [{<<"patterns">>, [NewRegex]}],
+    UpdateOptions = [{'update', Update}],
+
+    case kz_datamgr:update_doc(Db, DocId, UpdateOptions) of
+        {'error', _Reason} ->
+            io:format("failed to update doc ~s with new patterns\n", [DocId]);
+        {'ok', _} ->
+            io:format("successfully updated patterns for doc ~s (~p -> ~p)\n"
+                     ,[DocId, _Regex, NewRegex]
+                     )
+    end;
+maybe_update_feature_code(_Db, _Pattern, _Regex) ->
+    io:format("skipping pattern ~p\n", [_Regex]).
+
+-spec allow_authz_context(kz_term:ne_binary()) -> 'ok'.
+allow_authz_context(App) ->
+    allow_authz_context(App, kz_binary:rand_hex(6)).
+
+-spec allow_authz_context(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+allow_authz_context(App, DefaultContext) ->
+    Context = fetch_app_context(App, DefaultContext),
+    permit_authz_contexts(),
+    add_allowed_authz_context(Context).
+
+-spec deny_authz_context(kz_term:ne_binary()) -> 'ok'.
+deny_authz_context(App) ->
+    case fetch_app_context(App, 'undefined') of
+        'undefined' ->
+            io:format("app ~s not currently listed in allowed authz contexts~n", [App]);
+        Context ->
+            remove_allowed_authz_context(Context)
+    end.
+
+permit_authz_contexts() ->
+    case kapps_config:is_true(?APP_NAME, <<"allow_authz_context_overrides">>) of
+        'true' -> 'ok';
+        'false' ->
+            {'ok', _} = kapps_config:set_default(?APP_NAME, <<"allow_authz_context_overrides">>, 'true'),
+            io:format("authz context overrides were disabled; now enabled...~n")
+    end.
+
+-spec disable_authz_contexts() -> 'ok'.
+disable_authz_contexts() ->
+    {'ok', _} = kapps_config:set_default(?APP_NAME, <<"allow_authz_context_overrides">>, 'false'),
+    io:format("authz context overrides disabled~n").
+
+-spec enable_authz_contexts() -> 'ok'.
+enable_authz_contexts() ->
+    {'ok', _} = kapps_config:set_default(?APP_NAME, <<"allow_authz_context_overrides">>, 'true'),
+    io:format("authz context overrides enabled~n").
+
+-spec add_allowed_authz_context(kz_term:ne_binary()) -> 'ok'.
+add_allowed_authz_context(Context) ->
+    Contexts = kapps_config:get_ne_binaries(?APP_NAME, <<"authz_contexts">>, []),
+    Updated = lists:usort([Context | Contexts]),
+    {'ok', _} = kapps_config:set_default(?APP_NAME, <<"authz_contexts">>, Updated),
+    io:format("added ~s to allowed authz contexts~n", [Context]).
+
+-spec remove_allowed_authz_context(kz_term:ne_binary()) -> 'ok'.
+remove_allowed_authz_context(Context) ->
+    Contexts = kapps_config:get_ne_binaries(?APP_NAME, <<"authz_contexts">>, []),
+    case lists:member(Context, Contexts) of
+        'false' -> io:format("app context is not currently allowed~n");
+        'true' ->
+            Updated = lists:delete(Context, Contexts),
+            {'ok', _} = kapps_config:set_default(?APP_NAME, <<"authz_contexts">>, Updated),
+            io:format("removed ~s from allowed authz contexts~n", [Context])
+    end.
+
+-spec fetch_app_context(kz_term:ne_binary(), kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
+fetch_app_context(App, 'undefined') ->
+    kapps_config:get_ne_binary(App, <<"authz_context">>);
+fetch_app_context(App, DefaultContext) ->
+    case kapps_config:get_ne_binary(App, <<"authz_context">>) of
+        'undefined' ->
+            io:format("no authz context set for ~s, setting to ~s~n", [App, DefaultContext]),
+            {'ok', _} = kapps_config:set_default(App, <<"authz_context">>, DefaultContext),
+            DefaultContext;
+        Context -> Context
+    end.

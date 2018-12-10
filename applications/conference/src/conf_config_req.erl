@@ -61,6 +61,7 @@ handle_profile_request(JObj, Conference) ->
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     lager:debug("returning conference profile ~s", [ProfileName]),
+    lager:debug("~s", [kz_json:encode(kz_json:from_list(Resp))]),
     kapi_conference:publish_config_resp(ServerId, props:filter_undefined(Resp)).
 
 -spec lookup_profile(kz_term:ne_binary(), kapps_conference:conferece()) -> kz_json:object().
@@ -234,7 +235,7 @@ handle_controls_request(JObj, Conference) ->
 requested_controls_name(JObj) ->
     kz_json:get_ne_value(<<"Controls">>, JObj).
 
--spec controls(kz_term:ne_binary(), kz_json:object()) -> kz_json:object().
+-spec controls(kz_term:ne_binary(), kz_json:objects()) -> kz_json:object().
 controls(ControlsName, Controls) ->
     kz_json:from_list([{ControlsName, Controls}]).
 

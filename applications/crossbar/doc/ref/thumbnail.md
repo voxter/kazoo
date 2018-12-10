@@ -1,12 +1,12 @@
-### Thumbnail
+# Thumbnail
 
-#### About Thumbnail
+## About Thumbnail
 
-#### Schema
+## Schema
 
 
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/thumbnail
 

@@ -53,7 +53,7 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec init() -> ok.
+-spec init() -> 'ok'.
 init() ->
     init_db(),
     _ = crossbar_bindings:bind(<<"*.content_types_provided.global_provisioner_templates">>, ?MODULE, 'content_types_provided'),
@@ -64,12 +64,12 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.global_provisioner_templates">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.global_provisioner_templates">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.global_provisioner_templates">>, ?MODULE, 'delete'),
-    ok.
+    'ok'.
 
 init_db() ->
     _ = kz_datamgr:db_create(?KZ_PROVISIONER_DB),
-    _ = kz_datamgr:revise_doc_from_file(?KZ_PROVISIONER_DB, ?APP, <<"account/provisioner_templates.json">>),
-    ok.
+    _ = kapps_maintenance:refresh(?KZ_PROVISIONER_DB),
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc Add content types provided by this module.
@@ -90,7 +90,7 @@ content_types_provided_for_provisioner(Context, DocId, ?IMAGE_REQ, ?HTTP_GET) ->
         {'error', _} -> Context;
         {'ok', JObj} ->
             [Type, SubType] = binary:split(get_content_type(JObj), <<"/">>),
-            lager:debug("found attachement of content type: ~s/~s~n", [Type, SubType]),
+            lager:debug("found attachment of content type: ~s/~s~n", [Type, SubType]),
             cb_context:set_content_types_provided(Context, [{'to_binary', [{Type, SubType}]}])
     end;
 content_types_provided_for_provisioner(Context, _, _, _) ->

@@ -227,7 +227,7 @@ do_delete_fold(Db, Keys, AccIDs) ->
 get_selectors_db(#{account_id := AccountId
                   ,auth_account_id := AuthAccountId
                   }) ->
-    true =  kz_util:is_in_account_hierarchy(AuthAccountId, AccountId, true),
+    true =  kzd_accounts:is_in_account_hierarchy(AuthAccountId, AccountId, true),
     kz_util:format_resource_selectors_db(AccountId).
 
 -spec split_keys(kz_term:ne_binaries(), non_neg_integer()) -> [kz_term:ne_binaries()].
@@ -266,5 +266,5 @@ generate_selector_doc(AuthAccountId, Resource, Name, Selector, Value, Start, Sto
 -spec init_db(kz_term:ne_binary()) -> 'ok'.
 init_db(Db) when is_binary(Db) ->
     _ = kz_datamgr:db_create(Db),
-    {'ok', _} = kz_datamgr:revise_doc_from_file(Db, 'crossbar', "views/resource_selectors.json"),
+    kapps_maintenance:refresh(Db),
     'ok'.

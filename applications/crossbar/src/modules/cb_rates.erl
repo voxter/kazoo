@@ -63,7 +63,7 @@ init() ->
 
 init_db() ->
     _ = kz_datamgr:db_create(?KZ_RATES_DB),
-    kz_datamgr:revise_doc_from_file(?KZ_RATES_DB, ?APP, "views/rates.json").
+    kapps_maintenance:refresh(?KZ_RATES_DB).
 
 -spec authorize(cb_context:context()) -> boolean().
 authorize(Context) ->
@@ -175,7 +175,6 @@ ratedeck_db(Context) ->
 
 -spec post(cb_context:context()) -> cb_context:context().
 post(Context) ->
-    _ = init_db(),
     _ = kz_util:spawn(fun upload_csv/1, [Context]),
     crossbar_util:response_202(<<"attempting to insert rates from the uploaded document">>, Context).
 
@@ -254,9 +253,9 @@ validate_patch(Id, Context) ->
 %%------------------------------------------------------------------------------
 -spec on_successful_validation(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
-    Doc = lists:foldl(fun doc_updates/2
-                     ,cb_context:doc(Context)
-                     ,[{fun kz_doc:set_type/2, <<"rate">>}
+    Doc = lists:foldl(fun(F, R) -> F(R) end
+                     ,kzd_rates:from_json(cb_context:doc(Context))
+                     ,[fun kzd_rates:set_type/1
                       ,fun ensure_routes_set/1
                       ]
                      ),
@@ -264,28 +263,17 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(Id, Context) ->
     crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"rate">>)).
 
--spec doc_updates({fun(), kz_term:ne_binary()} | fun(), kz_json:object()) ->
-                         kz_json:object().
-doc_updates({Fun, Value}, Doc) when is_function(Fun, 2) ->
-    Fun(Doc, Value);
-doc_updates(Fun, Doc) when is_function(Fun, 1) ->
-    Fun(Doc).
-
 -spec ensure_routes_set(kz_json:object()) -> kz_json:object().
-ensure_routes_set(Doc) ->
-    ensure_routes_set(Doc, kz_json:get_value(<<"routes">>, Doc)).
+ensure_routes_set(Rate) ->
+    ensure_routes_set(Rate, kzd_rates:routes(Rate)).
 
--spec ensure_routes_set(kz_json:object(), kz_term:api_binaries()) -> kz_json:object().
-ensure_routes_set(Doc, 'undefined') ->
-    add_default_route(Doc, kz_json:get_value(<<"prefix">>, Doc));
-ensure_routes_set(Doc, []) ->
-    add_default_route(Doc, kz_json:get_value(<<"prefix">>, Doc));
-ensure_routes_set(Doc, _) ->
-    Doc.
-
--spec add_default_route(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
-add_default_route(Doc, Prefix) ->
-    kz_json:set_value(<<"routes">>, [<<"^\\+?", Prefix/binary, ".+$">>], Doc).
+-spec ensure_routes_set(kzd_rates:doc(), kz_term:api_ne_binaries()) -> kz_json:object().
+ensure_routes_set(Rate, 'undefined') ->
+    kzd_rates:set_default_route(Rate);
+ensure_routes_set(Rate, []) ->
+    kzd_rates:set_default_route(Rate);
+ensure_routes_set(Rate, _Routes) ->
+    Rate.
 
 %%------------------------------------------------------------------------------
 %% @doc Attempt to load a summarized listing of all instances of this
@@ -343,8 +331,8 @@ upload_csv(Context) ->
     Now = kz_time:now(),
     {'ok', {Count, Rates}} = process_upload_file(Context),
     lager:debug("trying to save ~b rates (took ~b ms to process)", [Count, kz_time:elapsed_ms(Now)]),
-    lists:foreach(fun(Rate) -> crossbar_doc:ensure_saved(cb_context:set_doc(Context, Rate), [{'publish_doc', 'false'}]) end, Rates),
-    lager:debug("it took ~b milli to process and save ~b rates", [kz_time:elapsed_ms(Now), Count]).
+    _  = crossbar_doc:save(cb_context:set_doc(Context, Rates), [{'publish_doc', 'false'}]),
+    lager:debug("it took ~b ms to process and save ~b rates", [kz_time:elapsed_ms(Now), Count]).
 
 -spec process_upload_file(cb_context:context()) ->
                                  {'ok', {non_neg_integer(), kz_json:objects()}}.
@@ -608,6 +596,6 @@ normalize_fields(Rate) ->
 -spec normalize_field(kz_json:path(), kz_json:json_term()) ->
                              {kz_json:path(), kz_json:json_term()}.
 normalize_field(<<"Base-Cost">> = K, BaseCost) ->
-    {K, wht_util:units_to_dollars(BaseCost)};
+    {K, kz_currency:units_to_dollars(BaseCost)};
 normalize_field(K, V) ->
     {K, V}.

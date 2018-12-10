@@ -1,4 +1,4 @@
-### Port Requests
+# Number Port Requests
 
 * [About Port Requests](#about-port-requests)
 * [Schema](#schema)
@@ -8,6 +8,7 @@
     + [Get port request by phone number for account and descendants](#get-port-request-for-account-and-descendants)
 * Port Request Listing
     - [List all](#list-port-requests)
+    - [List all by number](#list-port-requests-by-number-of-self-and-subaccounts)
     - [List all for sub accounts](#list-port-requests-of-self-and-sub-accounts)
     - [List by state](#listing-by-port-state)
         + [`unconfirmed`](#listing-by-unconfirmed-port)
@@ -45,7 +46,7 @@
     - [Update](#replace-an-attachment-on-a-port-request)
     - [Delete](#delete-an-attachment-on-a-port-request)
 
-#### About Port Requests
+## About Port Requests
 
 Manage and track number port requests through the Port Requests API.
 
@@ -61,7 +62,7 @@ A port request can be in one of seven **states**:
 
 ![porting state flow](images/port-request-states-flow.svg)
 
-#### Schema
+## Schema
 
 Schema for a port request
 
@@ -69,24 +70,24 @@ Schema for a port request
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`bill.carrier` | The name of the losing carrier | `string()` |   | `false` |  
-`bill.extended_address` | The suite/floor/apt of the billing address the losing carrier has on record | `string()` |   | `false` |  
-`bill.locality` | The locality (city) of the billing address the losing carrier has on record | `string()` |   | `false` |  
-`bill.name` | The losing carrier billing/account name | `string()` |   | `false` |  
-`bill.postal_code` | The zip/postal code of the billing address the losing carrier has on record | `string()` |   | `false` |  
-`bill.region` | The region (state) of the billing address the losing carrier has on record | `string()` |   | `false` |  
-`bill.street_address` | The address of the billing address the losing carrier has on record | `string()` |   | `false` |  
-`bill` | Billing information of the losing carrier | `object()` |   | `false` |  
-`comments` | The history of comments made on a port request | `array(object())` |   | `false` |  
-`name` | A friendly name for the port request | `string(1..128)` |   | `true` |  
-`notifications.email.send_to.[]` |   | `string()` |   | `false` |  
-`notifications.email.send_to` | A list or string of email recipent(s) | `string() | array(string())` |   | `false` |  
-`notifications.email` | Inbound Email Notifications | `object()` |   | `false` |  
-`notifications` | Status notifications | `object()` |   | `false` |  
-`numbers./\+?[0-9]+/` |   | `object()` |   | `false` |  
-`numbers` | The numbers to port in | `object()` |   | `true` |  
-`port_state` | What state the port request is currently in | `string('unconfirmed' | 'pending' | 'submitted' | 'scheduled' | 'completed' | 'rejected' | 'canceled')` | `unconfirmed` | `false` |  
-`transfer_date` | Requested transfer date in gregorain timestamp | `integer()` |   | `false` |  
+`bill.carrier` | The name of the losing carrier | `string()` |   | `false` |
+`bill.extended_address` | The suite/floor/apt of the billing address the losing carrier has on record | `string()` |   | `false` |
+`bill.locality` | The locality (city) of the billing address the losing carrier has on record | `string()` |   | `false` |
+`bill.name` | The losing carrier billing/account name | `string()` |   | `false` |
+`bill.postal_code` | The zip/postal code of the billing address the losing carrier has on record | `string()` |   | `false` |
+`bill.region` | The region (state) of the billing address the losing carrier has on record | `string()` |   | `false` |
+`bill.street_address` | The address of the billing address the losing carrier has on record | `string()` |   | `false` |
+`bill` | Billing information of the losing carrier | `object()` |   | `false` |
+`comments` | The history of comments made on a port request | `array(object())` |   | `false` |
+`name` | A friendly name for the port request | `string(1..128)` |   | `true` |
+`notifications.email.send_to.[]` |   | `string()` |   | `false` |
+`notifications.email.send_to` | A list or string of email recipient(s) | `string() | array(string())` |   | `false` |
+`notifications.email` | Inbound Email Notifications | `object()` |   | `false` |
+`notifications` | Status notifications | `object()` |   | `false` |
+`numbers./\+?[0-9]+/` |   | `object()` |   | `false` |
+`numbers` | The numbers to port in | `object()` |   | `true` |
+`port_state` | What state the port request is currently in | `string('unconfirmed' | 'pending' | 'submitted' | 'scheduled' | 'completed' | 'rejected' | 'canceled')` | `unconfirmed` | `false` |
+`transfer_date` | Requested transfer date in Gregorian timestamp | `integer()` |   | `false` |
 
 
 
@@ -124,6 +125,46 @@ curl -v -X GET \
             ]
         }
     ],
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+#### Search a port request by phone number from superduper admin across all sub-accounts
+
+> GET /v2/port_requests
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/port_requests?by_number={PHONE_NUMBER}
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": [
+        {
+            "account_id": "{ACCOUNT_ID}",
+            "created": 63630107130,
+            "id": "0684aa1e2785d62c76ce27d2451a1c26",
+            "name": "Porting 202.555.9000",
+            "numbers": {
+                "{PHONE_NUMBER}": {}
+            },
+            "port_state": "canceled",
+            "sent": false,
+            "updated": 63630120578,
+            "uploads": {
+                "file.pdf": {
+                    "content_type": "application/pdf",
+                    "length": 90931
+                }
+            }
+        }
+    ],
+    "page_size": 1,
     "request_id": "{REQUEST_ID}",
     "revision": "{REVISION}",
     "status": "success"
@@ -689,7 +730,40 @@ curl -v -X POST \
     "status": "success"
 }
 ```
+## Patch a port request
 
+> PATCH /v2/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}
+
+```shell
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data":{"your_custom_info":{"carrier_port_id": "apc-8535937-gtk123", "carrier_name": "ace phone co"}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "created": 63630097779,
+        "id": "{PORT_REQUEST_ID}",
+        "name": "{PORT_REQUEST_NAME}",
+        "numbers": {
+            "{PHONE_NUMBER}": {
+                "state": "NY"
+            }
+        },
+        "port_state": "unconfirmed",
+        "sent": false,
+        "updated": 63630104652,
+        "uploads": {},
+        "your_custom_info": {
+            "carrier_port_id": "apc-8535937-gtk123",
+            "carrier_name": "ace phone co"
+        }
+    }
+}
+```
 
 #### DELETE a port request
 

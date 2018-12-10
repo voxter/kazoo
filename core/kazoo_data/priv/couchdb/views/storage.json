@@ -1,7 +1,17 @@
 {
     "_id": "_design/storage",
+    "kazoo": {
+        "view_map": [
+            {
+                "database": "system_data"
+            }
+        ]
+    },
     "language": "javascript",
     "views": {
+        "accounts": {
+            "map": "function(doc) {if (doc.pvt_type != 'storage' || doc.pvt_deleted) return; emit(doc._id, null);}"
+        },
         "crossbar_listing": {
             "map": "function(doc) {if (doc.pvt_type != 'storage_plan' || doc.pvt_deleted) return; emit(doc._id, null);}"
         },

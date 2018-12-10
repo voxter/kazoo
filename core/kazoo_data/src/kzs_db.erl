@@ -36,9 +36,12 @@ db_create(Server, DbName) ->
 -spec db_create(map(), kz_term:ne_binary(), db_create_options()) -> boolean().
 db_create(#{}=Map, DbName, Options) ->
     %%TODO storage policy
-    do_db_create(Map, DbName, Options)
-        andalso db_create_others(Map, DbName, Options)
-        andalso kzs_publish:publish_db(DbName, 'created').
+    case do_db_create(Map, DbName, Options) of
+        'exists' -> db_create_others(Map, DbName, Options);
+        'true' -> kzs_publish:publish_db(DbName, 'created'),
+                  db_create_others(Map, DbName, Options);
+        'false' -> 'false'
+    end.
 
 -spec db_create_others(map(), kz_term:ne_binary(), db_create_options()) -> boolean().
 db_create_others(#{}=Map, DbName, Options) ->
@@ -52,14 +55,14 @@ db_create_others(#{}=Map, DbName, Options) ->
 do_db_create_others(Map, DbName, Options) ->
     Others = maps:get('others', Map, []),
     lists:all(fun({_Tag, M1}) ->
-                      do_db_create(#{server => M1}, DbName, Options)
+                      do_db_create(#{server => M1}, DbName, Options) =/= 'false'
               end, Others).
 
--spec do_db_create(map(), kz_term:ne_binary(), db_create_options()) -> boolean().
+-spec do_db_create(map(), kz_term:ne_binary(), db_create_options()) -> boolean() | 'exists'.
 do_db_create(#{server := {App, Conn}}, DbName, Options) ->
     case App:db_exists(Conn, DbName) of
         'false' -> App:db_create(Conn, DbName, Options);
-        'true' -> 'true'
+        'true' -> 'exists'
     end.
 
 -spec db_delete(map(), kz_term:ne_binary(), db_delete_options()) -> boolean().
@@ -189,7 +192,8 @@ do_db_view_update(#{server := {App, Conn}}=Server, Db, NewViews, Remove) ->
             add_update_remove_views(Server, Db, CurrentViews, NewViews, Remove);
         {'error', _R} ->
             case App:db_exists(Conn, Db) of
-                'true' -> add_update_remove_views(Server, Db, [], NewViews, Remove);
+                'true' ->
+                    add_update_remove_views(Server, Db, [], NewViews, Remove);
                 'false' ->
                     lager:error("error fetching current views for db ~s", [Db]),
                     'true'
@@ -203,9 +207,13 @@ add_update_remove_views(Server, Db, CurrentViews, NewViews, ShouldRemoveDangling
     Add = sets:to_list(sets:subtract(New, Current)),
     Update = sets:to_list(sets:intersection(Current, New)),
     Delete = sets:to_list(sets:subtract(Current, New)),
-    lager:debug("view updates found ~p new, ~p possible updates and ~p potential removals for db ~s"
-               ,[length(Add), length(Update), length(Delete), Db]
-               ),
+    _ = case ShouldRemoveDangling of
+            'true'-> lager:debug("view updates found ~p new, ~p possible updates and ~p potential removals for db ~s"
+                                ,[length(Add), length(Update), length(Delete), Db]
+                                );
+            'false' -> lager:debug("view updates found ~p new, ~p possible updates for db ~s"
+                                  ,[length(Add), length(Update), Db])
+        end,
     Conflicts = add_views(Server, Db, Add, NewViews),
     lager:debug("view additions resulted in ~p conflicts", [length(Conflicts)]),
     {Changed, Errors} = update_views(Server, Db, Update ++ Conflicts, CurrentViews, NewViews),
@@ -221,6 +229,7 @@ add_update_remove_views(Server, Db, CurrentViews, NewViews, ShouldRemoveDangling
 -spec add_views(map(), kz_term:ne_binary(), kz_term:ne_binaries(), views_listing()) -> kz_term:api_ne_binaries().
 add_views(Server, Db, Add, NewViews) ->
     Views = [props:get_value(Id, NewViews) || Id <- Add],
+    _ = [lager:debug("saving view ~s / ~s", [Db, Id]) || Id <- Add],
     {'ok', JObjs} = kzs_doc:save_docs(Server, Db, Views, []),
     [Id || JObj <- JObjs, {Id, <<"conflict">>} <- [log_save_view_error(JObj)] ].
 
@@ -231,7 +240,7 @@ update_views(Server, Db, Update, CurrentViews, NewViews) ->
                || Id <- Update,
                   CurrentView <- [props:get_value(Id, CurrentViews)],
                   NewView <- [props:get_value(Id, NewViews)],
-                  should_update(Id, NewView, CurrentView)
+                  should_update(Id, Db, NewView, CurrentView)
               ]),
     {'ok', JObjs} = kzs_doc:save_docs(Server, Db, Views, []),
     Errors = [Id || JObj <- JObjs, {Id, <<"conflict">>} <- [log_save_view_error(JObj)] ],
@@ -250,11 +259,11 @@ log_save_view_error(Id, Error) ->
     lager:warning("saving view ~s failed with error: ~s", [Id, Error]),
     {Id, Error}.
 
--spec should_update(kz_term:ne_binary(), kz_json:object(), kz_json:object()) -> boolean().
-should_update(_Id, _, undefined) ->
-    lager:warning("view ~p does not exist to update", [_Id]),
+-spec should_update(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_json:object()) -> boolean().
+should_update(_Id, _Db, _, 'undefined') ->
+    lager:debug("adding view ~s to db ~s", [_Id, _Db]),
     false;
-should_update(_Id, NewView, OldView) ->
+should_update(_Id, _Db, NewView, OldView) ->
     case kz_json:are_equal(kz_doc:delete_revision(NewView), kz_doc:delete_revision(OldView)) of
         true ->
             _ = kz_datamgr:change_notice()

@@ -19,7 +19,7 @@ handle(Data, Call) ->
         andalso cf_flow:lookup(Number, AccountId)
     of
         'false' ->
-            lager:info("capture group is empty and can not be set as destination, hanging up"),
+            lager:debug("capture group is empty and can not be set as destination, hanging up."),
             cf_exe:stop_bad_destination(Call);
         {'ok', CallFlow, _} ->
             Mode = kz_json:get_ne_binary_value(<<"mode">>, Data, <<"full">>),
@@ -32,9 +32,9 @@ handle(Data, Call) ->
 
 -spec update_call(kz_term:ne_binary(), {'ok', kapps_call:call()}, kz_term:ne_binary(), boolean()) -> 'ok'.
 update_call(Number, {'ok', Call}, Mode, Override) ->
-    lager:info("setting privacy mode for number ~s to ~s. use endpoint privacy: ~s"
-              ,[Number, Mode, Override]
-              ),
+    lager:debug("setting privacy mode for number ~s to ~s. use endpoint privacy: ~s"
+               ,[Number, Mode, Override]
+               ),
     CCVs = ccvs_by_privacy_mode(Mode),
     Routines = [{fun kapps_call:set_request/2
                 ,list_to_binary([Number, "@", kapps_call:request_realm(Call)])

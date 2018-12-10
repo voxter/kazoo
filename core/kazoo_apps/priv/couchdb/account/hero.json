@@ -1,0 +1,95 @@
+{
+    "_id": "_design/hero",
+    "kazoo": {
+        "view_map": [
+            {
+                "classification": "account"
+            }
+        ]
+    },
+    "language": "javascript",
+    "views": {
+        "accounts": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'account' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "base_groups": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'callflow' || doc.type != 'baseGroup' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "conferences": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'conference' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "devices": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'device' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "groups": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'group' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "queues": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'queue' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "user_groups": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'callflow' || doc.type != 'userGroup' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "user_statuses": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'user_status' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        },
+        "users": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'user' || doc.pvt_deleted) return;",
+                "  var emit_doc = JSON.parse(JSON.stringify(doc));",
+                "  emit_doc.has_photo = (doc._attachments && doc._attachments.photo) != undefined;",
+                "  emit(emit_doc._id, emit_doc);",
+                "}"
+            ]
+        },
+        "vmboxes": {
+            "map": [
+                "function (doc) {",
+                "  if (doc.pvt_type != 'vmbox' || doc.pvt_deleted) return;",
+                "  emit(doc._id, doc);",
+                "}"
+            ]
+        }
+    }
+}

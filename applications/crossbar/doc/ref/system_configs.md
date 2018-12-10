@@ -1,12 +1,22 @@
-### System Configs
+# System Configs
 
-#### About System Configs
+## About System Configs
 
 #### Schema
 
+Schema for system_config documents
 
 
-#### Fetch
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`$.+@.+^` | Node-specific settings - these take highest precedence | `object()` |   | `false` |  
+`$[a-zA-Z0-9.]+^` | Zone-specific settings - these are checked if a node-specific setting is not defined | `object()` |   | `false` |  
+`default` | default settings that apply to all nodes/zones if not defined | `object()` | `{}` | `false` |  
+
+
+
+## Fetch
 
 > GET /v2/system_configs
 
@@ -16,7 +26,7 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs
 ```
 
-#### Fetch
+## Fetch
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -26,7 +36,7 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-#### Create
+## Create
 
 > PUT /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -36,7 +46,7 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-#### Change
+## Change
 
 > POST /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -46,7 +56,7 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-#### Patch
+## Patch
 
 > PATCH /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -56,7 +66,7 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-#### Remove
+## Remove
 
 > DELETE /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -66,7 +76,7 @@ curl -v -X DELETE \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-#### Fetch
+## Fetch
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -76,7 +86,7 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-#### Change
+## Change
 
 > POST /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -86,7 +96,7 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-#### Patch
+## Patch
 
 > PATCH /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -96,7 +106,7 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-#### Remove
+## Remove
 
 > DELETE /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 

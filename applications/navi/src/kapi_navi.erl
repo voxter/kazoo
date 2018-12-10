@@ -75,9 +75,9 @@ bind_q(Queue, Props) ->
     bind_to_q(Queue, props:get_value('restrict_to', Props)).
 
 bind_to_q(Q, 'undefined') ->
-    'ok' = amqp_util:bind_q_to_kapps(Q, ?KEY_NAVI_PUSH_DEVICE);
+    'ok' = kz_amqp_util:bind_q_to_kapps(Q, ?KEY_NAVI_PUSH_DEVICE);
 bind_to_q(Q, ['push_device'|T]) ->
-    'ok' = amqp_util:bind_q_to_kapps(Q, ?KEY_NAVI_PUSH_DEVICE),
+    'ok' = kz_amqp_util:bind_q_to_kapps(Q, ?KEY_NAVI_PUSH_DEVICE),
     bind_to_q(Q, T);
 bind_to_q(Q, [_|T]) ->
     bind_to_q(Q, T);
@@ -89,9 +89,9 @@ unbind_q(Q, Props) ->
     unbind_q_from(Q, props:get_value('restrict_to', Props)).
 
 unbind_q_from(Q, 'undefined') ->
-    'ok' = amqp_util:unbind_q_from_kapps(Q, ?KEY_NAVI_PUSH_DEVICE);
+    'ok' = kz_amqp_util:unbind_q_from_kapps(Q, ?KEY_NAVI_PUSH_DEVICE);
 unbind_q_from(Q, ['push_device'|T]) ->
-    'ok' = amqp_util:unbind_q_from_kapps(Q, ?KEY_NAVI_PUSH_DEVICE),
+    'ok' = kz_amqp_util:unbind_q_from_kapps(Q, ?KEY_NAVI_PUSH_DEVICE),
     unbind_q_from(Q, T);
 unbind_q_from(Q, [_|T]) ->
     unbind_q_from(Q, T);
@@ -104,7 +104,7 @@ unbind_q_from(_Q, []) ->
 %%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    amqp_util:kapps_exchange().
+    kz_amqp_util:kapps_exchange().
 
 %%------------------------------------------------------------------------------
 %% @doc Publish the JSON iolist() to the proper Exchange
@@ -119,4 +119,4 @@ publish_push_device(JObj) ->
 -spec publish_push_device(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_push_device(Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?NAVI_PUSH_DEVICE_VALUES, fun push_device/1),
-    amqp_util:kapps_publish(?KEY_NAVI_PUSH_DEVICE, Payload, ContentType).
+    kz_amqp_util:kapps_publish(?KEY_NAVI_PUSH_DEVICE, Payload, ContentType).

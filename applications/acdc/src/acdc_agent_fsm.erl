@@ -73,7 +73,7 @@
 -define(SYNC_RESPONSE_TIMEOUT, 5000).
 -define(SYNC_RESPONSE_MESSAGE, 'sync_response_timeout').
 
-%% We weren't able to join our brethern, how long to wait to check again
+%% We weren't able to join our brethren, how long to wait to check again
 -define(RESYNC_RESPONSE_TIMEOUT, 15000).
 -define(RESYNC_RESPONSE_MESSAGE, 'resync_response_timeout').
 
@@ -531,7 +531,7 @@ sync('cast', {'sync_req', JObj}, #state{agent_listener=AgentListener
                                        }=State) ->
     case kz_json:get_value(<<"Process-ID">>, JObj) of
         AProcId ->
-            lager:debug("recv sync req from ourself"),
+            lager:debug("recv sync req from ourselves"),
             {'next_state', 'sync', State};
         _OtherProcId ->
             lager:debug("recv sync_req from ~s (we are ~s)", [_OtherProcId, AProcId]),
@@ -864,11 +864,11 @@ ringing('cast', {'playback_stop', _}, State) ->
     {'next_state', 'ringing', State};
 ringing('cast', {'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
                                                          ,member_call=MemberCall
-                                                         ,member_call_queue_id=QueueId
                                                          ,agent_listener=AgentListener
                                                          ,account_id=AccountId
                                                          ,agent_id=AgentId
                                                          ,queue_notifications=Ns
+                                                         ,member_call_queue_id=QueueId
                                                          }=State) ->
     lager:debug("agent phone has been connected to caller"),
     acdc_agent_listener:member_connect_accepted(AgentListener),

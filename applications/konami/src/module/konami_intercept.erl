@@ -91,7 +91,7 @@ get_originate_req(Data, Call) ->
     TargetId = kz_json:get_value(<<"target_id">>, Data),
     UnbridgedOnly = kz_json:is_true(<<"unbridged_only">>, Data, 'true'),
 
-    Params = kz_json:set_values([{<<"source">>, ?MODULE}
+    Params = kz_json:set_values([{<<"source">>, <<?MODULE_STRING>>}
                                 ,{<<"can_call_self">>, 'true'}
                                 ]
                                ,Data
@@ -159,11 +159,11 @@ send_originate_req([], _Call) ->
     lager:debug("no origination proprs, skipping"),
     {'error', 'no_endpoints'};
 send_originate_req(OriginateProps, _Call) ->
-    kapps_util:amqp_pool_collect(OriginateProps
-                                ,fun kapi_resource:publish_originate_req/1
-                                ,fun is_resp/1
-                                ,20 * ?MILLISECONDS_IN_SECOND
-                                ).
+    kz_amqp_worker:call_collect(OriginateProps
+                               ,fun kapi_resource:publish_originate_req/1
+                               ,fun is_resp/1
+                               ,20 * ?MILLISECONDS_IN_SECOND
+                               ).
 
 -spec is_resp(kz_json:objects() | kz_json:object()) -> boolean().
 is_resp([JObj|_]) ->

@@ -455,7 +455,7 @@ route_resp_pre_park_action(JObj) ->
 
 -spec maybe_start_dtmf_action(kz_term:proplist()) -> 'undefined' | kz_types:xml_el().
 maybe_start_dtmf_action(Props) ->
-    case ecallmgr_config:is_true(<<"should_detect_inband_dtmf">>) of
+    case kapps_config:is_true(?APP_NAME, <<"should_detect_inband_dtmf">>, 'false') of
         'false' -> 'undefined';
         'true' -> check_dtmf_type(Props)
     end.
@@ -485,7 +485,8 @@ get_leg_vars([Binary|_]=Binaries)
 get_leg_vars([_|_]=Prop) ->
     ["[^^", ?BRIDGE_CHANNEL_VAR_SEPARATOR
     ,string:join([kz_term:to_list(V)
-                  || V <- lists:foldr(fun get_channel_vars/2, [], Prop)]
+                  || V <- lists:foldr(fun get_channel_vars/2, [], Prop)
+                 ]
                 ,?BRIDGE_CHANNEL_VAR_SEPARATOR
                 )
     ,"]"
@@ -624,7 +625,7 @@ sip_headers_fold(K, V, Vars0) ->
                           ,{<<"{reseller_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Reseller-ID}">>}
                           ,{<<"{billing_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Billing-ID}">>}
                           ])).
--define(EXPANDABLE_MACROS, ecallmgr_config:get_json(<<"expandable_macros">>, ?DEFAULT_EXPANDABLE_MACROS)).
+-define(EXPANDABLE_MACROS, kapps_config:get_json(?APP_NAME, <<"expandable_macros">>, ?DEFAULT_EXPANDABLE_MACROS)).
 
 -spec maybe_expand_macro(kz_term:ne_binary()) -> kz_term:ne_binary().
 maybe_expand_macro(HeaderValue) ->
@@ -751,7 +752,9 @@ context(JObj, Props) ->
 %%%-----------------------------------------------------------------------------
 %% XML record creators and helpers
 %%%-----------------------------------------------------------------------------
--spec acl_node_el(kz_types:xml_attrib_value(), kz_types:xml_attrib_value()) -> kz_types:xml_el().
+-spec acl_node_el(kz_types:xml_attrib_value(), kz_types:xml_attrib_value()) -> kz_types:xml_el() | kz_types:xml_els().
+acl_node_el(Type, CIDRs) when is_list(CIDRs) ->
+    [acl_node_el(Type, CIDR) || CIDR <- CIDRs];
 acl_node_el(Type, CIDR) ->
     #xmlElement{name='node'
                ,attributes=[xml_attrib('type', Type)
@@ -856,9 +859,9 @@ user_el(Props, Children) ->
 -spec user_el_props(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_integer()) -> kz_term:proplist().
 user_el_props(Number, Username, 'undefined') ->
     [{'number-alias', Number}
-    ,{'cacheable', ecallmgr_config:get_integer(<<"user_cache_time_in_ms">>
-                                              ,?DEFAULT_USER_CACHE_TIME_IN_MS
-                                              )
+    ,{'cacheable', kapps_config:get_integer(?APP_NAME, <<"user_cache_time_in_ms">>
+                                           ,?DEFAULT_USER_CACHE_TIME_IN_MS
+                                           )
      }
      | user_el_default_props(Username)
     ];
@@ -1077,7 +1080,11 @@ room_el(Name, Status) ->
                            ]
                }.
 
--spec prepend_child(kz_types:xml_el(), kz_types:xml_el()) -> kz_types:xml_el().
+-spec prepend_child(kz_types:xml_el(), kz_types:xml_el() | kz_types:xml_els()) -> kz_types:xml_el().
+prepend_child(#xmlElement{}=El, Children) when is_list(Children) ->
+    lists:foldl(fun(C, #xmlElement{content=Contents}=E) ->
+                        E#xmlElement{content=[C|Contents]}
+                end, El, Children);
 prepend_child(#xmlElement{content=Contents}=El, Child) ->
     El#xmlElement{content=[Child|Contents]}.
 

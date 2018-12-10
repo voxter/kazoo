@@ -34,6 +34,7 @@
         ,is_preview/1
         ,read_preview_doc/1
         ,fix_timestamp/1, fix_timestamp/2, fix_timestamp/3
+        ,timestamp_params/3
         ,build_call_data/2
 
         ,public_proplist/2
@@ -210,41 +211,68 @@ relay_encoded_email([], _From, _Encoded) ->
     lager:debug("failed to send email as the TO addresses list is empty"),
     {'error', 'no_to_addresses'};
 relay_encoded_email(To, From, Encoded) ->
-    Self = self(),
-    Timeout = kapps_config:get_pos_integer(<<"smtp_client">>, <<"send_timeout_ms">>, 10 * ?MILLISECONDS_IN_SECOND),
-
     lager:debug("relaying from ~s to ~p", [From, To]),
+    handle_send(To, From, send(To, From, Encoded)).
+
+-type gen_smtp_send_resp() :: {'ok', pid()} | {'error', any()} | pid().
+
+-spec send(kz_term:binaries(), kz_term:ne_binary(), kz_term:ne_binary()) -> gen_smtp_send_resp().
+send(To, From, Encoded) ->
+    Self = self(),
     gen_smtp_client:send({From, To, Encoded}
                         ,smtp_options()
                         ,fun(X) -> Self ! {'relay_response', X} end
-                        ),
+                        ).
+
+-spec handle_send(kz_term:binaries(), kz_term:ne_binary(), gen_smtp_send_resp()) ->
+                         {'ok', kz_term:ne_binary()} | {'error', any()}.
+handle_send(To, From, {'ok', _Pid}) ->
+    lager:debug("smtp client is processing with pid ~p", [_Pid]),
+    wait_for_response(To, From);
+handle_send(_To, _From, {'error', _R}=Error) ->
+    lager:info("error trying to send email: ~p", [_R]),
+    Error;
+handle_send(To, From, _Pid) ->
+    lager:debug("smtp client is processing with pid ~p", [_Pid]),
+    wait_for_response(To, From).
+
+-spec wait_for_response(kz_term:binaries(), kz_term:ne_binary()) -> {'ok', kz_term:ne_binary()} | {'error', any()}.
+wait_for_response(To, From) ->
+    Timeout = kapps_config:get_pos_integer(<<"smtp_client">>, <<"send_timeout_ms">>, 10 * ?MILLISECONDS_IN_SECOND),
+
     %% The callback will receive either `{ok, Receipt}' where Receipt is the SMTP server's receipt
     %% identifier,  `{error, Type, Message}' or `{exit, ExitReason}', as the single argument.
     receive
-        {'relay_response', {'ok', Receipt}} ->
-            kz_cache:store_local(?CACHE_NAME
-                                ,{'receipt', Receipt}
-                                ,#email_receipt{to=To
-                                               ,from=From
-                                               ,timestamp=kz_time:now_s()
-                                               ,call_id=kz_util:get_callid()
-                                               }
-                                ,[{'expires', ?MILLISECONDS_IN_HOUR}]
-                                ),
-            _ = lager:debug("relayed message: ~p", [Receipt]),
-            {'ok', binary:replace(Receipt, <<"\r\n">>, <<>>, ['global'])};
-        {'relay_response', {'error', _Type, {_SubType, _FailHost, Message}}} ->
-            lager:debug("error relaying message: ~p(~p): ~p", [_Type, _SubType, Message]),
-            {'error', Message};
-        {'relay_response', {'exit', Reason}} ->
-            lager:debug("failed to send email:"),
-            log_email_send_error(Reason),
-            {'error', Reason}
+        {'relay_response', Resp} ->
+            handle_relay_response(To, From, Resp)
     after Timeout ->
             lager:debug("timed out waiting for relay response"),
             {'error', 'timeout'}
     end.
 
+-spec handle_relay_response(kz_term:binaries(), kz_term:ne_binary(), {'ok', kz_term:ne_binary()} | {'error', any()}) ->
+                                   {'ok', kz_term:ne_binary()} | {'error', any()}.
+handle_relay_response(To, From, {'ok', Receipt}) ->
+    kz_cache:store_local(?CACHE_NAME
+                        ,{'receipt', Receipt}
+                        ,#email_receipt{to=To
+                                       ,from=From
+                                       ,timestamp=kz_time:now_s()
+                                       ,call_id=kz_util:get_callid()
+                                       }
+                        ,[{'expires', ?MILLISECONDS_IN_HOUR}]
+                        ),
+    _ = lager:debug("relayed message: ~p", [Receipt]),
+    {'ok', binary:replace(Receipt, <<"\r\n">>, <<>>, ['global'])};
+handle_relay_response(_To, _From, {'error', _Type, {_SubType, _FailHost, Message}}) ->
+    lager:debug("error relaying message: ~p(~p): ~p", [_Type, _SubType, Message]),
+    {'error', Message};
+handle_relay_response(_To, _From, {'exit', Reason}) ->
+    lager:debug("failed to send email:"),
+    log_email_send_error(Reason),
+    {'error', Reason}.
+
+-spec log_email_send_error(any()) -> 'ok'.
 log_email_send_error({'function_clause', Stacktrace}) ->
     kz_util:log_stacktrace(Stacktrace);
 log_email_send_error(Reason) ->
@@ -472,7 +500,7 @@ send_update(RespQ, MsgId, Status, Msg, Metadata) ->
 -spec find_account_rep_email(kz_term:api_object() | kz_term:ne_binary()) -> kz_term:api_binaries().
 find_account_rep_email('undefined') -> 'undefined';
 find_account_rep_email(?NE_BINARY=AccountId) ->
-    case kz_services:is_reseller(AccountId) of
+    case kz_services_reseller:is_reseller(AccountId) of
         'true' ->
             lager:debug("finding admin email for reseller account ~s", [AccountId]),
             find_account_admin_email(AccountId);
@@ -524,7 +552,7 @@ extract_admin_emails(Users) ->
     ].
 
 -spec find_reseller_id(kz_term:ne_binary()) -> kz_term:ne_binary().
-find_reseller_id(AccountId) -> kz_services:find_reseller_id(AccountId).
+find_reseller_id(AccountId) -> kz_services_reseller:get_id(AccountId).
 
 -spec find_account_admin(kz_term:api_binary()) -> kz_term:api_object().
 find_account_admin('undefined') -> 'undefined';
@@ -636,8 +664,11 @@ is_notice_enabled_default(TemplateKey) ->
 get_parent_account_id(AccountId) ->
     case kzd_accounts:fetch(AccountId) of
         {'ok', JObj} -> kzd_accounts:parent_account_id(JObj);
+        {'error', 'not_found'} ->
+            lager:info("account ~s no longer exists, no parent account", [AccountId]),
+            'undefined';
         {'error', _E} ->
-            lager:error("failed to find parent account for ~s", [AccountId]),
+            lager:error("failed to find parent account for ~s: ~p", [AccountId, _E]),
             'undefined'
     end.
 
@@ -814,6 +845,18 @@ is_preview(DataJObj) ->
       kz_json:get_first_defined([<<"Preview">>, <<"preview">>], DataJObj, 'false')
      ).
 
+-spec timestamp_params(kz_time:gregorian_seconds(), kz_term:ne_binary(), string()) -> kz_term:proplist().
+timestamp_params(Timestamp, ?NE_BINARY=Timezone, ClockTimezone) when is_integer(Timestamp) ->
+    DateTime = calendar:gregorian_seconds_to_datetime(Timestamp),
+    lager:debug("using tz ~s (system ~s) for ~p", [Timezone, ClockTimezone, DateTime]),
+
+    props:filter_undefined(
+      [{<<"utc">>, localtime:local_to_utc(DateTime, ClockTimezone)}
+      ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, Timezone)}
+      ,{<<"timestamp">>, Timestamp}
+      ,{<<"timezone">>, Timezone}
+      ]).
+
 %% make timestamp ready to process by "date" filter in ErlyDTL
 %% returns a prop list with local, UTC time and timezone
 -spec fix_timestamp(kz_time:gregorian_seconds() | kz_term:api_ne_binary()) -> kz_term:proplist().
@@ -826,17 +869,8 @@ fix_timestamp('undefined', Thing) ->
 fix_timestamp(?NE_BINARY=Timestamp, Thing) ->
     fix_timestamp(kz_term:to_integer(Timestamp), Thing);
 fix_timestamp(Timestamp, ?NE_BINARY=TZ) when is_integer(Timestamp) ->
-    DateTime = calendar:gregorian_seconds_to_datetime(Timestamp),
     ClockTimezone = kapps_config:get_string(<<"servers">>, <<"clock_timezone">>, <<"UTC">>),
-
-    lager:debug("using tz ~s (system ~s) for ~p", [TZ, ClockTimezone, DateTime]),
-
-    props:filter_undefined(
-      [{<<"utc">>, localtime:local_to_utc(DateTime, ClockTimezone)}
-      ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, TZ)}
-      ,{<<"timestamp">>, Timestamp}
-      ,{<<"timezone">>, TZ}
-      ]);
+    timestamp_params(Timestamp, TZ, ClockTimezone);
 fix_timestamp(Timestamp, 'undefined') ->
     fix_timestamp(Timestamp, <<"UTC">>);
 fix_timestamp(Timestamp, DataJObj) ->
@@ -943,7 +977,7 @@ notification_ignored(TemplateId) -> {'ignored', TemplateId}.
 -spec notification_failed(kz_term:ne_binary(), any()) -> template_response().
 notification_failed(TemplateId, Reason) -> {'failed', Reason, TemplateId}.
 
--spec notification_disabled(kz_term:ne_binary(), kz_json:object()) -> template_response().
+-spec notification_disabled(kz_json:object(), kz_term:ne_binary()) -> template_response().
 notification_disabled(DataJObj, TemplateId) ->
     AccountId = kapi_notifications:account_id(DataJObj),
     lager:debug("notification ~s is disabled for account ~s", [TemplateId, AccountId]),

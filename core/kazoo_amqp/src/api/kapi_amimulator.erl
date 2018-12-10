@@ -18,7 +18,7 @@
         ,publish_control_queue_resp/2, publish_control_queue_resp/3
         ]).
 
--include_lib("amqp_util.hrl").
+-include_lib("kz_amqp_util.hrl").
 -include_lib("kazoo_amqp/include/kz_api.hrl").
 
 -define(CONTROL_QUEUE_REQ_HEADERS, [<<"Call-ID">>]).
@@ -36,7 +36,7 @@
 -define(CONTROL_QUEUE_RESP_TYPES, []).
 
 -define(CONTROL_QUEUE_ROUTING_KEY(CallId)
-       ,<<"amimulator.control_queue.", (amqp_util:encode(CallId))/binary>>
+       ,<<"amimulator.control_queue.", (kz_amqp_util:encode(CallId))/binary>>
        ).
 
 %%------------------------------------------------------------------------------
@@ -81,12 +81,12 @@ control_queue_resp_v(JObj) -> control_queue_resp_v(kz_json:to_proplist(JObj)).
 -spec bind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
-    amqp_util:bind_q_to_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
+    kz_amqp_util:bind_q_to_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
 -spec unbind_q(kz_term:ne_binary(), kz_term:proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
-    amqp_util:unbind_q_from_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
+    kz_amqp_util:unbind_q_from_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
 %%------------------------------------------------------------------------------
 %% @doc declare the exchanges used by this API
@@ -94,7 +94,7 @@ unbind_q(Queue, Props) ->
 %%------------------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    amqp_util:kapps_exchange().
+    kz_amqp_util:kapps_exchange().
 
 %%------------------------------------------------------------------------------
 
@@ -106,7 +106,7 @@ publish_control_queue_req(JObj) ->
 -spec publish_control_queue_req(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_control_queue_req(Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_REQ_VALUES, fun ?MODULE:control_queue_req/1),
-    amqp_util:kapps_publish(?CONTROL_QUEUE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
+    kz_amqp_util:kapps_publish(?CONTROL_QUEUE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
 
 call_id([_|_]=API) ->
     props:get_value(<<"Call-ID">>, API);
@@ -123,4 +123,4 @@ publish_control_queue_resp(Q, JObj) ->
 -spec publish_control_queue_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_control_queue_resp(Q, Req, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_RESP_VALUES, fun ?MODULE:control_queue_resp/1),
-    amqp_util:targeted_publish(Q, Payload, ContentType).
+    kz_amqp_util:targeted_publish(Q, Payload, ContentType).

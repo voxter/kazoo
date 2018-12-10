@@ -28,6 +28,7 @@
         ,trie_build_timeout_ms/0
         ,lru_expires_s/0
 
+        ,should_publish_alert/1
         ]).
 
 -include("hotornot.hrl").
@@ -119,7 +120,7 @@ rate_version() ->
 
 -spec set_rate_version(kz_term:ne_binary()) -> 'ok'.
 set_rate_version(Version) ->
-    kapps_config:set_string(?APP_NAME, <<"rate_version">>, Version),
+    {'ok', _} = kapps_config:set_string(?APP_NAME, <<"rate_version">>, Version),
     'ok'.
 
 -spec should_account_filter_by_resource(kz_term:ne_binary()) -> boolean().
@@ -133,3 +134,10 @@ lru_expires_s() -> ?SECONDS_IN_DAY.
 lru_expires_s() ->
     kapps_config:get_integer(?APP_NAME, <<"trie_lru_expires_s">>, ?SECONDS_IN_DAY).
 -endif.
+
+-spec should_publish_alert(kz_term:api_ne_binary()) -> boolean().
+should_publish_alert('undefined') ->
+    kapps_config:get_is_true(?APP_NAME, [<<"should_publish_system_alert">>, <<"both">>], 'true');
+should_publish_alert(Direction) ->
+    kapps_config:get_is_true(?APP_NAME, [<<"should_publish_system_alert">>, Direction], 'true')
+        orelse kapps_config:get_is_true(?APP_NAME, [<<"should_publish_system_alert">>, <<"both">>], 'true').

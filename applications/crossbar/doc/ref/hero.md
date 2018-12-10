@@ -1,12 +1,12 @@
-### Hero
+# Hero
 
-#### About Hero
+## About Hero
 
-#### Schema
+## Schema
 
 
 
-#### Change
+## Change
 
 > POST /v2/accounts/{ACCOUNT_ID}/hero
 

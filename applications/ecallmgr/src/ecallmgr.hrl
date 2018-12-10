@@ -16,12 +16,14 @@
 
 -define(DEFAULT_FETCH_TIMEOUT, 2600).
 
--define(FS_NODES, ecallmgr_config:get_ne_binaries(<<"fs_nodes">>, [])).
--define(FS_NODES(Node), ecallmgr_config:get_ne_binaries(<<"fs_nodes">>, [], Node)).
+-define(FS_NODES, kapps_config:get_ne_binaries(?APP_NAME, <<"fs_nodes">>, [])).
+-define(FS_NODES(Node), kapps_config:get_ne_binaries(?APP_NAME, <<"fs_nodes">>, [], Node)).
 
 -define(ECALLMGR_PLAYBACK_MEDIA_KEY(M), {'playback_media', M}).
 
--define(DEFAULT_FREESWITCH_CONTEXT, ecallmgr_config:get_ne_binary(<<"freeswitch_context">>, <<"context_2">>)).
+-define(DEFAULT_FREESWITCH_CONTEXT
+       ,kapps_config:get_ne_binary(?APP_NAME, <<"freeswitch_context">>, <<"context_2">>)
+       ).
 
 -define(SIP_INTERFACE, "sipinterface_1").
 -define(DEFAULT_FS_PROFILE, "sipinterface_1").
@@ -30,8 +32,8 @@
 
 -define(LOCAL_MEDIA_PATH, "/tmp/").
 
--define(DEFAULT_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_sample_rate">>, 8000)).
--define(DEFAULT_STEREO_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_stereo_sample_rate">>, 16000)).
+-define(DEFAULT_SAMPLE_RATE, kapps_config:get_integer(?APP_NAME, <<"record_sample_rate">>, 8000)).
+-define(DEFAULT_STEREO_SAMPLE_RATE, kapps_config:get_integer(?APP_NAME, <<"record_stereo_sample_rate">>, 16000)).
 
 -type fs_app() :: {kz_term:ne_binary(), binary() | 'noop'} |
                   {kz_term:ne_binary(), kz_term:ne_binary(), atom()}.
@@ -61,44 +63,43 @@
                           ,timestamp = kz_time:now_s() :: pos_integer() | '$2' | '_'
                           }).
 
--record(channel, {uuid :: kz_term:api_binary() | '$1' | '$2' | '_'
-                 ,destination :: kz_term:ne_binary() | '_'
-                 ,direction :: kz_term:api_binary() | '$1' | '_'
-                 ,account_id :: kz_term:api_binary() | '$1' | '$2' | '_'
-                 ,account_billing :: kz_term:api_binary() | '$7' | '_'
-                 ,authorizing_id :: kz_term:api_binary() | '$1' | '$3' | '_'
+-record(channel, {uuid :: kz_term:api_ne_binary() | '$1' | '$2' | '_'
+                 ,destination :: kz_term:api_ne_binary() | '_'
+                 ,direction :: kz_term:api_ne_binary() | '$1' | '_'
+                 ,account_id :: kz_term:api_ne_binary() | '$1' | '$2' | '_'
+                 ,account_billing :: kz_term:api_ne_binary() | '$7' | '_'
+                 ,authorizing_id :: kz_term:api_ne_binary() | '$1' | '$3' | '_'
                  ,authorizing_type :: kz_term:api_binary() | '_'
                  ,is_authorized :: kz_term:api_boolean() | '_'
-                 ,owner_id :: kz_term:api_binary() | '$1' | '_'
-                 ,resource_id :: kz_term:api_binary() | '$4' | '_'
-                 ,presence_id :: kz_term:api_binary() | '$2' | '_'
-                 ,fetch_id :: kz_term:api_binary() | '$5' | '_'
-                 ,bridge_id :: kz_term:api_binary() | '$5' | '_'
-                 ,reseller_id :: kz_term:api_binary() | '$1' | '$2' | '_'
-                 ,reseller_billing :: kz_term:api_binary() | '_'
-                 ,realm :: kz_term:ne_binary() | '_' | '$2'
-                 ,username :: kz_term:api_binary() | '_' | '$1'
+                 ,owner_id :: kz_term:api_ne_binary() | '$1' | '_'
+                 ,resource_id :: kz_term:api_ne_binary() | '$4' | '_'
+                 ,presence_id :: kz_term:api_ne_binary() | '$2' | '_'
+                 ,fetch_id :: kz_term:api_ne_binary() | '$5' | '_'
+                 ,bridge_id :: kz_term:api_ne_binary() | '$5' | '_'
+                 ,reseller_id :: kz_term:api_ne_binary() | '$1' | '$2' | '_'
+                 ,reseller_billing :: kz_term:api_ne_binary() | '_'
+                 ,realm :: kz_term:api_ne_binary() | '_' | '$2'
+                 ,username :: kz_term:api_ne_binary() | '_' | '$1'
                  ,import_moh = 'false' :: boolean() | '_'
                  ,answered = 'true' :: boolean() | '_'
                  ,other_leg :: kz_term:api_binary() | '$2' | '_'
                  ,node :: atom() | '$1' | '$2' | '$3' | '_'
                  ,former_node :: atom() | '$2' | '_'
                  ,timestamp :: kz_time:gregorian_seconds() | '$3' | '_'
-                 ,profile :: kz_term:api_binary() | '_'
-                 ,context :: kz_term:api_binary() | '_'
-                 ,dialplan :: kz_term:api_binary() | '_'
+                 ,profile :: kz_term:api_ne_binary() | '_'
+                 ,context :: kz_term:api_ne_binary() | '_'
+                 ,dialplan :: kz_term:api_ne_binary() | '_'
                  ,precedence = 5 :: pos_integer() | '$2' | '_'
                  ,handling_locally = 'false' :: boolean() | '_' %% is this ecallmgr handling the call control?
-                 ,to_tag :: kz_term:api_binary() | '_'
-                 ,from_tag :: kz_term:api_binary() | '_'
-                 ,interaction_id :: kz_term:api_binary() | '$5' | '_'
-                 ,callee_number :: kz_term:api_binary() | '$5' | '_'
-                 ,callee_name :: kz_term:api_binary() | '$5' | '_'
+                 ,to_tag :: kz_term:api_ne_binary() | '_'
+                 ,from_tag :: kz_term:api_ne_binary() | '_'
+                 ,interaction_id :: kz_term:api_ne_binary() | '$5' | '_'
+                 ,callee_number :: kz_term:api_ne_binary() | '$5' | '_'
+                 ,callee_name :: kz_term:api_ne_binary() | '$5' | '_'
                  ,is_loopback :: boolean() | '_'
-                 ,loopback_leg_name :: kz_term:api_binary() | '_'
-                 ,loopback_other_leg :: kz_term:api_binary() | '_'
-                 ,callflow_id :: kz_term:api_binary() | '_'
-                 ,caller_id :: kz_term:api_binary() | '_'
+                 ,loopback_leg_name :: kz_term:api_ne_binary() | '_'
+                 ,loopback_other_leg :: kz_term:api_ne_binary() | '_'
+                 ,callflow_id :: kz_term:api_ne_binary() | '_'
                  ,is_onhold = 'false' :: boolean() | '_'
                  ,cavs :: kz_term:proplist() | '_' | 'undefined'
                  }).
@@ -107,8 +108,8 @@
 -type channels() :: [channel()].
 -type channel_updates() :: [{pos_integer(), any()}].
 
--record(conference, {name :: kz_term:api_binary() | '$1' | '_'
-                    ,uuid :: kz_term:api_binary() | '$1' | '_'
+-record(conference, {name :: kz_term:api_ne_binary() | '$1' | '_'
+                    ,uuid :: kz_term:api_ne_binary() | '$1' | '_'
                     ,node :: atom() | '$1' | '$2' | '_'
                     ,participants = 0 :: non_neg_integer() | '_'
                     ,profile_name = <<"default">> :: kz_term:ne_binary() | '_'
@@ -148,12 +149,12 @@
 -type participant() :: #participant{}.
 -type participants() :: [participant()].
 
--define(DEFAULT_REALM, ecallmgr_config:get_ne_binary(<<"default_realm">>, <<"nodomain.com">>)).
--define(MAX_TIMEOUT_FOR_NODE_RESTART, ecallmgr_config:get_integer(<<"max_timeout_for_node_restart">>, 10 * ?MILLISECONDS_IN_SECOND)).
+-define(DEFAULT_REALM, kapps_config:get_ne_binary(?APP_NAME, <<"default_realm">>, <<"nodomain.com">>)).
+-define(MAX_TIMEOUT_FOR_NODE_RESTART, kapps_config:get_integer(?APP_NAME, <<"max_timeout_for_node_restart">>, 10 * ?MILLISECONDS_IN_SECOND)).
 -define(MAX_NODE_RESTART_FAILURES, 3).
 
 -define(EXPIRES_DEVIATION_TIME
-       ,ecallmgr_config:get_integer(<<"expires_deviation_time">>, 180)
+       ,kapps_config:get_integer(?APP_NAME, <<"expires_deviation_time">>, 180)
        ).
 
 %% list of dialplan Application-Names that can execute after a call has hung up
@@ -562,6 +563,8 @@
         ,<<"channel_hold">>
         ,<<"presence">>
         ]).
+
+-define(HTTP_GET_PREFIX, "http_cache://").
 
 -define(ECALLMGR_HRL, 'true').
 -endif.

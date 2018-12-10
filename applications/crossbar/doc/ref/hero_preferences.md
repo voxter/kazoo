@@ -1,6 +1,6 @@
-### Hero Preferences
+# Hero Preferences
 
-#### About Hero Preferences
+## About Hero Preferences
 
 #### Schema
 
@@ -15,7 +15,7 @@ Key | Description | Type | Default | Required | Support Level
 
 
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/hero_preferences
 
@@ -25,7 +25,7 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/hero_preferences
 ```
 
-#### Change
+## Change
 
 > POST /v2/accounts/{ACCOUNT_ID}/hero_preferences
 

@@ -24,7 +24,7 @@ handle(Data, Call) ->
         andalso cf_flow:lookup(Number, AccountId)
     of
         'false' ->
-            lager:info("capture group is empty and can not be set as destination"),
+            lager:debug("capture group is empty and can not be set as destination."),
             cf_exe:stop_bad_destination(Call);
         {'ok', Flow, 'false'} ->
             JObj = suppress_ccv(Data),

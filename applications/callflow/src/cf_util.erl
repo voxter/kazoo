@@ -442,10 +442,9 @@ send_default_response(Cause, Call) ->
 -spec apply_dialplan(kz_term:ne_binary(), kz_term:api_object()) -> kz_term:ne_binary().
 apply_dialplan(N, 'undefined') -> N;
 apply_dialplan(Number, DialPlan) ->
-    Regexs = kz_json:get_keys(DialPlan),
-    case Regexs of
+    case kz_json:get_keys(DialPlan) of
         [] -> Number;
-        _ -> maybe_apply_dialplan(Regexs, DialPlan, Number)
+        Regexps -> maybe_apply_dialplan(Regexps, DialPlan, Number)
     end.
 
 -spec maybe_apply_dialplan(kz_json:path(), kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binary().
@@ -592,10 +591,10 @@ find_channels(Usernames, Call) ->
           ,{<<"Usernames">>, Usernames}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kapps_util:amqp_pool_request(Req
-                                     ,fun kapi_call:publish_query_user_channels_req/1
-                                     ,fun kapi_call:query_user_channels_resp_v/1
-                                     )
+    case kz_amqp_worker:call(Req
+                            ,fun kapi_call:publish_query_user_channels_req/1
+                            ,fun kapi_call:query_user_channels_resp_v/1
+                            )
     of
         {'ok', Resp} -> kz_json:get_value(<<"Channels">>, Resp, []);
         {'error', _E} ->

@@ -22,6 +22,7 @@
 -export([hostname/1]).
 -export([interface/1, interface/2]).
 -export([interfaces/1]).
+-export([instance_uuid/1]).
 -export([fetch_timeout/0, fetch_timeout/1]).
 -export([init/1
         ,handle_call/3
@@ -36,7 +37,7 @@
 
 -define(SERVER, ?MODULE).
 
--define(UPTIME_S, ecallmgr_config:get_integer(<<"fs_node_uptime_s">>, 600)).
+-define(UPTIME_S, kapps_config:get_integer(?APP_NAME, <<"fs_node_uptime_s">>, 600)).
 
 -type interface() :: {kz_term:ne_binary(), kz_term:proplist()}.
 -type interfaces() :: [interface()].
@@ -44,7 +45,7 @@
 -define(DEFAULT_FS_COMMANDS, [kz_json:from_list([{<<"load">>, <<"mod_sofia">>}])
                              ,kz_json:from_list([{<<"reloadacl">>, <<>>}])
                              ]).
--define(FS_CMDS(Node), ecallmgr_config:get_jsons(<<"fs_cmds">>, ?DEFAULT_FS_COMMANDS, Node)).
+-define(FS_CMDS(Node), kapps_config:get_jsons(?APP_NAME, <<"fs_cmds">>, ?DEFAULT_FS_COMMANDS, Node)).
 
 -define(DEFAULT_CAPABILITIES, [kz_json:from_list([{<<"module">>, <<"mod_conference">>}
                                                  ,{<<"is_loaded">>, 'false'}
@@ -97,6 +98,7 @@
                               ]).
 
 -record(state, {node               :: atom()
+               ,instance_uuid      :: kz_term:api_ne_binary()
                ,options = []       :: kz_term:proplist()
                ,interfaces = []    :: interfaces()
                ,start_cmds_pid_ref :: kz_term:api_pid_ref()
@@ -239,7 +241,7 @@ handle_reload_gateways(JObj, Props) ->
            ,?DEFAULT_FS_PROFILE
            ," rescan"
            ],
-    case ecallmgr_config:get_boolean(<<"process_gateways">>, 'false')
+    case kapps_config:get_boolean(?APP_NAME, <<"process_gateways">>, 'false')
         andalso freeswitch:bgapi(Node, 'sofia', lists:flatten(Args))
     of
         'false' -> 'ok';
@@ -262,7 +264,7 @@ find_srv(Node) when is_atom(Node) ->
 
 -spec fetch_timeout() -> pos_integer().
 fetch_timeout() ->
-    ecallmgr_config:get_integer(<<"fetch_timeout">>, ?DEFAULT_FETCH_TIMEOUT).
+    kapps_config:get_integer(?APP_NAME, <<"fetch_timeout">>, ?DEFAULT_FETCH_TIMEOUT).
 
 -spec fetch_timeout(fs_node()) -> pos_integer().
 fetch_timeout(_Node) ->
@@ -314,6 +316,11 @@ handle_call('interfaces', _, #state{interfaces=[]}=State) ->
 handle_call('interfaces', _, #state{interfaces=Interfaces}=State) ->
     Resp = kz_json:from_list_recursive(Interfaces),
     {'reply', Resp, State};
+handle_call('instance_uuid', _, #state{instance_uuid='undefined', node=Node}=State) ->
+    {'ok', UUID} = freeswitch:api(Node, 'eval', "${Core-UUID}"),
+    {'reply', UUID, State#state{instance_uuid=UUID}};
+handle_call('instance_uuid', _, #state{instance_uuid=UUID}=State) ->
+    {'reply', UUID, State};
 handle_call('node', _, #state{node=Node}=State) ->
     {'reply', Node, State}.
 
@@ -325,7 +332,8 @@ handle_call('node', _, #state{node=Node}=State) ->
 handle_cast('sync_interfaces', #state{node=Node
                                      ,interfaces=Interfaces
                                      }=State) ->
-    {'noreply', State#state{interfaces=node_interfaces(Node, Interfaces)}};
+    {'ok', UUID} = freeswitch:api(Node, 'eval', "${Core-UUID}"),
+    {'noreply', State#state{instance_uuid=UUID, interfaces=node_interfaces(Node, Interfaces)}};
 handle_cast('sync_capabilities', #state{node=Node}=State) ->
     _Pid = kz_util:spawn(fun probe_capabilities/1, [Node]),
     lager:debug("syncing capabilities in ~p", [_Pid]),
@@ -409,13 +417,13 @@ code_change(_OldVsn, State, _Extra) ->
                        {'error', 'retry'}.
 
 -spec run_start_cmds(atom(), kz_term:proplist()) -> kz_term:pid_ref().
-run_start_cmds(Node, Options) ->
+run_start_cmds(Node, Options) when is_atom(Node) ->
     kz_util:spawn_monitor(fun run_start_cmds/3, [Node, Options, self()]).
 
 -spec run_start_cmds(atom(), kz_term:proplist(), pid()) -> any().
-run_start_cmds(Node, Options, Parent) ->
+run_start_cmds(Node, Options, Parent) when is_atom(Node) ->
     kz_util:put_callid(Node),
-    timer:sleep(ecallmgr_config:get_integer(<<"fs_cmds_wait_ms">>, 5 * ?MILLISECONDS_IN_SECOND, Node)),
+    timer:sleep(kapps_config:get_integer(?APP_NAME, <<"fs_cmds_wait_ms">>, 5 * ?MILLISECONDS_IN_SECOND, Node)),
 
     run_start_cmds(Node, Options, Parent, is_restarting(Node)).
 
@@ -445,17 +453,17 @@ is_restarting_status(UP) ->
     end.
 
 -spec run_start_cmds(atom(), kz_term:proplist(), pid(), boolean() | kz_json:objects()) -> 'ok'.
-run_start_cmds(Node, Options, Parent, 'true') ->
+run_start_cmds(Node, Options, Parent, 'true') when is_atom(Node) ->
     lager:debug("node ~s is considered restarting", [Node]),
     run_start_cmds(Node, Options, Parent, ?FS_CMDS(Node));
-run_start_cmds(Node, Options, Parent, 'false') ->
+run_start_cmds(Node, Options, Parent, 'false') when is_atom(Node) ->
     lager:debug("node ~s is not considered restarting, trying reconnect cmds first", [Node]),
-    Cmds = case ecallmgr_config:get_jsons(<<"fs_reconnect_cmds">>, 'undefined') of
+    Cmds = case kapps_config:get_jsons(?APP_NAME, <<"fs_reconnect_cmds">>, 'undefined') of
                'undefined' -> ?FS_CMDS(Node);
                ReconCmds -> ReconCmds
            end,
     run_start_cmds(Node, Options, Parent, Cmds);
-run_start_cmds(Node, Options, Parent, Cmds) ->
+run_start_cmds(Node, Options, Parent, Cmds) when is_atom(Node) ->
     Res = process_cmds(Node, Options, Cmds),
 
     case is_list(Res)
@@ -586,7 +594,7 @@ channels_as_json(Node) ->
 
 -spec probe_capabilities(atom()) -> 'ok'.
 probe_capabilities(Node) ->
-    probe_capabilities(Node, ecallmgr_config:get_jsons(<<"capabilities">>, ?DEFAULT_CAPABILITIES)).
+    probe_capabilities(Node, kapps_config:get_jsons(?APP_NAME, <<"capabilities">>, ?DEFAULT_CAPABILITIES)).
 
 -spec probe_capabilities(atom(), kz_json:objects()) -> 'ok'.
 probe_capabilities(Node, PossibleCapabilities) ->
@@ -633,3 +641,7 @@ interface(Node) ->
 -spec interface(atom() | binary(), kz_term:ne_binary()) -> kz_term:api_object().
 interface(Node, Profile) ->
     gen_server:call(find_srv(Node), {'interface', Profile}).
+
+-spec instance_uuid(atom() | binary()) -> kz_term:api_ne_binary().
+instance_uuid(Node) ->
+    gen_server:call(find_srv(Node), 'instance_uuid').

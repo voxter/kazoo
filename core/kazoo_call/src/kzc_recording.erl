@@ -356,7 +356,7 @@ handle_cast({'update_control_queue', JObj}, #state{call=Call}=State) ->
     Req = props:filter_undefined([{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    case kapps_util:amqp_pool_request(Req
+    case kz_amqp_worker:call(Req
                                      ,fun kapi_amimulator:publish_control_queue_req/1
                                      ,fun kapi_amimulator:control_queue_resp_v/1
                                      ) of

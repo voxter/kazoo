@@ -24,6 +24,7 @@
         ,worker_maybe_send_update/3
         ,get_output_header/1
         ,output_path/1
+        ,finish_task/2
         ,cleanup_task/2
         ]).
 
@@ -68,7 +69,6 @@
 -define(REPLY(State, Value), {'reply', Value, State}).
 -define(REPLY_FOUND(State, TaskJObj), {'reply', {'ok', TaskJObj}, State}).
 -define(REPLY_NOT_FOUND(State), {'reply', {'error', 'not_found'}, State}).
-
 
 %%%=============================================================================
 %%% API
@@ -124,7 +124,6 @@ restart(TaskId = ?NE_BINARY) ->
                                {'error', 'not_found' | 'task_running'}.
 remove(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'remove_task', TaskId}).
-
 
 %%%=============================================================================
 %%% Worker API
@@ -277,7 +276,24 @@ output_path(TaskId=?NE_BINARY) ->
     <<"/tmp/task_out.", TaskId/binary, ".csv">>.
 
 %%------------------------------------------------------------------------------
-%% @doc
+%% @doc Calls the task's 'finish' function, if applicable
+%%
+%% Run after all rows are processed but before the task is considered complete.
+%% @end
+%%------------------------------------------------------------------------------
+-spec finish_task(kz_json:object(), any()) -> 'ok'.
+finish_task(API, Data) ->
+    lager:debug("finishing up after task"),
+    Action = kz_json:get_value(<<"action">>, API),
+    case tasks_bindings:apply(API, <<"finish">>, [Action, Data]) of
+        [] -> lager:debug("skipped finish");
+        [{'EXIT', {_E, _Rs}}] ->
+            lager:debug("finish ~p: ~p", [_E, hd(_Rs)]);
+        _ -> lager:debug("finish completed")
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Calls the task's 'cleanup' function, once the task is considered complete
 %% @end
 %%------------------------------------------------------------------------------
 -spec cleanup_task(kz_json:object(), any()) -> 'ok'.
@@ -291,7 +307,6 @@ cleanup_task(API, Data) ->
         _ -> lager:debug("cleanup completed")
     end.
 
-
 %%%=============================================================================
 %%% gen_server callbacks
 %%%=============================================================================
@@ -304,8 +319,6 @@ cleanup_task(API, Data) ->
 init([]) ->
     _ = process_flag('trap_exit', 'true'),
     lager:info("ensuring db ~s exists", [?KZ_TASKS_DB]),
-    'true' = kz_datamgr:db_create(?KZ_TASKS_DB),
-    kz_datamgr:revise_views_from_folder(?KZ_TASKS_DB, ?APP),
     {'ok', #state{}}.
 
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
@@ -369,7 +382,7 @@ handle_call({'restart_task', TaskId}, _From, State) ->
 
 %% This used to be cast but would race with worker process' EXIT signal.
 handle_call({'worker_finished', TaskId, TotalSucceeded, TotalFailed}, _From, State) ->
-    lager:debug("worker finished ~s: ~p/~p", [TaskId, TotalSucceeded, TotalFailed]),
+    lager:debug("worker finished ~s: ~p:~p", [TaskId, TotalSucceeded, TotalFailed]),
     Task = task_by_id(TaskId, State),
     Task1 = Task#{finished => kz_time:now_s()
                  ,total_rows_failed => TotalFailed
@@ -581,17 +594,22 @@ add_task(Task=#{id := TaskId}, State=#state{tasks = Tasks}) ->
                                       {'error', any()}.
 update_task(Task = #{id := TaskId}) ->
     Updates = kz_json:to_proplist(kz_tasks:to_json(Task)),
-    case kz_datamgr:update_doc(?KZ_TASKS_DB, TaskId, Updates) of
-        {'ok', Doc} -> {'ok', kz_tasks:to_public_json(kz_tasks:from_json(Doc))};
+    UpdateOptions = [{'update', Updates}
+                    ,{'ensure_saved', 'true'}
+                    ],
+    case kz_datamgr:update_doc(?KZ_TASKS_DB, TaskId, UpdateOptions) of
+        {'ok', Doc} ->
+            {'ok', kz_tasks:to_public_json(kz_tasks:from_json(Doc))};
         {'error', _R}=E ->
             lager:error("failed to update ~s in ~s: ~p", [TaskId, ?KZ_TASKS_DB, _R]),
             E
     end.
 
 -spec set_last_worker_update(kz_tasks:id(), non_neg_integer(), state()) -> state().
-set_last_worker_update(TaskId,
-                       ProcessedSoFar,
-                       State = #state{last_worker_update = LWU}) ->
+set_last_worker_update(TaskId
+                      ,ProcessedSoFar
+                      ,#state{last_worker_update = LWU}=State
+                      ) ->
     State#state{last_worker_update = LWU#{TaskId => ProcessedSoFar}}.
 
 -spec task_api(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_json:object().

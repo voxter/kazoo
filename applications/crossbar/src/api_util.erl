@@ -631,27 +631,19 @@ parse_path_tokens(Context, [Mod|T], Events) ->
 
 -spec is_cb_module(cb_context:context(), kz_term:ne_binary()) -> boolean().
 is_cb_module(Context, Elem) ->
-    try (kz_term:to_atom(<<"cb_", Elem/binary>>)):module_info('exports') of
-        _ -> 'true'
-    catch
-        'error':'badarg' -> 'false'; %% atom didn't exist already
-        _E:_R -> is_cb_module_version(Context, Elem)
-    end.
+    ApiVersion = cb_context:api_version(Context),
 
--spec is_cb_module_version(cb_context:context(), kz_term:ne_binary()) -> boolean().
-is_cb_module_version(Context, Elem) ->
-    case cb_context:is_context(Context) of
-        'false' -> 'false';
-        'true'  ->
-            ApiVersion = cb_context:api_version(Context),
-            ModuleName = <<"cb_", Elem/binary, "_", ApiVersion/binary>>,
-            try (kz_term:to_atom(ModuleName)):module_info('exports') of
-                _ -> 'true'
-            catch
-                'error':'badarg' -> 'false'; %% atom didn't exist already
-                _E:_R -> 'false'
-            end
-    end.
+    Modules = [<<"cb_", Elem/binary>>
+              ,<<"cb_", Elem/binary, "_", ApiVersion/binary>>
+              ],
+
+    is_cb_module(Modules).
+
+-spec is_cb_module(kz_term:ne_binaries()) -> boolean().
+is_cb_module([]) -> 'false';
+is_cb_module([Module|Modules]) ->
+    'true' =:= kz_module:is_exported(Module, 'init', 0)
+        orelse is_cb_module(Modules).
 
 %%------------------------------------------------------------------------------
 %% @doc This function will find the intersection of the allowed methods
@@ -1168,10 +1160,7 @@ finish_request(_Req, Context) ->
     Verb = cb_context:req_verb(Context),
     Event = create_event_name(Context, [<<"finish_request">>, Verb, Mod]),
     _ = kz_util:spawn(fun crossbar_bindings:pmap/2, [Event, Context]),
-    case kz_json:get_value(<<"billing">>, cb_context:doc(Context)) of
-        'undefined' -> 'ok';
-        _Else -> crossbar_services:reconcile(Context)
-    end.
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc This function will create the content for the response body.
@@ -1237,7 +1226,7 @@ create_resp_file(Req, Context) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Encodes the `JObj' and send it as a chunk. Starts chunk response if is
-%% not started yet. This is usually called by `api_resource:to_chnuk/3'.
+%% not started yet. This is usually called by `api_resource:to_chunk/3'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec create_json_chunk_response(cowboy_req:req(), cb_context:context()) ->
@@ -1383,7 +1372,6 @@ create_push_response(Req0, Context, Fun) ->
     Req2 = set_resp_headers(Req1, Context),
     {succeeded(Context), cowboy_req:set_resp_body(Content, Req2), Context}.
 
-
 -type pull_response() :: kz_term:text() | resp_file().
 
 %%------------------------------------------------------------------------------
@@ -1451,7 +1439,7 @@ do_create_resp_envelope(Context) ->
                    ]
            end,
 
-    encode_start_keys(kz_json:set_values(props:filter_undefined(Resp), cb_context:resp_envelope(Context))
+    encode_start_keys(kz_json:set_values(Resp, cb_context:resp_envelope(Context))
                      ,cb_context:should_paginate(Context)
                      ).
 

@@ -99,7 +99,7 @@ call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber,
              ,{<<"Average-Wait-Time">>, AverageWaitTimeEstimation}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
+    kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
 
 -spec call_abandoned(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 call_abandoned(AccountId, QueueId, CallId, Reason) ->
@@ -127,7 +127,7 @@ call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
              ,{<<"Caller-ID-Name">>, CallerIdName}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    kapps_util:amqp_pool_send(
+    kz_amqp_worker:cast(
       Prop
      ,fun kapi_acdc_stats:publish_call_marked_callback/1
      ).
@@ -185,7 +185,7 @@ call_average_wait_time_estimated(AccountId, QueueId, CallId, AverageWaitTime) ->
            ,{<<"Average-Wait-Time">>, AverageWaitTime}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_average_wait_time_estimated/1).
+    kz_amqp_worker:cast(Prop, fun kapi_acdc_stats:publish_call_average_wait_time_estimated/1).
 
 -spec agent_ready(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok' | {'error', any()}.
 agent_ready(AcctId, AgentId) ->
@@ -364,7 +364,7 @@ average_wait_time_estimation(AccountId, QueueId, Skills, Window) ->
             ,{<<"Window">>, Window}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case kapps_util:amqp_pool_request(Req
+    case kz_amqp_worker:call(Req
                                      ,fun kapi_acdc_stats:publish_average_wait_time_req/1
                                      ,fun kapi_acdc_stats:average_wait_time_resp_v/1
                                      )
@@ -692,7 +692,7 @@ handle_info(?CLEANUP_MSG, State) ->
     _ = cleanup_data(self()),
     {'noreply', State#state{cleanup_ref=start_cleanup_timer()}};
 handle_info(_Msg, State) ->
-    lager:debug("unhandling message: ~p", [_Msg]),
+    lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State}.
 
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
@@ -1352,13 +1352,13 @@ maybe_created_db(DbName, 'false') ->
     case kz_datamgr:db_exists(DbName) of
         'true' ->
             lager:debug("database ~s already created, refreshing view", [DbName]),
-            kz_datamgr:revise_views_from_folder(DbName, 'acdc');
+            kapps_maintenance:refresh(DbName);
         'false' ->
             lager:debug("modb ~s was not created", [DbName])
     end;
 maybe_created_db(DbName, 'true') ->
     lager:debug("created db ~s, adding views", [DbName]),
-    kz_datamgr:revise_views_from_folder(DbName, 'acdc').
+    kapps_maintenance:refresh(DbName).
 
 -spec call_stat_id(kz_json:object()) -> kz_term:ne_binary().
 call_stat_id(JObj) ->

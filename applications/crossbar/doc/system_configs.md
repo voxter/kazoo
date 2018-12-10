@@ -1,102 +1,60 @@
-### System Configs
+# System Configs
+
+## About System Configs
+
+!!! note
+    You must be `superduper_admin` to access this resource. Also make sure that the `system_configs` crossbar module has been enabled. `sup crossbar_maintenance start_module cb_system_configs`.
 
 Manipulate documents in the `system_config` database via Crossbar.
 
-Alter system configs REST API (diffs, validation)
+A system configuration document is a JSON document of certain syntactic type (each node value must be a JSON object of type `system_config.$config_name`). REST API allows to address both documents and document nodes. Default node of the configuration document is treated specially, see below.
 
-A system configuration document is a JSON document of certain
-syntetic type (each node value must be a JSON object of type
-system_config.$config_name). REST API allows to address both
-documents and and docuemnt nodes. Default node of the
-configuration document is treated specially, see below.
+In order to avoid confusion configuration document nodes we call document sections, each such section is a JSON object representing a configuration object for Kazoo node or zone.
 
-In order to avoid confusion configuration document nodes
-we call document sections, each such section is a JSON
-object representing a configuration object for Kazoo
-node or zone.
+General idea is to return (with `with_defaults=true` URI option) the effective values for configuration, therefore a complex merge down is performed: document values are merged with document default section, and then merged with schema defaults.
 
-General idea is to return (with with_defaults=true URI
-option) the effective values for configuration, therefore
-a complex mergedown is performed: document values are
-merged with document default section, and then merged
-with schema defaults.
+Therefore on save actions (`PUT`/`POST`/`PATCH`) a reverse operation is performed: a difference from defaults is calculated and stored to the document (if any). Thus by setting a value to schema default will effectively remove it from the document on save action.
 
-Therefore on save actions (PUT/POST/PATCH) a reverse
-operation is performed: a difference from defaults
-is calculated and stored to the document (if any).
-Thus by setting a value to schema default will effectively
-remove it from the document on save action.
+### Documents
 
-Documents
----------
+`GET` always returns either an empty document or stored document. The document always has a default section included, populated with default values deduced from schema.
 
-GET always returns either an empty document or stored
-document. The document always has a default section included,
-populated with default values deduced from schema.
+`POST` expects to receive a complete configuration document. The document must be valid, each section of the document must pass the validation against `system_config.$config_name` schema. Before saving the difference with provided default is calculated, and then the difference with schema defaults is calculated, and then the result of this is stored, meaning if section value is equal to default section value it will not be stored to the document. The actual (stored) values are then returned as POST results.
 
-POST expects to receive a complete configuration document.
-The document must be valid, each section of the document
-must pass the validation against system_config.$config_name
-schema. Before saving the difference with provided default
-is calculated, and then the difference with schema defaults
-is calculated, and then the result of this is stored, meaning
-if section value is equal to default section value it will
-not be stored to the document. The actual (stored) values
-are then returned as POST results.
+`PATCH` will merge provided changes with stored document, and then the resulting document is valid then the same store procedure is applied as in POST. The actual stored values are then returned as PATCH result.
 
-PATCH will merge provided changes with stored document,
-and then the resulting document is valid then the same
-store procedure is applied as in POST. The actual stored
-values are then returned as PATCH result.
+`DELETE` deletes the document (or wipes a section). Attempt to delete non-existing configuration object will generate an HTTP `404` error.
 
-DELETE deletes the document (or wipes a section). Attempt
-to delete non-existing configuration object will generate
-an HTTP 404 error.
+### Sections
 
-Sections
---------
+`GET` always returns either an empty document or stored values.
 
-GET always returns either an empty document or stored
-values.
+`POST` expects to receive a valid configuration document (against schema `system_config.$config_name`). If the document is valid, then a difference is calculated with configuration document default section, and then the difference is calculated with schema defaults, and then the result is stored. For default section only the difference from schema defaults are calculated. The actual (stored) values are returned as result of `POST` request.
 
-POST expects to receive a valid configuration document
-(against schema system_config.$config_name). If the
-document is valid, then a difference is calculated
-with configuration document default section, and
-then the difference is calculated with schema defaults,
-and then the result is stored. For default section
-only the difference from schema defaults are calculated.
-The actual (stored) values are returned as result of
-POST request.
+`PATCH` will merge provided changes with stored section, and then the result is validated against schema. If result is valid, then the same procedure is applied as in `POST`. The actual (stored) values are returned as `PATCH` result.
 
-PATCH will merge provided changes with stored section,
-and then the result is validated against schema. If
-result is valid, then the same procedure is applied
-as in POST. The actual (stored) values are returned
-as PATCH result.
-
-DELETE deletes the section specified. If configuration
-document doesn't exist (or secion in the document), then
-the request will fail with HTTP 404.
+`DELETE` deletes the section specified. If configuration document doesn't exist (or section in the document), then the request will fail with HTTP 404.
 
 Defaults
 --------
 
-In order to have effective configuration values one must
-provide `with_defaults=true` URI parameter for GET requests
-(either to get document or document section). With this
-parameter provided a configuration mergedown as described
-above is performed.
-
-#### About System Configs
-
-You must be `superduper_admin` to access this resource. Also make sure that the system_configs crossbar module has been enabled. `sup crossbar_maintenance start_module cb_system_configs`.
+In order to have effective configuration values one must provide `with_defaults=true` URI parameter for GET requests (either to get document or document section). With this parameter provided a configuration merge down as described above is performed.
 
 #### Schema
 
+Schema for system_config documents
 
 
-#### Fetch
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`$.+@.+^` | Node-specific settings - these take highest precedence | `object()` |   | `false` |  
+`$[a-zA-Z0-9.]+^` | Zone-specific settings - these are checked if a node-specific setting is not defined | `object()` |   | `false` |  
+`default` | default settings that apply to all nodes/zones if not defined | `object()` | `{}` | `false` |  
+
+
+
+## Fetch List of Configured System Configs Categories
 
 > GET /v2/system_configs
 
@@ -106,7 +64,8 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs
 ```
 
-request response:
+**Response**
+
 ```json
 {
   "next_start_key": "notification.ported",
@@ -168,11 +127,11 @@ request response:
   "node": "{NODE}",
   "request_id": "4b9bb77a555a0130d5d862964ba3c834",
   "status": "success",
-  "auth_token": {AUTH_TOKEN}
+  "auth_token": "{AUTH_TOKEN}"
 }
 ```
 
-#### Fetch
+## Fetch Specific Config Category Default Values
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -182,11 +141,8 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
 ```json
 {
     "data": {
@@ -205,7 +161,7 @@ response body:
 }
 ```
 
-#### Create
+## Create System Config Category
 
 > PUT /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -215,9 +171,9 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-See POST
+See [Update System Config Category](#update-system-config-category).
 
-#### Change
+## Update System Config Category
 
 > POST /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -227,7 +183,8 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-request body:
+**Example Request Body**
+
 ```json
 {
     "data": {
@@ -243,7 +200,8 @@ request body:
 }
 ```
 
-response body:
+**Response**
+
 ```json
 {
     "data": {
@@ -262,7 +220,7 @@ response body:
 }
 ```
 
-#### Patch
+## Patch
 
 > PATCH /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -272,7 +230,8 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-request body:
+**Example Request Body**
+
 ```json
 {
     "data": {
@@ -283,7 +242,8 @@ request body:
 }
 ```
 
-response body:
+**Response**
+
 ```json
 {
     "data": {
@@ -302,7 +262,7 @@ response body:
 }
 ```
 
-#### Fetch
+## Fetch Config Category with All Node Values and Default Values
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}?with_defaults=true
 
@@ -312,11 +272,8 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
 ```json
 {
     "data": {
@@ -339,7 +296,7 @@ response body:
 }
 ```
 
-#### Remove
+## Remove
 
 > DELETE /v2/system_configs/{SYSTEM_CONFIG_ID}
 
@@ -349,11 +306,8 @@ curl -v -X DELETE \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
 ```json
 {
     "data": {
@@ -372,7 +326,7 @@ response body:
 }
 ```
 
-#### Fetch
+## Fetch Specific Config Category For A Node
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -382,11 +336,8 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
 ```json
 {
     "data": {
@@ -401,7 +352,7 @@ response body:
 }
 ```
 
-#### Change
+## Change System Config Value For A NODE
 
 > POST /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -411,7 +362,8 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-request body:
+**Example Request Body**
+
 ```json
 {
     "data": {
@@ -421,7 +373,8 @@ request body:
 }
 ```
 
-response body:
+**Response**
+
 ```json
 {
     "data": {
@@ -438,7 +391,7 @@ response body:
 }
 ```
 
-#### Patch
+## Patch System Config Value For A NODE
 
 > PATCH /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -448,7 +401,8 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-request body:
+**Example Request Body**
+
 ```json
 {
     "data": {
@@ -457,7 +411,8 @@ request body:
 }
 ```
 
-response body:
+**Response**
+
 ```json
 {
     "data": {
@@ -474,7 +429,7 @@ response body:
 }
 ```
 
-#### Fetch with defaults
+## Fetch with defaults
 
 > GET /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -484,11 +439,8 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}?with_defaults=true
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
 ```json
 {
     "data": {
@@ -505,7 +457,7 @@ response body:
 }
 ```
 
-#### Remove
+## Remove
 
 > DELETE /v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 
@@ -515,11 +467,9 @@ curl -v -X DELETE \
     http://{SERVER}:8000/v2/system_configs/{SYSTEM_CONFIG_ID}/{NODE}
 ```
 
-request body:
-```json
-```
+**Response**
 
-response body:
+```json
 {
     "data": {
         "id": "sysconf\/node"
@@ -532,4 +482,4 @@ response body:
     "status": "success",
     "auth_token": "{AUTH_TOKEN}"
 }
-```json
+```

@@ -255,7 +255,7 @@ find_agent_call_ids(Call) ->
     Req = [{<<"Call-ID">>, amimulator_call:call_id(Call)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kapps_util:amqp_pool_collect(Req
+    case kz_amqp_worker:call_collect(Req
                                      ,fun kapi_acdc_agent:publish_stats_req/1
                                      ,500
                                      ) of

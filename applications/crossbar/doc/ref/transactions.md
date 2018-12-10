@@ -1,12 +1,12 @@
-### Transactions
+# Transactions
 
-#### About Transactions
+## About Transactions
 
-#### Schema
+## Schema
 
 
 
-#### Fetch
+## Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/transactions
 
@@ -16,53 +16,33 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions
 ```
 
-#### Fetch
+## Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/transactions/subscriptions
-
-```shell
-curl -v -X GET \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/subscriptions
-```
-
-#### Fetch
-
-> GET /v2/accounts/{ACCOUNT_ID}/transactions/monthly_recurring
+> GET /v2/accounts/{ACCOUNT_ID}/transactions/{TRANSACTION_ID}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/monthly_recurring
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/{TRANSACTION_ID}
 ```
 
-#### Remove
+## Create
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/transactions/debit
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/debit
-```
-
-#### Create
-
-> PUT /v2/accounts/{ACCOUNT_ID}/transactions/credit
+> PUT /v2/accounts/{ACCOUNT_ID}/transactions/sale
 
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/credit
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/sale
 ```
 
-#### Fetch
+## Create
 
-> GET /v2/accounts/{ACCOUNT_ID}/transactions/current_balance
+> PUT /v2/accounts/{ACCOUNT_ID}/transactions/refund
 
 ```shell
-curl -v -X GET \
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/current_balance
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/transactions/refund
 ```
 

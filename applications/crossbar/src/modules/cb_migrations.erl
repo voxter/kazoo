@@ -196,7 +196,7 @@ filter_account_resellers([], _Res, Acc) ->
 -spec get_resellers(list(), list()) -> list().
 get_resellers([H|T], Acc) ->
     Account = kz_json:get_value(<<"id">>, H),
-    case kz_services:is_reseller(Account) of
+    case kz_services_reseller:is_reseller(Account) of
         'true'  -> get_resellers(T, [Account|Acc]);
         'false' -> get_resellers(T, Acc)
     end;
@@ -265,10 +265,11 @@ maybe_create_migration_doc(Account) ->
 
 -spec create_migration_doc(binary()) -> 'ok'.
 create_migration_doc(Account) ->
-    Doc = kz_json:from_list(
-            [{<<"_id">>, ?MIGRATIONS_DOC}
-            ,{<<"pvt_created">>, kz_time:now_s()}
-            ,{<<"migrations_performed">>, []}
-            ]),
-    {'ok', _} = kz_datamgr:ensure_saved(Account, Doc),
+    Update = [{<<"pvt_created">>, kz_time:now_s()}
+             ,{<<"migrations_performed">>, []}
+             ],
+    UpdateOptions = [{'update', Update}
+                    ,{'ensure_saved', 'true'}
+                    ],
+    {'ok', _} = kz_datamgr:update_doc(Account, ?MIGRATIONS_DOC, UpdateOptions),
     lager:debug("created migration doc for account ~s", [Account]).

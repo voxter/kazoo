@@ -456,7 +456,7 @@ start_call_handlers(Node, JObj, #outbound_dial{loopback_b=LoopbackB, b_leg=CallI
     maybe_update_ecallmgr_node([LoopbackB, CallId]),
 
     _ = kz_util:spawn(fun ecallmgr_call_sup:start_event_process/2, [Node, CallId]),
-    {'ok', CtlPid} = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, 'undefined', CCVs, []),
+    {'ok', CtlPid} = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, 'undefined', CCVs),
 
     get_control_queue(CtlPid).
 

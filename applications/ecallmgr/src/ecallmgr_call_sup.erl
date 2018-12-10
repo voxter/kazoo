@@ -13,7 +13,7 @@
 
 -export([start_link/0]).
 -export([start_control_process/3
-        ,start_control_process/6
+        ,start_control_process/5
         ]).
 -export([start_event_process/2]).
 -export([init/1]).
@@ -40,17 +40,16 @@ start_event_process(Node, UUID) ->
 
 -spec start_control_process(atom(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 start_control_process(Node, CallId, FetchId) ->
-    start_control_process(Node, CallId, FetchId, 'undefined', kz_json:new(), []).
+    start_control_process(Node, CallId, FetchId, 'undefined', kz_json:new()).
 
--spec start_control_process(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_json:object(), kz_term:proplist()) ->
+-spec start_control_process(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_json:object()) ->
                                    kz_types:sup_startchild_ret().
-start_control_process(Node, CallId, FetchId, ControllerQ, CCVs, Options) ->
+start_control_process(Node, CallId, FetchId, ControllerQ, CCVs) ->
     ecallmgr_call_control_sup:start_proc([Node
                                          ,CallId
                                          ,FetchId
                                          ,ControllerQ
                                          ,CCVs
-                                         ,Options
                                          ]).
 
 %%==============================================================================

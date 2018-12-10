@@ -42,7 +42,7 @@
                ,request_params :: kz_term:api_object()
                ,response_code :: kz_term:api_ne_binary()
                ,response_headers :: kz_term:binaries() | kz_term:api_ne_binary()
-               ,response_body = <<>> :: binary()
+               ,response_body = [] :: iodata()
                ,response_content_type :: kz_term:api_binary()
                ,response_pid :: kz_term:api_pid() %% pid of the processing of the response
                ,response_event_handlers = [] :: kz_term:pids()
@@ -109,15 +109,16 @@ maybe_relay_event(JObj, Props) ->
                 [kapps_call_command:relay_event(P, JObj) || P <- Pids];
             _ -> 'ok'
         end,
-    relay_cdr_event(JObj, Props).
+    handle_call_event(JObj, Props).
 
--spec relay_cdr_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
-relay_cdr_event(JObj, Props) ->
+-spec handle_call_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_call_event(JObj, Props) ->
     case kz_util:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
             Pid = props:get_value('server', Props),
             gen_listener:cast(Pid, {'cdr', JObj});
-        _ -> 'ok'
+        {_, _Evt} ->
+            lager:info("ignoring event ~s", [_Evt])
     end.
 
 %%%=============================================================================
@@ -192,7 +193,7 @@ handle_cast({'request', Uri, Method, Params}
             ,State#state{request_id=ReqId
                         ,request_params=Params
                         ,response_content_type = <<>>
-                        ,response_body = <<>>
+                        ,response_body = []
                         ,method=Method
                         ,voice_uri=Uri
                         ,call=Call2
@@ -282,7 +283,7 @@ handle_info({'http', {ReqId, {'error', Error}}}
            ,#state{request_id=ReqId
                   ,response_body=_RespBody
                   }=State) ->
-    lager:info("recv error ~p : collected: ~s", [Error, _RespBody]),
+    lager:info("recv error ~p : collected: ~s", [Error, lists:reverse(_RespBody)]),
     {'noreply', State};
 
 handle_info({'http', {ReqId, {'error', 'req_timedout'}}}
@@ -301,29 +302,34 @@ handle_info({'http', {ReqId, 'stream', Chunk}}
            ,#state{request_id=ReqId
                   ,response_body=RespBody
                   }=State) ->
-    lager:info("adding response chunk: '~s'", [Chunk]),
-    {'noreply', State#state{response_body = <<RespBody/binary, Chunk/binary>>}};
+    lager:info("adding response chunk: '~ts'", [Chunk]),
+
+    {'noreply', State#state{response_body = [Chunk | RespBody]}};
 
 handle_info({'http', {ReqId, 'stream_end', FinalHeaders}}
            ,#state{request_id=ReqId
-                  ,response_body=RespBody
+                  ,response_body=RevBody
                   ,call=Call
                   ,debug=Debug
                   ,requester_queue=RequesterQ
                   }=State) ->
     RespHeaders = normalize_resp_headers(FinalHeaders),
-    maybe_debug_resp(Debug, Call, <<"200">>, RespHeaders, RespBody),
+    Body = unicode:characters_to_binary(lists:reverse(RevBody)),
+    maybe_debug_resp(Debug, Call, <<"200">>, RespHeaders, Body),
+
+    AMQPConsumer = kz_amqp_channel:consumer_pid(),
     HandleArgs = [RequesterQ
                  ,kzt_util:set_amqp_listener(self(), Call)
                  ,props:get_value(<<"content-type">>, RespHeaders)
-                 ,RespBody
+                 ,Body
+                 ,AMQPConsumer
                  ],
-    {Pid, Ref} = kz_util:spawn_monitor(fun handle_resp/4, HandleArgs),
+    {Pid, Ref} = kz_util:spawn_monitor(fun handle_resp/5, HandleArgs),
     lager:debug("processing resp with ~p(~p)", [Pid, Ref]),
     {'noreply'
     ,State#state{request_id = 'undefined'
                 ,request_params = kz_json:new()
-                ,response_body = <<>>
+                ,response_body = []
                 ,response_content_type = <<>>
                 ,response_pid = Pid
                 ,response_ref = Ref
@@ -358,6 +364,7 @@ handle_info({'DOWN', Ref, 'process', Pid, 'normal'}
            ,#state{response_pid=Pid
                   ,response_ref=Ref
                   }=State) ->
+    lager:debug("response processing finished for ~p(~p)", [Pid, Ref]),
     {'noreply', State#state{response_pid='undefined'}, 'hibernate'};
 handle_info({'DOWN', Ref, 'process', Pid, Reason}
            ,#state{response_pid=Pid
@@ -463,8 +470,10 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
 normalize_resp_headers(Headers) ->
     [{kz_term:to_lower_binary(K), kz_term:to_binary(V)} || {K, V} <- Headers].
 
--spec handle_resp(kz_term:api_binary(), kapps_call:call(), kz_term:ne_binary(), binary()) -> 'ok'.
-handle_resp(RequesterQ, Call, CT, <<_/binary>> = RespBody) ->
+-spec handle_resp(kz_term:api_binary(), kapps_call:call(), kz_term:ne_binary(), binary(), pid()) -> 'ok'.
+handle_resp(RequesterQ, Call, CT, <<_/binary>> = RespBody, AMQPConsumer) ->
+    _ = kz_amqp_channel:consumer_pid(AMQPConsumer),
+
     kz_util:put_callid(kapps_call:call_id(Call)),
     Srv = kzt_util:get_amqp_listener(Call),
 
@@ -489,10 +498,10 @@ process_resp(_, Call, _, <<>>) ->
     lager:debug("no response body, finishing up"),
     {'stop', Call};
 process_resp(RequesterQ, Call, Hdrs, RespBody) when is_list(Hdrs) ->
-    handle_resp(RequesterQ, Call, props:get_value(<<"content-type">>, Hdrs), RespBody);
+    handle_resp(RequesterQ, Call, props:get_value(<<"content-type">>, Hdrs), RespBody, kz_amqp_channel:consumer_pid());
 process_resp(RequesterQ, Call, CT, RespBody) ->
     lager:info("finding translator for content type ~s", [CT]),
-    try kzt_translator:exec(Call, RespBody, CT) of
+    try kzt_translator:exec(RequesterQ, Call, CT, RespBody) of
         {'stop', _Call1}=Stop ->
             lager:debug("translator says stop"),
             Stop;
@@ -604,25 +613,31 @@ store_debug(Call, Doc) when is_list(Doc) ->
     store_debug(Call, kz_json:from_list(Doc));
 store_debug(Call, DebugJObj) ->
     AccountModDb = kz_util:format_account_mod_id(kapps_call:account_id(Call)),
-    JObj =
-        kz_doc:update_pvt_parameters(kz_json:set_values([{<<"call_id">>, kapps_call:call_id(Call)}
-                                                        ,{<<"iteration">>, kzt_util:iteration(Call)}
-                                                        ]
-                                                       ,DebugJObj
-                                                       )
-                                    ,AccountModDb
-                                    ,[{'account_id', kapps_call:account_id(Call)}
-                                     ,{'account_db', AccountModDb}
-                                     ,{'type', <<"pivot_debug">>}
-                                     ,{'now', kz_time:now_s()}
-                                     ]
-                                    ),
+    JObj = debug_doc(Call, DebugJObj, AccountModDb),
+
     case kazoo_modb:save_doc(AccountModDb, JObj) of
         {'ok', _Saved} ->
             lager:debug("saved debug doc: ~p", [_Saved]);
         {'error', _E} ->
             lager:debug("failed to save debug doc: ~p", [_E])
     end.
+
+-spec debug_doc(kapps_call:call(), kz_json:object(), kz_term:ne_binary()) ->
+                       kz_json:object().
+debug_doc(Call, DebugJObj, AccountModDb) ->
+    WithCallJObj = kz_json:set_values([{<<"call_id">>, kapps_call:call_id(Call)}
+                                      ,{<<"iteration">>, kzt_util:iteration(Call)}
+                                      ]
+                                     ,DebugJObj
+                                     ),
+    kz_doc:update_pvt_parameters(WithCallJObj
+                                ,AccountModDb
+                                ,[{'account_id', kapps_call:account_id(Call)}
+                                 ,{'account_db', AccountModDb}
+                                 ,{'type', <<"pivot_debug">>}
+                                 ,{'now', kz_time:now_s()}
+                                 ]
+                                ).
 
 -spec fix_value(number() | list()) -> number() | kz_term:ne_binary().
 fix_value(N) when is_number(N) -> N;

@@ -1,23 +1,24 @@
-
-# Blackhole *Realtime HTTP Websocket Events*
+# Blackhole - Real-time HTTP Websocket Events
 
 ## Setting up
 
 1. Find your Account ID (e.g. `4b31dd1d32ce6d249897c06332375d65`)
-1. [Obtain an Auth Token](https://2600hz.atlassian.net/wiki/display/APIs/Generating+an+Authentication+Token) (e.g. `7b70f69a2a4976d80bfa0382894d1553`)
-1. Copy the **Example Client** code into an HTML file (named e.g. `kazoo_example_ws_client.html`)
+2. [Obtain an Auth Token](../../crossbar/doc/how_to_authenticate.md)
+3. Copy the **Example Client** code into an HTML file (named e.g. `kazoo_example_ws_client.html`)
     1. Replace `{BLACKHOLE_IP_ADDRESS}` with your Kazoo server's IP address
-    1. Replace default `5555` with the port number you can configure in **sysconfig > blackhole > port** (integer)
-    1. Replace the `{ACCOUNT_ID}` and `{AUTH_TOKEN}` fields with your data. `{REQUEST_ID}` is optional, a self generated guid which is present in the event message. You can just use same as `{ACCOUNT_ID}` or any random number.
-1. You're all set!
+    2. Replace default `5555` with the port number you can configure in **sysconfig > blackhole > port** (integer)
+    3. Replace the `{ACCOUNT_ID}` and `{AUTH_TOKEN}` fields with your data. `{REQUEST_ID}` is optional, a self generated GUID which is present in the event message. You can just use same as `{ACCOUNT_ID}` or any random number.
+4. You're all set!
 
-Now access `kazoo_example_ws_client.html` with your favourite Web browser and open the Javascript console.
+Now access `kazoo_example_ws_client.html` with your favorite Web browser and open the JavaScript console.
+
 * You should be able to see whether your client connected to Kazoo
 * Make a call: the events your client is listening for will appear in the console!
 
-From here, you can write your own Javascript callbacks, triggered everytime a registered event is sent from Kazoo.
+From here, you can write your own JavaScript callbacks, triggered every time a registered event is sent from Kazoo.
 
 ## Example Client
+
 ```html
 <html>
   <head>
@@ -47,7 +48,7 @@ From here, you can write your own Javascript callbacks, triggered everytime a re
                 request_id: '{REQUEST_ID}',
                 data: {
                     account_id: '{ACCOUNT_ID}',
-                    bindings: ['call.CHANNEL_ANSWER.*', 'call.CHANNEL_DESTROY.*']
+                    binding: 'conference.event.{CONFERENCE_ID}.*'
                 }
             });
 
@@ -57,7 +58,7 @@ From here, you can write your own Javascript callbacks, triggered everytime a re
                 request_id: '{REQUEST_ID}',
                 data: {
                     account_id: '{ACCOUNT_ID}',
-                    bindings: ['doc_created.*.user.*', 'doc_edited.*.user.*']
+                    binding: 'doc_created.*.user.*'
                 }
             });
         }
@@ -75,9 +76,10 @@ From here, you can write your own Javascript callbacks, triggered everytime a re
 
 You can add one or multiple bindings by using:
 
-`note: binding will be picked first over bindings in case both are added`
+!!! note
+    Binding will be picked first over bindings in case both are added
 
-``` javascript
+```javascript
 // For one use: binding
 send({
     action: 'subscribe',
@@ -103,7 +105,7 @@ send({
 
 You can also add a friendly name and some metadata to any subscribe command.
 
-``` javascript
+```javascript
 send({
     action: 'subscribe',
     auth_token: '{AUTH_TOKEN}',
@@ -119,11 +121,11 @@ send({
 });
 ```
 
-
-To remove unnecessary bindings use 'unsubscribe' event:
+To remove unnecessary bindings use `unsubscribe` event:
 
 For particular subscription:
-```
+
+```javascript
 send({
     action: 'unsubscribe',
     auth_token: '{AUTH_TOKEN}',
@@ -136,13 +138,13 @@ send({
 ```
 
 For all previous subscriptions:
-```
+
+```javascript
 send({
     action: 'unsubscribe',
     auth_token: '{AUTH_TOKEN}'
 });
 ```
-
 
 ### The EventJObj data structure
 
@@ -151,6 +153,7 @@ It will send an event to you through Websockets if there is an active binding th
 
 Events are plain AMQP event messages.
 Here are a few complete `call.*.*` JSON events:
+
 ```json
 {
     "name": "CHANNEL_CREATE",

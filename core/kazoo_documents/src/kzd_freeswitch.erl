@@ -19,6 +19,7 @@
         ,ccvs/1, ccv/2, ccv/3
         ,channel_authorized/1
         ,conference_name/1, conference_profile_name/1, conference_uuid/1
+        ,context/1, context/2
         ,dialed_number/1
         ,disposition/1
         ,event_name/1
@@ -28,6 +29,7 @@
         ,hangup_code/1, hangup_cause/1
         ,hostname/1, hostname/2
         ,hunt_destination_number/1
+        ,hunt_context/1, hunt_context/2
         ,is_channel_recovering/1, is_channel_recovering/2
         ,is_consuming_global_resource/1, is_consuming_global_resource/2
         ,is_loopback/1, loopback_other_leg/1, loopback_leg_name/1
@@ -170,9 +172,23 @@ channel_authorized(Props) ->
 outbound_flags(Props) ->
     ccv(Props, <<"Outbound-Flags">>).
 
--spec hunt_destination_number(data()) -> kz_term:api_binary().
+-spec hunt_destination_number(data()) -> kz_term:api_ne_binary().
 hunt_destination_number(Props) ->
-    props:get_value(<<"Hunt-Destination-Number">>, Props).
+    case props:get_value(<<"Hunt-Destination-Number">>, Props) of
+        'undefined' -> sip_req_user(Props);
+        HuntDestinationNumber -> HuntDestinationNumber
+    end.
+
+-spec sip_req_user(data()) -> kz_term:api_ne_binary().
+sip_req_user(Props) ->
+    case props:get_value(<<"variable_sip_req_uri">>, Props) of
+        'undefined' -> 'undefined';
+        ReqURI ->
+            case binary:split(ReqURI, <<"@">>) of
+                [Number, _Realm] -> Number;
+                _Split -> 'undefined'
+            end
+    end.
 
 -spec is_channel_recovering(data()) -> boolean().
 is_channel_recovering(Props) ->
@@ -471,6 +487,22 @@ conference_profile_name(Props) ->
 -spec conference_uuid(data()) -> kz_term:api_ne_binary().
 conference_uuid(Props) ->
     props:get_ne_binary_value(<<"Conference-Unique-ID">>, Props).
+
+-spec context(data()) -> kz_term:api_ne_binary().
+context(Props) ->
+    context(Props, 'undefined').
+
+-spec context(data(), Default) -> kz_term:ne_binary() | Default.
+context(Props, Default) ->
+    props:get_ne_binary_value(<<"Caller-Context">>, Props, Default).
+
+-spec hunt_context(data()) -> kz_term:api_ne_binary().
+hunt_context(Props) ->
+    hunt_context(Props, 'undefined').
+
+-spec hunt_context(data(), Default) -> kz_term:ne_binary() | Default.
+hunt_context(Props, Default) ->
+    props:get_ne_binary_value(<<"Hunt-Context">>, Props, Default).
 
 -spec join_time(data()) -> kz_time:gregorian_seconds().
 join_time(Props) ->

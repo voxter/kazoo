@@ -13,7 +13,6 @@
 -export([init/0
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
         ,resource_exists/0, resource_exists/1, resource_exists/2
-        ,billing/1
         ,authenticate/1
         ,authorize/1
         ,validate/1, validate/2, validate/3
@@ -36,7 +35,6 @@
 
 -define(KEY_MAC_ADDRESS, <<"mac_address">>).
 
-
 %%%=============================================================================
 %%% API
 %%%=============================================================================
@@ -45,19 +43,17 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec init() -> ok.
+-spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"v1_resource.allowed_methods.devices">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"v1_resource.resource_exists.devices">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"v1_resource.authenticate">>, ?MODULE, 'authenticate'),
     _ = crossbar_bindings:bind(<<"v1_resource.authorize">>, ?MODULE, 'authorize'),
-    _ = crossbar_bindings:bind(<<"v1_resource.billing">>, ?MODULE, 'billing'),
     _ = crossbar_bindings:bind(<<"v1_resource.validate.devices">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"v1_resource.execute.put.devices">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"v1_resource.execute.post.devices">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"v1_resource.execute.delete.devices">>, ?MODULE, 'delete'),
-    _ = crossbar_bindings:bind(<<"v1_resource.finish_request.*.devices">>, 'crossbar_services', 'reconcile'),
-    ok.
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc This function determines the verbs that are appropriate for the
@@ -95,24 +91,6 @@ resource_exists(_) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true'.
-
-%%------------------------------------------------------------------------------
-%% @doc Ensure we will be able to bill for devices
-%% @end
-%%------------------------------------------------------------------------------
--spec billing(cb_context:context()) -> cb_context:context().
-billing(Context) ->
-    process_billing(Context, cb_context:req_nouns(Context), cb_context:req_verb(Context)).
-
-process_billing(Context, [{<<"devices">>, _}|_], ?HTTP_GET) -> Context;
-process_billing(Context, [{<<"devices">>, _}|_], _Verb) ->
-    try kz_services:allow_updates(cb_context:account_id(Context)) of
-        'true' -> Context
-    catch
-        'throw':{Error, Reason} ->
-            crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
-    end;
-process_billing(Context, _Nouns, _Verb) -> Context.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -508,10 +486,10 @@ lookup_regs(AccountRealm) ->
           ,{<<"Fields">>, [<<"Authorizing-ID">>]}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kapps_util:amqp_pool_collect(Req
-                                     ,fun kapi_registration:publish_query_req/1
-                                     ,'ecallmgr'
-                                     )
+    case kz_amqp_worker:call_collect(Req
+                                    ,fun kapi_registration:publish_query_req/1
+                                    ,'ecallmgr'
+                                    )
     of
         {'error', _E} ->
             lager:debug("error getting reg: ~p", [_E]),
@@ -597,12 +575,23 @@ maybe_aggregate_device(DeviceId, Context, 'success') ->
         'false' ->
             maybe_remove_aggregate(DeviceId, Context);
         'true' ->
-            lager:debug("adding device to the sip auth aggregate"),
-            {'ok', _} = kz_datamgr:ensure_saved(?KZ_SIP_DB, kz_doc:delete_revision(cb_context:doc(Context))),
-            kapps_util:amqp_pool_send([], fun(_) -> kapi_switch:publish_reload_acls() end),
+            aggregate_device(cb_context:doc(Context)),
+            _ = kz_amqp_worker:cast([], fun(_) -> kapi_switch:publish_reload_acls() end),
             'true'
     end;
 maybe_aggregate_device(_, _, _) -> 'false'.
+
+-spec aggregate_device(kz_json:object()) -> 'ok'.
+aggregate_device(Device) ->
+    lager:debug("adding device to the sip auth aggregate"),
+    Doc = kz_doc:delete_revision(Device),
+    Update = kz_json:to_proplist(kz_json:flatten(Doc)),
+    UpdateOptions = [{'update', Update}
+                    ,{'create', []}
+                    ,{'ensure_saved', 'true'}
+                    ],
+    {'ok', _} = kz_datamgr:update_doc(?KZ_SIP_DB, kz_doc:id(Device), UpdateOptions),
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -616,10 +605,9 @@ maybe_remove_aggregate(DeviceId, Context) ->
 -spec maybe_remove_aggregate(kz_term:api_binary(), cb_context:context(), crossbar_status()) -> boolean().
 maybe_remove_aggregate('undefined', _Context, _RespStatus) -> 'false';
 maybe_remove_aggregate(DeviceId, _Context, 'success') ->
-    case kz_datamgr:open_doc(?KZ_SIP_DB, DeviceId) of
-        {'ok', JObj} ->
-            _ = kz_datamgr:del_doc(?KZ_SIP_DB, JObj),
-            kapps_util:amqp_pool_send([], fun(_) -> kapi_switch:publish_reload_acls() end),
+    case kz_datamgr:del_doc(?KZ_SIP_DB, DeviceId) of
+        {'ok', _JObj} ->
+            _ = kz_amqp_worker:cast([], fun(_) -> kapi_switch:publish_reload_acls() end),
             'true';
         {'error', 'not_found'} -> 'false'
     end;

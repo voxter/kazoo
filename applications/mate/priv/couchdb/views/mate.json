@@ -1,5 +1,12 @@
 {
     "_id": "_design/mate",
+    "kazoo": {
+        "view_map": [
+            {
+                "database": "accounts"
+            }
+        ]
+    },
     "language": "javascript",
     "views": {
         "listing_by_mattermost_team_id": {

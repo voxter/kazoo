@@ -187,7 +187,8 @@ request_patterns(Context) ->
 validate_request(CallflowId, Context) ->
     case request_numbers(Context) of
         [] -> validate_patterns(CallflowId, Context);
-        OriginalNumbers when is_list(OriginalNumbers) ->
+        OriginalNumbers
+          when is_list(OriginalNumbers) ->
             validate_callflow_schema(CallflowId, normalize_numbers(Context, OriginalNumbers));
         OriginalNumbers ->
             Msg = kz_json:from_list(
@@ -439,7 +440,7 @@ filter_callflow_list(CallflowId, JObjs) ->
     ].
 
 %%------------------------------------------------------------------------------
-%% @doc collect addional informat about the objects referenced in the flow
+%% @doc collect additional information about the objects referenced in the flow
 %% @end
 %%------------------------------------------------------------------------------
 

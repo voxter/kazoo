@@ -12,14 +12,14 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `config` | Build an ad-hoc conference using the conferences JSON schema | `object()` |   | `false` |  
 `id` | Kazoo ID of the conference | `string(32)` |   | `false` |  
-`moderator` | Is the caller entering the conference as a moderator | `boolean()` | `false` | `false` |  
-`play_entry_tone` | Should the Entry Tone be played | `boolean() | string()` | `true` | `false` |  
-`play_exit_tone` | Should the Exit Tone be played | `boolean() | string()` | `true` | `false` |  
+`moderator` | Is the caller entering the conference as a moderator | `boolean()` |   | `false` |  
+`play_entry_tone` | Should the Entry Tone be played | `boolean() | string()` |   | `false` |  
+`play_exit_tone` | Should the Exit Tone be played | `boolean() | string()` |   | `false` |  
 `welcome_prompt.media_id` | Media to play, either Kazoo media ID or URL | `string()` |   | `false` |  
 `welcome_prompt.play` | Should the Welcome Prompt be played | `boolean()` | `true` | `false` |  
 `welcome_prompt` | Describes how the caller is greeted on entering a conference | `object()` |   | `false` |  
 
-##### conferences
+### conferences
 
 Schema for conferences
 
@@ -37,8 +37,8 @@ Key | Description | Type | Default | Required | Support Level
 `language` | Prompt language to play in the conference | `string()` |   | `false` |  
 `max_members_media` | Media to play when the conference is full | `string()` |   | `false` |  
 `max_participants` | The maximum number of participants that can join | `integer()` |   | `false` |  
-`member.join_deaf` | Determines if a member will join deaf | `boolean()` | `false` | `false` |  
-`member.join_muted` | Determines if a member will join muted | `boolean()` | `true` | `false` |  
+`member.join_deaf` | Determines if a member will join deaf | `boolean()` | `false` | `false` | `supported`
+`member.join_muted` | Determines if a member will join muted | `boolean()` | `true` | `false` | `supported`
 `member.numbers.[]` |   | `string()` |   | `false` |  
 `member.numbers` | Defines the conference (call in) number(s) for members | `array(string())` | `[]` | `false` |  
 `member.pins.[]` |   | `string()` |   | `false` |  
@@ -53,10 +53,10 @@ Key | Description | Type | Default | Required | Support Level
 `moderator.pins` | Defines the pin number(s) for moderators | `array(string())` | `[]` | `false` |  
 `moderator` | Defines the discovery (call in) properties for a moderator | `object()` | `{}` | `false` |  
 `moderator_controls` | profile on the switch for controlling the conference as a moderator | `string()` |   | `false` |  
-`name` | A friendly name for the conference | `string(1..128)` |   | `false` |  
-`owner_id` | The user ID who manages this conference | `string(32)` |   | `false` |  
-`play_entry_tone` | Whether to play an entry tone, or the entry tone to play | `boolean() | string()` |   | `false` |  
-`play_exit_tone` | Whether to play an exit tone, or the exit tone to play | `boolean() | string()` |   | `false` |  
+`name` | A friendly name for the conference | `string(1..128)` |   | `false` | `supported`
+`owner_id` | The user ID who manages this conference | `string(32)` |   | `false` | `supported`
+`play_entry_tone` | Whether to play an entry tone, or the entry tone to play | `boolean() | string()` |   | `false` | `supported`
+`play_exit_tone` | Whether to play an exit tone, or the exit tone to play | `boolean() | string()` |   | `false` | `supported`
 `play_name` | Do we need to announce new conference members? | `boolean()` | `false` | `false` |  
 `play_welcome` | Whether to play the welcome prompt | `boolean()` |   | `false` |  
 `profile` | Profile configuration | `object()` |   | `false` |  
@@ -65,7 +65,7 @@ Key | Description | Type | Default | Required | Support Level
 `reuse_pronounced_name` | Force re-using previous name recordings for known users calling into the conference | `boolean()` |   | `false` |  
 `wait_for_moderator` | should members wait for a moderator before joining the conference | `boolean()` |   | `false` |  
 
-##### conferences.profile
+### conferences.profile
 
 Schema for conference profiles
 

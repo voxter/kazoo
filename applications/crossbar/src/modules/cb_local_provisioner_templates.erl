@@ -51,7 +51,7 @@
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec init() -> ok.
+-spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.content_types_provided.local_provisioner_templates">>, ?MODULE, 'content_types_provided'),
     _ = crossbar_bindings:bind(<<"*.content_types_accepted.local_provisioner_templates">>, ?MODULE, 'content_types_accepted'),
@@ -61,7 +61,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.local_provisioner_templates">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.local_provisioner_templates">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.local_provisioner_templates">>, ?MODULE, 'delete'),
-    ok.
+    'ok'.
 
 %%------------------------------------------------------------------------------
 %% @doc Add content types provided by this module
@@ -80,7 +80,7 @@ content_types_provided_for_provisioner(Context, DocId, ?IMAGE_REQ, ?HTTP_GET) ->
         {'ok', JObj} ->
             CT = kz_doc:attachment_content_type(JObj, ?IMAGE_REQ, <<"application/octet-stream">>),
             [Type, SubType] = binary:split(CT, <<"/">>),
-            lager:debug("found attachement of content type: ~s/~s~n", [Type, SubType]),
+            lager:debug("found attachment of content type: ~s/~s~n", [Type, SubType]),
             cb_context:set_content_types_provided(Context, [{'to_binary', [{Type, SubType}]}])
     end;
 content_types_provided_for_provisioner(Context, _, _, _) ->

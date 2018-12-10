@@ -4,15 +4,12 @@
 
 #### Schema
 
-Validator for the acdc_wait_time callflow's data object
+Validator for the acdc_wait_time callflow data object
 
 
 
-Key | Description | Type | Default | Required | Support Level
---- | ----------- | ---- | ------- | -------- | -------------
-`id` | Queue ID | `string()` |   | `false` |  
-`var` | Custom KV whose value to use instead of "id" | `string()` |   | `false` |  
-`window` | Window over which average wait time is calculated (in seconds) | `integer()` |   | `false` |  
-
-
-
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`id` | Queue ID | `string()` |   | `false`
+`var` | Custom KV whose value to use instead of "id" | `string()` |   | `false`
+`window` | Window over which average wait time is calculated (in seconds) | `integer()` |   | `false`

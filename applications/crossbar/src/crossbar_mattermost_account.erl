@@ -138,8 +138,11 @@ ensure_team_exists(Context, OnSuccess, 'undefined') ->
     case mattermost_authed_req('post', "/v4/teams", JObj) of
         {'ok', 201, _, EncodedResp} ->
             TeamId = kz_json:get_value(<<"id">>, kz_json:decode(EncodedResp)),
-            AccountUpdater = fun(Doc) -> kz_json:set_value(?MATTERMOST_ID_KEY, TeamId, Doc) end,
-            case kz_util:account_update(AccountId, AccountUpdater) of
+            AccountDoc = kz_json:set_value(?MATTERMOST_ID_KEY
+                                          ,TeamId
+                                          ,cb_context:account_doc(Context)
+                                          ),
+            case kzd_accounts:save(AccountDoc) of
                 {'ok', _} ->
                     ensure_team_exists(Context, OnSuccess, TeamId);
                 _Err ->

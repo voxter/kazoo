@@ -368,7 +368,7 @@ handle_event(_JObj, #state{uuid=UUID}) ->
 %%------------------------------------------------------------------------------
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{control_pid=CtrlPid}) when is_pid(CtrlPid) ->
-    lager:debug("stop abandoned call controll process ~p", [CtrlPid]),
+    lager:debug("stop abandoned call control process ~p", [CtrlPid]),
     ecallmgr_call_control:stop(CtrlPid),
     lager:debug("originate termination: ~p", [_Reason]);
 terminate(_Reason, _State) ->
@@ -772,8 +772,7 @@ start_control_process(#state{originate_req=JObj
                             ,fetch_id=FetchId
                             ,control_pid='undefined'
                             }=State) ->
-    Options = [{'no_short_lived_protection', 'true'}],
-    case ecallmgr_call_sup:start_control_process(Node, Id, FetchId, ControllerQ, kz_json:new(), Options) of
+    case ecallmgr_call_sup:start_control_process(Node, Id, FetchId, ControllerQ, kz_json:new()) of
         {'ok', CtrlPid} when is_pid(CtrlPid) ->
             _ = maybe_send_originate_uuid(UUID, CtrlPid, State),
             kz_cache:store_local(?ECALLMGR_UTIL_CACHE, {Id, 'start_listener'}, 'true'),

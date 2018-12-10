@@ -8,6 +8,7 @@
 -behaviour(application).
 
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 
 -export([start/2, stop/1]).
 
@@ -17,7 +18,11 @@
 %%------------------------------------------------------------------------------
 -spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_Type, _Args) ->
-    kazoo_media_sup:start_link().
+    Ret = kazoo_media_sup:start_link(),
+    kapps_maintenance:bind_and_register_views('kazoo_media', 'kazoo_media_maintenance', 'register_views'),
+    kapps_maintenance:bind('migrate', 'kazoo_media_maintenance', 'migrate'),
+    kazoo_media_maintenance:refresh(),
+    Ret.
 
 %%------------------------------------------------------------------------------
 %% @doc Implement the application stop behaviour.
@@ -26,4 +31,6 @@ start(_Type, _Args) ->
 -spec stop(any()) -> any().
 stop(_State) ->
     _ = kz_media_proxy:stop(),
+    kapps_maintenance:unbind('migrate', 'kazoo_media_maintenance', 'migrate'),
+    kapps_maintenance:unbind('register_views', 'kazoo_media_maintenance', 'register_views'),
     'ok'.

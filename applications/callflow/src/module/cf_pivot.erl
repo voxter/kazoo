@@ -81,11 +81,14 @@ wait_for_pivot(Data, Call) ->
         {'ok', JObj} ->
             case kz_util:get_event_type(JObj) of
                 {<<"call_event">>,<<"CHANNEL_DESTROY">>} ->
-                    lager:debug("CHANNEL_DESTROY received stoping call"),
+                    lager:debug("CHANNEL_DESTROY received stooping call"),
                     cf_exe:stop(Call);
                 {<<"pivot">>,<<"failed">>} ->
                     lager:warning("pivot failed failing back to next callflow action"),
                     cf_exe:continue(Call);
+                {<<"pivot">>,<<"processing">>} ->
+                    lager:info("pivot is processing the response"),
+                    cf_exe:stop_on_destroy(Call);
                 _Other ->
                     wait_for_pivot(Data, Call)
             end;

@@ -121,11 +121,9 @@ pages:
     - 'applications/ecallmgr/doc/config.md'
   - 'Fax':
     - 'applications/fax/doc/README.md'
+    - 'Virtual Fax Machine (FaxBox)': 'applications/fax/doc/faxbox.md'
     - 'Postfix Settings': 'applications/fax/doc/postfix.md'
-    - 'SMTP Settings': 'applications/fax/doc/smtp.md'
     - 'HAProxy Settings': 'applications/fax/doc/haproxy.md'
-    - 'DNS Settings': 'applications/fax/doc/dns.md'
-    - 'Google Cloud Printer': 'applications/fax/doc/gcp.md'
     - 'Internet Fax for Office 2010': 'applications/fax/doc/user.md'
   - 'Frontier':
     - 'applications/frontier/doc/README.md'
@@ -244,7 +242,6 @@ pages:
   - 'Kazoo Services (and Plans)':
     - 'core/kazoo_services/doc/README.md'
     - 'core/kazoo_services/doc/lifecycle.md'
-    - 'core/kazoo_services/doc/ratedeck.md'
     - 'core/kazoo_services/doc/bookkeepers.md'
   - 'Kazoo PropEr':
     - 'core/kazoo_proper/doc/README.md'

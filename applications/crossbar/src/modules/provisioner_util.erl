@@ -223,7 +223,7 @@ do_full_provision_contact_list(AccountId) when is_binary(AccountId) ->
         {'ok', JObj} ->
             Routines = [fun kz_doc:public_fields/1
                        ,fun(J) ->
-                                ResellerId = kz_services:find_reseller_id(AccountId),
+                                ResellerId = kz_services_reseller:get_id(AccountId),
                                 kz_json:set_value(<<"provider_id">>, ResellerId, J)
                         end
                        ,fun(J) -> kz_json:delete_key(<<"available_apps">>, J) end
@@ -285,7 +285,7 @@ get_provision_defaults(Context) ->
     lager:debug("attempting to pull provisioning configs from ~s", [UrlString]),
     case kz_http:get(UrlString, ?BASE_HEADERS) of
         {'ok', 200, _, Response} ->
-            lager:debug("great success, accquired provisioning template"),
+            lager:debug("great success, acquired provisioning template"),
             JResp = kz_json:decode(Response),
             cb_context:setters(Context
                               ,[{fun cb_context:set_doc/2, kz_json:set_value(<<"template">>, JResp, JObj)}
@@ -369,7 +369,7 @@ handle_full_provisioner_mac_in_use_by_resp({'ok', 200, _, Body}) ->
 handle_full_provisioner_mac_in_use_by_resp(_) -> 'undefined'.
 
 %%------------------------------------------------------------------------------
-%% @doc post data to a provisiong server
+%% @doc post data to a provisioning server
 %% @end
 %%------------------------------------------------------------------------------
 -spec do_simple_provision(kz_term:ne_binary(), cb_context:context()) -> boolean().
@@ -396,7 +396,7 @@ do_simple_provision(MACAddress, Context) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc post data to a provisiong server
+%% @doc post data to a provisioning server
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_account(kz_term:ne_binary() | cb_context:context()) -> boolean().

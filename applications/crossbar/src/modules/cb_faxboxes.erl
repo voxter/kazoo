@@ -75,12 +75,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.faxboxes">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.faxboxes">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.patch.faxboxes">>, ?MODULE, 'patch'),
-    _ = crossbar_bindings:bind(<<"*.execute.delete.faxboxes">>, ?MODULE, 'delete'),
-    _ = crossbar_bindings:bind(<<"v2_resource.finish_request.*.faxboxes">>
-                              ,'crossbar_services'
-                              ,'reconcile'
-                              ),
-    'ok'.
+    crossbar_bindings:bind(<<"*.execute.delete.faxboxes">>, ?MODULE, 'delete').
 
 %%------------------------------------------------------------------------------
 %% @doc Given the path tokens related to this module, what HTTP methods are
@@ -130,7 +125,7 @@ validate_resource(Context, FaxboxId) ->
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /faxes mights load a list of fax objects
+%% /faxes might load a list of fax objects
 %% /faxes/123 might load the fax object 123
 %% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
@@ -210,7 +205,7 @@ validate_patch(Context) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc If the HTTP verib is PUT, execute the actual action, usually a db save.
+%% @doc If the HTTP verb is PUT, execute the actual action, usually a db save.
 %% @end
 %%------------------------------------------------------------------------------
 -spec put(cb_context:context()) -> cb_context:context().
@@ -248,7 +243,7 @@ patch(Context, Id) ->
     post(Context, Id).
 
 %%------------------------------------------------------------------------------
-%% @doc If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
@@ -554,11 +549,19 @@ oauth_req(Doc, OAuthRefresh, Context) ->
 -spec faxbox_doc_save(cb_context:context()) -> cb_context:context().
 faxbox_doc_save(Context) ->
     Ctx2 = crossbar_doc:save(Context),
-    Ctx3 = crossbar_doc:ensure_saved(
-             cb_context:set_doc(
-               cb_context:set_account_db(Ctx2, ?KZ_FAXES_DB),
-               kz_doc:delete_revision(cb_context:doc(Ctx2))
-              )),
+
+    ToSave = kz_json:set_values([{kz_doc:path_account_db(), ?KZ_FAXES_DB}
+                                ,{kz_doc:path_revision(), 'null'}
+                                ]
+                               ,cb_context:doc(Ctx2)
+                               ),
+
+    DocId = kz_doc:id(ToSave),
+    Ctx3 = crossbar_doc:update(cb_context:set_account_db(Ctx2, ?KZ_FAXES_DB)
+                              ,DocId
+                              ,kz_json:to_proplist(kz_json:flatten(ToSave))
+                              ),
+
     case cb_context:resp_status(Ctx3) of
         'success' -> Ctx2;
         _ -> Ctx3

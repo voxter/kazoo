@@ -95,7 +95,7 @@
         ,host_url/1, set_host_url/2
         ,set_pretty_print/2
         ,set_port/2
-        ,set_raw_path/2
+        ,raw_path/1, set_raw_path/2
         ,raw_qs/1, set_raw_qs/2
         ,profile_id/1 ,set_profile_id/2
 
@@ -145,11 +145,11 @@ new() -> #cb_context{}.
 is_context(#cb_context{}) -> 'true';
 is_context(_) -> 'false'.
 
--spec req_value(context(), kz_json:path()) -> kz_json:api_json_term().
+-spec req_value(context(), kz_json:get_key()) -> kz_json:api_json_term().
 req_value(#cb_context{}=Context, Key) ->
     req_value(Context, Key, 'undefined').
 
--spec req_value(context(), kz_json:path(), Default) -> kz_json:json_term() | Default.
+-spec req_value(context(), kz_json:get_key(), Default) -> kz_json:json_term() | Default.
 req_value(#cb_context{req_data=ReqData
                      ,query_json=QS
                      ,req_json=JObj
@@ -235,7 +235,7 @@ is_authenticated(#cb_context{}) -> 'true'.
 is_superduper_admin('undefined') -> 'false';
 is_superduper_admin(AccountId=?NE_BINARY) ->
     lager:debug("checking for superduper admin: ~s", [AccountId]),
-    case kz_util:is_system_admin(AccountId) of
+    case kzd_accounts:is_superduper_admin(AccountId) of
         'true' ->
             lager:debug("the requestor is a superduper admin"),
             'true';
@@ -668,6 +668,9 @@ host_url(#cb_context{host_url = Value}) -> Value.
 set_pretty_print(#cb_context{}=Context, Value) ->
     Context#cb_context{pretty_print = Value}.
 
+-spec raw_path(context()) -> binary().
+raw_path(#cb_context{raw_path = Value}) -> Value.
+
 -spec set_raw_path(context(), binary()) -> context().
 set_raw_path(#cb_context{}=Context, Value) ->
     Context#cb_context{raw_path = Value}.
@@ -788,6 +791,10 @@ response(#cb_context{resp_status='success'
                     ,resp_data=JObj
                     }) ->
     {'ok', JObj};
+response(#cb_context{resp_status='accepted'
+                    ,resp_data=JObj
+                    }) ->
+    {'ok', JObj};
 response(#cb_context{resp_error_code=Code
                     ,resp_error_msg=Msg
                     ,resp_data=DataJObj
@@ -848,7 +855,9 @@ validate_request_data(?NE_BINARY=SchemaId, Context, OnSuccess, OnFailure, Schema
     end;
 validate_request_data(SchemaJObj, Context, OnSuccess, OnFailure, _SchemaRequired) ->
     Strict = fetch(Context, 'schema_strict_validation', ?SHOULD_FAIL_ON_INVALID_DATA),
-    try kz_json_schema:validate(SchemaJObj, kz_doc:public_fields(req_data(Context))) of
+    SystemSL = kapps_config:get_binary(<<"crossbar">>, <<"stability_level">>),
+    Options = [{'extra_validator_options', [{'stability_level', SystemSL}]}],
+    try kz_json_schema:validate(SchemaJObj, kz_doc:public_fields(req_data(Context)), Options) of
         {'ok', JObj} ->
             lager:debug("validation passed"),
             validate_passed(set_req_data(Context, JObj), OnSuccess);
@@ -856,7 +865,7 @@ validate_request_data(SchemaJObj, Context, OnSuccess, OnFailure, _SchemaRequired
             lager:debug("validation errors when strictly validating"),
             validate_failed(SchemaJObj, Context, Errors, OnFailure);
         {'error', Errors} ->
-            lager:debug("validation errors but not stricly validating, trying to fix request"),
+            lager:debug("validation errors but not strictly validating, trying to fix request"),
             maybe_fix_js_types(SchemaJObj, Context, OnSuccess, OnFailure, Errors)
     catch
         'error':'function_clause' ->
@@ -940,6 +949,8 @@ find_schema(Schema=?NE_BINARY) ->
 -spec add_system_error(atom() | binary(), context()) -> context().
 add_system_error('too_many_requests', Context) ->
     build_system_error(429, 'too_many_requests', <<"too many requests">>, Context);
+add_system_error('no_payment_token', Context) ->
+    build_system_error(402, 'no_payment_token', <<"no payment method available">>, Context);
 add_system_error('no_credit', Context) ->
     build_system_error(402, 'no_credit', <<"not enough credit to perform action">>, Context);
 add_system_error('unspecified_fault', Context) ->
@@ -1044,7 +1055,7 @@ build_system_error(Code, Error, JObj, Context) ->
 %% @doc Add a validation error to the list of request errors.
 %% @end
 %%------------------------------------------------------------------------------
--spec add_validation_error(kz_json:path(), kz_term:ne_binary(), kz_term:ne_binary() | kz_json:object(), context()) ->
+-spec add_validation_error(kz_json:get_key(), kz_term:ne_binary(), kz_term:ne_binary() | kz_json:object(), context()) ->
                                   context().
 add_validation_error(<<_/binary>> = Property, Code, Message, Context) ->
     add_validation_error([Property], Code, Message, Context);
@@ -1150,5 +1161,5 @@ system_error(Context, Error) ->
                ,{<<"Account-ID">>, auth_account_id(Context)}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
-    kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1),
+    _ = kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1),
     add_system_error(Error, Context).

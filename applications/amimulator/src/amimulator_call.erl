@@ -275,7 +275,7 @@ control_queue(#call{call_id=CallId
     Req = props:filter_undefined([{<<"Call-ID">>, CallId}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    ReqResp = kapps_util:amqp_pool_request(Req
+    ReqResp = kz_amqp_worker:call(Req
                                           ,fun kapi_amimulator:publish_control_queue_req/1
                                           ,fun kapi_amimulator:control_queue_resp_v/1
                                           ),
@@ -286,7 +286,7 @@ control_queue(#call{call_id=CallId
                                                 %     'undefined' ->
                                                 %         {'error', 'not_found'};
                                                 %     OtherCallId ->
-                                                %         ReqResp2 = kapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
+                                                %         ReqResp2 = kz_amqp_worker:call(props:set_value(<<"Call-ID">>, OtherCallId, Req)
                                                 %                                                  ,fun kapi_amimulator:publish_control_queue_req/1
                                                 %                                                  ,fun kapi_amimulator:control_queue_resp_v/1
                                                 %                                                 ),

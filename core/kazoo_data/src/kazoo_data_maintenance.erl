@@ -25,16 +25,19 @@
 
 -export([load_doc_from_file/2]).
 
+-export([cache_strategy/0, set_cache_strategy/1]).
+
+-export([dataplan_reload/0, dataplan_reload/1]).
+
 -spec flush() -> 'ok'.
 flush() ->
     _ = kz_datamgr:flush_cache_docs(),
-    _ = kzs_plan:flush(),
+    _ = dataplan_reload(),
     io:format("flushed all data manager caches~n").
 
 -spec flush_data_plans() -> 'ok'.
 flush_data_plans() ->
-    _ = kzs_plan:flush(),
-    io:format("flushed all data plans~n").
+    dataplan_reload().
 
 -spec flush_docs() -> 'ok'.
 flush_docs() ->
@@ -114,3 +117,39 @@ load_doc_from_file(Db, FilePath) ->
             lager:debug("exception: ~p", [Reason]),
             {'error', Reason}
     end.
+
+-spec set_cache_strategy(kz_types:text()) -> 'ok'.
+set_cache_strategy(?NE_BINARY = StrategyBin) ->
+    set_cache_strategy(kz_term:to_atom(StrategyBin));
+set_cache_strategy(Strategy) when is_atom(Strategy) ->
+    application:set_env('kazoo_data', 'cache_strategy', Strategy),
+    cache_strategy().
+
+-spec cache_strategy() -> 'ok'.
+cache_strategy() ->
+    Strategy = kzs_cache:cache_strategy(),
+    io:format("             strategy: ~s~n", [Strategy]),
+    print_strategy_details(Strategy).
+
+-define(STRATEGY_DETAILS(Mitigate, Async)
+       ,io:format("  stampede mitigation: ~s~n          async store: ~s~n", [Mitigate, Async])
+       ).
+
+print_strategy_details('none') ->
+    ?STRATEGY_DETAILS('false', 'false');
+print_strategy_details('stampede') ->
+    ?STRATEGY_DETAILS('true', 'false');
+print_strategy_details('async') ->
+    ?STRATEGY_DETAILS('false', 'true');
+print_strategy_details('stampede_async') ->
+    ?STRATEGY_DETAILS('true', 'true').
+
+-spec dataplan_reload() -> 'ok'.
+dataplan_reload() ->
+    _ = kzs_plan:reload(),
+    io:format("dataplans reloaded~n").
+
+-spec dataplan_reload(kz_term:ne_binary()) -> 'ok'.
+dataplan_reload(AccountId) ->
+    _ = kzs_plan:reload(AccountId),
+    io:format("dataplan for account ~s reloaded~n", [AccountId]).

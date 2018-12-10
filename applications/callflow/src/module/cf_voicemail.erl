@@ -41,6 +41,7 @@
 -define(KEY_DELETE_AFTER_NOTIFY, <<"delete_after_notify">>).
 -define(KEY_SAVE_AFTER_NOTIFY, <<"save_after_notify">>).
 -define(KEY_FORCE_REQUIRE_PIN, <<"force_require_pin">>).
+-define(MAX_INVALID_PIN_LOOPS, 3).
 
 -define(MAILBOX_DEFAULT_SIZE
        ,kapps_config:get_integer(?CF_CONFIG_CAT
@@ -131,7 +132,7 @@
               ,del_temporary_unavailable = <<"5">> :: kz_term:ne_binary()
               ,return_main = <<"0">> :: kz_term:ne_binary()
 
-                                        %% Post playbak
+                                        %% Post playback
               ,keep = <<"1">> :: kz_term:ne_binary()
               ,replay = <<"2">> :: kz_term:ne_binary()
               ,forward = <<"3">> :: kz_term:ne_binary()
@@ -224,7 +225,7 @@ handle(Data, Call) ->
 -spec check_mailbox(mailbox(), kapps_call:call()) ->
                            'ok' | {'error', 'channel_hungup'}.
 check_mailbox(Box, Call) ->
-    %% Wrapper to initalize the attempt counter
+    %% Wrapper to initialize the attempt counter
     Resp = check_mailbox(Box, Call, 1),
     _ = send_mwi_update(Box),
     Resp.
@@ -534,7 +535,7 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
                     lager:info("caller pressed '~s', redirecting to check voicemail", [Login]),
                     check_mailbox(Box, Call);
                 Operator ->
-                    lager:info("caller choose to ring the operator"),
+                    lager:info("caller chose to ring the operator"),
                     case cf_util:get_operator_callflow(kapps_call:account_id(Call)) of
                         {'ok', Flow} -> {'branch', Flow};
                         {'error', _R} -> record_voicemail(tmp_file(Ext), Box, Call)
@@ -688,18 +689,18 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
                 andalso review_recording(AttachmentName, 'true', Box, Call)
             of
                 'false' ->
-                    cf_exe:update_call(Call, Routins),
+                    _ = cf_exe:update_call(Call, Routins),
                     new_message(AttachmentName, Length, Box, Call);
                 {'ok', 'record'} ->
                     record_voicemail(tmp_file(Ext), Box, Call);
                 {'ok', _Selection} ->
-                    cf_exe:update_call(Call, Routins),
+                    _ = cf_exe:update_call(Call, Routins),
                     cf_util:start_task(fun new_message/4, [AttachmentName, Length, Box], Call),
                     _ = kapps_call_command:prompt(<<"vm-saved">>, Call),
                     _ = kapps_call_command:prompt(<<"vm-thank_you">>, Call),
                     'ok';
                 {'branch', Flow} ->
-                    cf_exe:update_call(Call, Routins),
+                    _ = cf_exe:update_call(Call, Routins),
                     _ = new_message(AttachmentName, Length, Box, Call),
                     _ = kapps_call_command:prompt(<<"vm-saved">>, Call),
                     {'branch', Flow}
@@ -712,23 +713,31 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec setup_mailbox(mailbox(), kapps_call:call()) -> mailbox().
+-spec setup_mailbox(mailbox(), kapps_call:call()) ->
+                           mailbox() |
+                           {'error', 'channel_hungup'}.
 setup_mailbox(#mailbox{media_extension=Ext}=Box, Call) ->
     lager:debug("starting voicemail configuration wizard"),
     {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_intro">>, Call),
 
     lager:info("prompting caller to set a pin"),
-    #mailbox{} = change_pin(Box, Call),
+    case change_pin(Box, Call) of
+        #mailbox{} ->
+            {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_rec_greeting">>, Call),
+            lager:info("prompting caller to record an unavailable greeting"),
 
-    {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_rec_greeting">>, Call),
-    lager:info("prompting caller to record an unavailable greeting"),
+            #mailbox{}=Box1 = record_unavailable_greeting(tmp_file(Ext), Box, Call),
+            'ok' = update_doc(<<"is_setup">>, 'true', Box1, Call),
+            lager:info("voicemail configuration wizard is complete"),
 
-    #mailbox{}=Box1 = record_unavailable_greeting(tmp_file(Ext), Box, Call),
-    'ok' = update_doc(<<"is_setup">>, 'true', Box1, Call),
-    lager:info("voicemail configuration wizard is complete"),
+            {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_complete">>, Call),
+            Box1#mailbox{is_setup='true'};
+        {'error', 'max_retry'} ->
+            lager:debug("Hanging up channel after several empty or invalid pins"),
+            _ = kapps_call_command:b_prompt(<<"vm-goodbye">>, Call),
+            {'error', 'channel_hungup'}
+    end.
 
-    {'ok', _} = kapps_call_command:b_prompt(<<"vm-setup_complete">>, Call),
-    Box1#mailbox{is_setup='true'}.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -739,7 +748,8 @@ setup_mailbox(#mailbox{media_extension=Ext}=Box, Call) ->
                        'ok' | {'error', 'channel_hungup'}.
 main_menu(#mailbox{is_setup='false'}=Box, Call) ->
     try setup_mailbox(Box, Call) of
-        #mailbox{}=Box1 -> main_menu(Box1, Call, 1)
+        #mailbox{}=Box1 -> main_menu(Box1, Call, 1);
+        {'error', 'channel_hungup'} = Err -> Err
     catch
         'error':{'badmatch',{'error','channel_hungup'}} ->
             lager:debug("channel has hungup while setting up mailbox"),
@@ -753,7 +763,7 @@ main_menu(Box, Call) -> main_menu(Box, Call, 1).
                        'ok' | {'error', 'channel_hungup'}.
 main_menu(Box, Call, Loop) when Loop > 4 ->
     %% If there have been too may loops with no action from the caller this
-    %% is likely a abandonded channel, terminate
+    %% is likely a abandoned channel, terminate
     lager:info("entered main menu with too many invalid entries"),
     _ = kapps_call_command:b_prompt(<<"vm-goodbye">>, Call),
     send_mwi_update(Box);
@@ -955,7 +965,7 @@ message_prompt(Messages, Message, Count, #mailbox{skip_envelope='true'}) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Plays back a message then the menu, and continues to loop over the
-%% menu utill
+%% menu util
 %% @end
 %%------------------------------------------------------------------------------
 -spec play_messages(kz_json:objects(), non_neg_integer(), mailbox(), kapps_call:call()) ->
@@ -1210,7 +1220,9 @@ message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
         {'ok', Prev} -> {'ok', 'prev'};
         {'ok', Next} -> {'ok', 'next'};
         {'error', _}=E -> E;
-        _ -> message_menu(Box, Call)
+        _ ->
+            kapps_call_command:b_prompt(<<"menu-invalid_entry">>, Call),
+            message_menu(Box, Call)
     end.
 
 %%------------------------------------------------------------------------------
@@ -1548,12 +1560,18 @@ record_name(AttachmentName, #mailbox{name_media_id=MediaId
 %%------------------------------------------------------------------------------
 -spec change_pin(mailbox(), kapps_call:call()) ->
                         mailbox() | {'error', any()}.
+change_pin(Box, Call) ->
+    change_pin(Box, Call, 1).
+
+-spec change_pin(mailbox(), kapps_call:call(), non_neg_integer()) ->
+                        mailbox() | {'error', any()}.
 change_pin(#mailbox{mailbox_id=Id
                    ,interdigit_timeout=Interdigit
                    }=Box
           ,Call
+          ,Loop
           ) ->
-    lager:info("requesting new mailbox pin number"),
+    lager:info("requesting new mailbox pin number (loop ~p)", [Loop]),
     try
         {'ok', Pin} = get_new_pin(Interdigit, Call),
         lager:info("collected first pin"),
@@ -1585,7 +1603,7 @@ change_pin(#mailbox{mailbox_id=Id
                 Box;
             {'error', _Reason} ->
                 lager:debug("box failed validation: ~p", [_Reason]),
-                invalid_pin(Box, Call)
+                invalid_pin(Box, Call, Loop)
         end
     catch
         'error':{'badmatch',{'error','channel_hungup'}} ->
@@ -1593,10 +1611,10 @@ change_pin(#mailbox{mailbox_id=Id
             {'error', 'channel_hungup'};
         'error':{'badmatch',{'ok',_ConfirmPin}} ->
             lager:debug("new pin was invalid, try again"),
-            invalid_pin(Box, Call);
+            invalid_pin(Box, Call, Loop);
         _E:_R ->
             lager:debug("failed to get new pin: ~s: ~p", [_E, _R]),
-            invalid_pin(Box, Call)
+            invalid_pin(Box, Call, Loop)
     end.
 
 -spec update_user_creds(kz_term:ne_binary(), kz_term:api_binary(), kz_term:ne_binary()) -> 'ok'.
@@ -1634,12 +1652,15 @@ should_update_user_creds(_, _, _) ->
     lager:debug("user is not priv_level user, not updating creds"),
     'false'.
 
--spec invalid_pin(mailbox(), kapps_call:call()) ->
+-spec invalid_pin(mailbox(), kapps_call:call(), non_neg_integer()) ->
                          mailbox() |
                          {'error', any()}.
-invalid_pin(Box, Call) ->
+invalid_pin(_Box, _Call, Loop) when Loop >= ?MAX_INVALID_PIN_LOOPS ->
+    lager:debug("Several empty or invalid pins"),
+    {'error', 'max_retry'};
+invalid_pin(Box, Call, Loop) ->
     case kapps_call_command:b_prompt(<<"vm-pin_invalid">>, Call) of
-        {'ok', _} -> change_pin(Box, Call);
+        {'ok', _} -> change_pin(Box, Call, Loop + 1);
         {'error', 'channel_hungup'}=E ->
             lager:debug("channel hungup after bad pin"),
             E;
@@ -2171,30 +2192,26 @@ set_recording_media_doc(Recording, #mailbox{mailbox_number=BoxNum
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec update_doc(kz_json:path()
+-spec update_doc(kz_json:path() | kz_json:key()
                 ,kz_json:api_json_term()
                 ,mailbox() | kz_term:ne_binary()
                 ,kapps_call:call() | kz_term:ne_binary()
                 ) ->
                         'ok' |
                         {'error', atom()}.
+update_doc(Key, Value, ?NE_BINARY = Id, ?NE_BINARY = Db) ->
+    Update = [{Key, Value}],
+    Updates = [{'update', Update}
+              ,{'ensure_saved', 'true'}
+              ],
+    case kz_datamgr:update_doc(Db, Id, Updates) of
+        {'ok', _} -> 'ok';
+        {'error', _R}=Error ->
+            lager:info("unable to update ~s in ~s, ~p", [Id, Db, _R]),
+            Error
+    end;
 update_doc(Key, Value, #mailbox{mailbox_id=Id}, Db) ->
     update_doc(Key, Value, Id, Db);
-update_doc(Key, Value, Id, ?NE_BINARY = Db) ->
-    case kz_datamgr:open_doc(Db, Id) of
-        {'ok', JObj} ->
-            case kz_datamgr:save_doc(Db, kz_json:set_value(Key, Value, JObj)) of
-                {'error', 'conflict'} ->
-                    update_doc(Key, Value, Id, Db);
-                {'ok', _} -> 'ok';
-                {'error', R}=E ->
-                    lager:info("unable to update ~s in ~s, ~p", [Id, Db, R]),
-                    E
-            end;
-        {'error', R}=E ->
-            lager:info("unable to update ~s in ~s, ~p", [Id, Db, R]),
-            E
-    end;
 update_doc(Key, Value, Id, Call) ->
     update_doc(Key, Value, Id, kapps_call:account_db(Call)).
 
@@ -2211,7 +2228,8 @@ tmp_file(Ext) ->
 %% encoded Unix epoch in the provided timezone
 %% @end
 %%------------------------------------------------------------------------------
--spec get_unix_epoch(integer(), kz_term:ne_binary()) -> kz_term:ne_binary().
+-spec get_unix_epoch(kz_time:gregorian_seconds(), kz_term:ne_binary()) ->
+                            kz_term:ne_binary().
 get_unix_epoch(Epoch, Timezone) ->
     UtcDateTime = calendar:gregorian_seconds_to_datetime(Epoch),
     LocalDateTime = localtime:utc_to_local(UtcDateTime, Timezone),

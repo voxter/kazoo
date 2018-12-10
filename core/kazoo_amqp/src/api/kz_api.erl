@@ -24,11 +24,11 @@
         ,default_headers/4
         ,default_headers/5
 
-        ,call_id/1
+        ,call_id/1, call_id/2
         ,account_id/1
         ,server_id/1
         ,queue_id/1
-        ,msg_id/1
+        ,msg_id/1, msg_id/2
         ,msg_reply_id/1
         ,event_category/1
         ,event_name/1
@@ -62,7 +62,7 @@
         ,validate_message/4
         ]).
 
--include_lib("amqp_util.hrl").
+-include_lib("kz_amqp_util.hrl").
 
 -ifdef(TEST).
 -export([has_any/2, has_all/2]).
@@ -104,11 +104,14 @@ app_version(JObj) ->
 node(JObj) ->
     kz_json:get_ne_binary_value(?KEY_NODE, JObj).
 
--spec msg_id(kz_term:api_terms()) -> kz_term:api_binary().
-msg_id(Props) when is_list(Props) ->
-    props:get_value(?KEY_MSG_ID, Props);
-msg_id(JObj) ->
-    kz_json:get_value(?KEY_MSG_ID, JObj).
+-spec msg_id(kz_term:api_terms()) -> kz_term:api_ne_binary().
+msg_id(API) -> msg_id(API, 'undefined').
+
+-spec msg_id(kz_term:api_terms(), Default) -> kz_term:ne_binary() | Default.
+msg_id(Props, Default) when is_list(Props) ->
+    props:get_ne_binary_value(?KEY_MSG_ID, Props, Default);
+msg_id(JObj, Default) ->
+    kz_json:get_ne_binary_value(?KEY_MSG_ID, JObj, Default).
 
 -spec msg_reply_id(kz_term:api_terms()) -> kz_term:api_binary().
 msg_reply_id(Props) when is_list(Props) ->
@@ -122,11 +125,15 @@ account_id(Props) when is_list(Props) ->
 account_id(JObj) ->
     kz_json:get_value(?KEY_API_ACCOUNT_ID, JObj).
 
--spec call_id(kz_term:api_terms()) -> kz_term:api_binary().
-call_id(Props) when is_list(Props) ->
-    props:get_value(?KEY_API_CALL_ID, Props);
-call_id(JObj) ->
-    kz_json:get_value(?KEY_API_CALL_ID, JObj).
+-spec call_id(kz_term:api_terms()) -> kz_term:api_ne_binary().
+call_id(API) ->
+    call_id(API, 'undefined').
+
+-spec call_id(kz_term:api_terms(), Default) -> kz_term:ne_binary() | Default.
+call_id(Props, Default) when is_list(Props) ->
+    props:get_ne_binary_value(?KEY_API_CALL_ID, Props, Default);
+call_id(JObj, Default) ->
+    kz_json:get_ne_binary_value(?KEY_API_CALL_ID, JObj, Default).
 
 -spec defer_response(kz_term:api_terms()) -> kz_term:api_binary().
 defer_response(Props) when is_list(Props) ->
@@ -294,7 +301,7 @@ should_strip_from_payload(_) -> 'false'.
 %%------------------------------------------------------------------------------
 -spec extract_defaults(kz_term:api_terms()) -> kz_term:proplist().
 extract_defaults(Prop) when is_list(Prop) ->
-    %% not measurable faster over the foldl, but cleaner (imo)
+    %% not measurable faster over the foldl, but cleaner (IMO)
     [ {H, V} || H <- ?DEFAULT_HEADERS ++ ?OPTIONAL_DEFAULT_HEADERS,
                 (V = props:get_value(H, Prop)) =/= 'undefined'
     ];
@@ -338,7 +345,7 @@ publish_error(TargetQ, JObj) ->
 -spec publish_error(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
 publish_error(TargetQ, Error, ContentType) ->
     {'ok', Payload} = prepare_api_payload(Error, ?ERROR_RESP_VALUES, fun error_resp/1),
-    amqp_util:targeted_publish(TargetQ, Payload, ContentType).
+    kz_amqp_util:targeted_publish(TargetQ, Payload, ContentType).
 
 %%------------------------------------------------------------------------------
 %% @doc Sanitizes generic AMQP payloads

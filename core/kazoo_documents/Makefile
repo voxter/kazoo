@@ -5,20 +5,28 @@ TEST_EBINS = $(ROOT)/applications/crossbar/ebin
 SRC_FILES := $(sort $(wildcard src/*.erl.src))
 ERL_FILES := $(SRC_FILES:.erl.src=.erl)
 
-SOURCES = $(wildcard src/*.erl) $(ERL_FILES)
+SOURCES := $(sort $(wildcard src/*.erl) $(ERL_FILES))
 COMPILE_MOAR = $(ERL_FILES)
 
 all: compile
 
-compile: $(ERL_FILES)
+compile: compile-autogen $(ERL_FILES)
 
-clean: clean-autogen
+compile-autogen: $(addsuffix -compile,$(SRC_FILES))
 
-clean-autogen:
-	@$(foreach ERL,$(ERL_FILES),cmp --silent $(ERL) $(ERL:.erl=.erl.src) && rm $(ERL);) true
+# Re-enable when fixed by 2600hz
+clean:
+	:
 
-%.erl: %.erl.src
-	@$(cp -n $< $@) true
+clean-autogen: $(addsuffix -clean,$(SRC_FILES))
+
+%-clean: %
+	$(eval ERL := $(<:.erl.src=.erl))
+	@-cmp -s $(ERL) $<; [[ $$? -eq 0 ]] && rm $(ERL) || :
+
+%-compile: %
+	$(eval ERL := $(<:.erl.src=.erl))
+	$(shell cp --no-clobber $< $(ERL))
 
 diff:
 	@$(foreach ERL,$(ERL_FILES),cmp --silent $(ERL) $(ERL:.erl=.erl.src) || diff -c $(ERL) $(ERL).src;) true

@@ -67,7 +67,7 @@ handle(Data, Call) ->
 %%------------------------------------------------------------------------------
 -spec menu_loop(menu(), kapps_call:call()) -> 'ok'.
 menu_loop(#cf_menu_data{retries=Retries}=Menu, Call) when Retries =< 0 ->
-    lager:info("maxium number of retries reached"),
+    lager:info("maximum number of retries reached"),
     _ = kapps_call_command:flush_dtmf(Call),
     _ = play_exit_prompt(Menu, Call),
     case cf_exe:attempt(<<"max_retries">>, Call) of
@@ -352,10 +352,8 @@ play_exit_prompt(#cf_menu_data{exit_media=Id}, Call) ->
 -spec get_prompt(menu(), kapps_call:call()) -> kz_term:ne_binary().
 get_prompt(#cf_menu_data{greeting_id='undefined'}, Call) ->
     kapps_call:get_prompt(Call, <<"menu-no_prompt">>);
-get_prompt(#cf_menu_data{greeting_id = <<"local_stream://", _/binary>> = ID}, _) ->
-    ID;
 get_prompt(#cf_menu_data{greeting_id=Id}, Call) ->
-    <<$/, (kapps_call:account_db(Call))/binary, $/, Id/binary>>.
+    kz_media_util:media_path(Id, kapps_call:account_id(Call)).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -394,7 +392,7 @@ maybe_delete_attachments(AccountDb, _MediaId, JObj) ->
     case kz_doc:maybe_remove_attachments(JObj) of
         {'false', _} -> 'ok';
         {'true', Removed} ->
-            kz_datamgr:save_doc(AccountDb, Removed),
+            _ = kz_datamgr:save_doc(AccountDb, Removed),
             lager:debug("removing attachments from ~s", [_MediaId])
     end.
 

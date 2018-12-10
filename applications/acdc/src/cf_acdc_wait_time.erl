@@ -1,6 +1,8 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-, 2600Hz
-%%% @doc Data: {
+%%% @copyright (C) 2018-, Voxter Communications Inc
+%%% @doc Handles branching the callflow based on the current average wait time
+%%% of a queue
+%%% Data: {
 %%%   "id":"queue id",
 %%%   "window":900 // Window over which average wait time is calc'd
 %%% }
@@ -17,8 +19,7 @@
 -include_lib("callflow/src/callflow.hrl").
 
 %%------------------------------------------------------------------------------
-%% Handle execution of this callflow module
-%% @doc
+%% @doc Handle execution of this callflow module
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
