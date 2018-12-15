@@ -20,6 +20,16 @@ my $conectado     = 0;
 my $last_event_ts = 0;
 my $daemon        = 0;
 
+my $check_prev_line = 0;
+my $prev_uniqueid;
+my $prev_queue_id;
+my $prev_agent_id;
+my $prev_event_id;
+my $prev_date;
+my $prev_infoqr;
+my $prev_repqr;
+my @prev_parametros = ();
+
 $SIG{ALRM} = 'reconecta';
 
 sub daemonize
@@ -367,6 +377,19 @@ sub last_event {
     }
 }
 
+sub clear_prev_line_values {
+    $check_prev_line = 0;
+    $prev_linea = "";
+    $prev_uniqueid = "";
+    $prev_queue_id = "";
+    $prev_agent_id = "";
+    $prev_event_id = "";
+    $prev_date = "";
+    $prev_infoqr = "";
+    $prev_repqr = "";
+    @prev_parametros = ();
+}
+
 sub procesa {
 
     my $max_infos = 5;
@@ -420,6 +443,29 @@ sub procesa {
     $queue_id = check_queue($queue_name);
     $agent_id = check_agent($agent);
     $event_id = check_event($event);
+
+    if( $check_prev_line && ( $prev_date ne $date || $prev_queue_id ne $queue_id ) )
+    {
+        $sth = $dbh->prepare(qq{
+            INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent$prev_infoqr) VALUES (?,?,?,?,?$prev_repqr);
+        });
+        $sth->execute($prev_uniqueid, $prev_date, $prev_queue_id, $prev_agent_id, $prev_event_id, @prev_parametros) or handle_error( $dbh->err(), $dbh->errstr(), $prev_linea );
+        clear_prev_line_values();
+    }
+
+    if ( $event eq "EXITWITHTIMEOUT" ) {
+        $check_prev_line = 1;
+        $prev_linea = $linea;
+        $prev_uniqueid = $uniqueid;
+        $prev_queue_id = $queue_id;
+        $prev_agent_id = $agent_id;
+        $prev_event_id = $event_id;
+        $prev_date = $date;
+        $prev_infoqr = $infoqr;
+        $prev_repqr = $repqr;
+        @prev_parametros = @parametros;
+        return;
+    }
 
     $sth = $dbh->prepare(qq{
         INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent$infoqr) VALUES (?,?,?,?,?$repqr);
