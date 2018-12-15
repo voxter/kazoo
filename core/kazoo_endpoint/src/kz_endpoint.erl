@@ -1180,7 +1180,7 @@ maybe_get_t38(Endpoint, Call) ->
         'false' -> [];
         'true' ->
             kapps_call_command:get_inbound_t38_settings(Opt
-                                                       ,kz_json:get_value(<<"Fax-T38-Enabled">>, Endpoint)
+                                                       ,kz_json:is_true([<<"media">>, <<"fax_option">>], Endpoint)
                                                        )
     end.
 
@@ -1645,6 +1645,11 @@ maybe_set_call_forward({Endpoint, Call, CallFwd, CCVs}) ->
     {Endpoint, Call, CallFwd
     ,kz_json:set_values([{<<"Call-Forward">>, <<"true">>}
                         ,{<<"Authorizing-Type">>, <<"device">>}
+                        ,{<<"Authorizing-ID">>, kz_doc:id(Endpoint)}
+                        ,{<<"Call-Forward-From">>, kapps_call:inception_type(Call)}
+                        ,{<<"Call-Forward-For-UUID">>, kapps_call:other_leg_call_id(Call)}
+                        ,{<<"Require-Ignore-Early-Media">>, <<"true">>}
+                        ,{<<"Ignore-Early-Media">>, <<"true">>}
                          | bowout_settings('undefined' =:= kapps_call:call_id_direct(Call))
                         ]
                        ,CCVs
@@ -1687,7 +1692,7 @@ maybe_set_confirm_properties({Endpoint, Call, CallFwd, CCVs}=Acc) ->
                       ,{<<"Confirm-Read-Timeout">>, kz_term:to_binary(7 * ?MILLISECONDS_IN_SECOND)}
                       ,{<<"Confirm-File">>, ?CONFIRM_FILE(Call)}
                       ,{<<"Require-Ignore-Early-Media">>, <<"true">>}
-                      ,{<<"Require-Fail-On-Single-Reject">>, <<"USER_BUSY,CALL_REJECTED,NO_ANSWER,NORMAL_CLEARING">>}
+                      ,{<<"Require-Fail-On-Single-Reject">>, <<"USER_BUSY,CALL_REJECTED,NO_ANSWER,NORMAL_CLEARING,PROGRESS_TIMEOUT">>}
                       ],
             {Endpoint, Call, CallFwd
             ,kz_json:merge_jobjs(kz_json:from_list(Confirm), CCVs)
