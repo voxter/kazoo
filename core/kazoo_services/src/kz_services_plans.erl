@@ -23,6 +23,8 @@
         ,editable_fields/1
         ]).
 
+-export([is_empty/1]).
+
 -include("services.hrl").
 
 -opaque plans() :: dict:dict().
@@ -148,8 +150,8 @@ get_object_plans(Services, FetchContext) ->
 -spec build_object_plan(kz_services:services(), fetch_context(), kz_json:objects()) -> fetch_context().
 build_object_plan(Services, FetchContext, ObjectPlans) ->
     Props = [{PlanId, kz_json:get_value([<<"value">>, PlanId], ObjectPlan)}
-             || ObjectPlan <- ObjectPlans
-                    ,PlanId <- kz_json:get_keys(<<"value">>, ObjectPlan)
+             || ObjectPlan <- ObjectPlans,
+                PlanId <- kz_json:get_keys(<<"value">>, ObjectPlan)
             ],
     lists:foldl(get_object_plans_fold(Services)
                ,FetchContext
@@ -498,3 +500,11 @@ get_ui_apps(ResellerId) ->
             lager:debug("failed to read master's app_store: ~p", [_Reason]),
             [{<<"_all">>, ?UNDERSCORE_ALL_FIELDS}]
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec is_empty(plans()) -> boolean().
+is_empty(Plans) ->
+    dict:is_empty(Plans).
