@@ -118,6 +118,10 @@ help(JObj, <<?CATEGORY>>=Category, Action) ->
 %%% Actions
 %%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec action(kz_term:ne_binary()) -> map().
 action(<<"import">>) ->
     #{<<"description">> => <<"Bulk-import of users">>
@@ -152,6 +156,10 @@ action(<<"delete">>) ->
 %%% These are called during CSV first upload on all rows to verify the CSV data
 %%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec verify_account_id(kz_term:ne_binary()) -> boolean().
 verify_account_id(?MATCH_ACCOUNT_RAW(_)) -> 'true';
 verify_account_id(_) -> 'false'.
@@ -295,6 +303,10 @@ generate_return_values_from_doc(Doc, 'delete') ->
 %%% Cleanup functions
 %%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 -spec cleanup(kz_term:ne_binary(), any()) -> any().
 cleanup(<<"import">>, 'init') ->
     %% Hit if no rows at all succeeded.
