@@ -127,7 +127,6 @@ action(<<"import">>) ->
                      "* `username`: The users username (Unique)\n"
                      "* `first_name`: The users first_name\n"
                      "* `last_name`: The users last_name\n"
-                     "* `account_name`: account name it is assigned to.\n"
                      "* `account_id`: account it is assigned to (32 alphanumeric characters).\n"
                      "Note: account creating the task (or `auth_by` account) must have permissions on the affecting account.\n"
                    >>
