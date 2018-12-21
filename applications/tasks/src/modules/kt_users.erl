@@ -426,7 +426,7 @@ doc_public_fields(Args) ->
         ]}}]
     ,{<<"call_restriction">>, kz_json:new()}
     ,{<<"contact_list">>, kz_json:new()}
-    ,{<<"music_on_hold">>, kz_josn:new()}
+    ,{<<"music_on_hold">>, kz_json:new()}
     ,{<<"ringtones">>, kz_json:new()}
     ].
 
