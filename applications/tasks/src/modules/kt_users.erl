@@ -424,10 +424,10 @@ doc_public_fields(Args) ->
         ,{<<"ignore_early_media">>, <<"true">>}
         ,{<<"require_keypress">>, <<"true">>}
         ]}}]
-    ,{<<"call_restriction">>, {[]}}
-    ,{<<"contact_list">>, {[]}}
-    ,{<<"music_on_hold">>, {[]}}
-    ,{<<"ringtones">>, {[]}}
+    ,{<<"call_restriction">>, kz_json:new()}
+    ,{<<"contact_list">>, kz_json:new()}
+    ,{<<"music_on_hold">>, kz_josn:new()}
+    ,{<<"ringtones">>, kz_json:new()}
     ].
 
 apps(Props) -> maybe_nest(<<"apps">>, Props).
