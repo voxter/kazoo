@@ -239,8 +239,8 @@ handle_result(Args, {'error', Reason}, Action) ->
 format_result(Args, Reason=?NE_BINARY, Action) ->
     Map = generate_return_values_from_args(Args, Action),
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
-format_result(_Args, Doc, Action) ->
-    Map = generate_return_values_from_doc(Doc, Action),
+format_result(Args, Doc, Action) ->
+    Map = generate_return_values_from_doc(Doc, Args, Action),
     Map#{?OUTPUT_CSV_HEADER_ERROR => undefined}.
 
 %%------------------------------------------------------------------------------
@@ -249,9 +249,10 @@ format_result(_Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
+     Numbers = binary:replace(maps:get(<<"numbers">>, Args), ?NUMBER_SEPERATOR, <<",">>),
     #{<<"id">> => <<"undefined">>
 %%     ,<<"flow">> => maps:get(<<"flow">>, Args)
-     ,<<"numbers">> => maps:get(<<"numbers">>, Args)
+     ,<<"numbers">> =>  Numbers
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      };
 generate_return_values_from_args(Args ,'delete') ->
@@ -265,14 +266,15 @@ generate_return_values_from_args(Args ,'delete') ->
 %% @doc Generate the csv return row values from the callflow doc
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_return_values_from_doc(kz_doc:object(), atom()) -> map().
-generate_return_values_from_doc(Doc, 'import') ->
+-spec generate_return_values_from_doc(kz_doc:object(), map(), atom()) -> map().
+generate_return_values_from_doc(Doc, Args, 'import') ->
+     Numbers = binary:replace(maps:get(<<"numbers">>, Args), ?NUMBER_SEPERATOR, <<",">>),
     #{<<"id">> => kz_doc:id(Doc)
 %%     ,<<"flow">> => kzd_callflows:flow(Doc)
-     ,<<"numbers">> => kzd_callflows:numbers(Doc)
+     ,<<"numbers">> => Numbers
      ,<<"account_id">> => kz_doc:account_id(Doc)
      };
-generate_return_values_from_doc(Doc, 'delete') ->
+generate_return_values_from_doc(Doc, _Args, 'delete') ->
     #{<<"id">> => kz_doc:id(Doc)
 %%     ,<<"flow">> => <<"undefined">>
      ,<<"numbers">> => <<"undefined">>
