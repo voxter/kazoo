@@ -256,7 +256,7 @@ generate_return_values_from_args(Args ,'import') ->
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      };
 generate_return_values_from_args(Args ,'delete') ->
-    #{<<"id">> => maps:get(<<"device_id">>, Args)
+    #{<<"id">> => maps:get(<<"callflow_id">>, Args)
 %%     ,<<"flow">> => <<"undefined">>
      ,<<"numbers">> => <<"undefined">>
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
@@ -334,14 +334,14 @@ select_account_id(?MATCH_ACCOUNT_RAW(_)=AccountId, _) -> AccountId;
 select_account_id(_, AccountId) -> AccountId.
 
 %%------------------------------------------------------------------------------
-%% @doc Verify the device passes validation and save the device to kazoo
+%% @doc Verify the device passes validation and save the callflow to kazoo
 %% @end
 %%------------------------------------------------------------------------------
 -spec validate_and_save_callflow(kz_type:ne_binary(), kz_tasks:args()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
 validate_and_save_callflow(AccountId, Args) ->
     case validate_callflow(AccountId, Args) of
         {'error', Cause} = Error ->
-            lager:error("device failed validation: ~p", [Cause]),
+            lager:error("callflow failed validation: ~p", [Cause]),
             Error;
         'ok' ->
             prepare_and_save_callflow(AccountId, Args)
@@ -396,10 +396,10 @@ validate_unique_numbers(AccountDb, Numbers) ->
 -spec validate_numbers_length(kz_type:ne_binary(), kz_type:ne_binarys()) -> 'ok' | {'error', kz_type:ne_binary()}.
 validate_numbers_length(_AccountId, []) -> 'ok';
 validate_numbers_length(AccountId, Numbers) ->
-    case kapps_config:get_is_true(<<"user">>, <<"enforce_min_length">>, 'false') of
+    case kapps_config:get_is_true(<<"callflow">>, <<"enforce_min_length">>, 'false') of
         'false' -> 'ok';
         'true' ->
-            MinLength = kapps_account_config:get_global(AccountId, <<"user">>, <<"min_user_length">>, 3),
+            MinLength = kapps_account_config:get_global(AccountId, <<"callflow">>, <<"min_callflow_length">>, 1),
             check_numbers_length(Numbers, MinLength)
     end.
 
