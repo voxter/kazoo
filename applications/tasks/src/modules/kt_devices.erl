@@ -182,11 +182,11 @@ import(#{account_id := Account
       ) ->
     AccountId = select_account_id(AccountId0, Account),
     Resp = case is_authorized_account(AuthAccountId, AccountId) of
-        'true' ->
-            validate_and_save_device(AccountId, Args);
-        'false' ->
-            {'error', <<"Access denied, Auth Account does not have access to account">>}
-    end,
+               'true' ->
+                   validate_and_save_device(AccountId, Args);
+               'false' ->
+                   {'error', <<"Access denied, Auth Account does not have access to account">>}
+           end,
     Row = handle_result(Args, Resp, 'import'),
     {Row, sets:add_element(AccountId, AccountIds)}.
 
@@ -203,11 +203,11 @@ delete(#{account_id := Account
       ) ->
     AccountId = select_account_id(AccountId0, Account),
     Resp = case is_authorized_account(AuthAccountId, AccountId) of
-        'true' ->
-            delete_device(AccountId, Args);
-        'false' ->
-            {'error', <<"Access denied, Auth Account does not have access to account">>}
-    end,
+               'true' ->
+                   delete_device(AccountId, Args);
+               'false' ->
+                   {'error', <<"Access denied, Auth Account does not have access to account">>}
+           end,
     Row = handle_result(Args, Resp, 'delete'),
     {Row, sets:add_element(AccountId, AccountIds)}.
 
@@ -347,7 +347,7 @@ validate_and_save_device(AccountId, Args) ->
             Error;
         'ok' ->
             prepare_and_save_device(AccountId, Args)
-     end.
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Build User doc and save device to kazoo storage
