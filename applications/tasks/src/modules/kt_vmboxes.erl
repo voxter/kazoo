@@ -1,4 +1,4 @@
-
+%%%-----------------------------------------------------------------------------
 %%% @copyright (C) 2016-2018, Voxter
 %%% @doc
 %%% @author Ben Bradford
@@ -348,7 +348,7 @@ validate_and_save_vmbox(AccountId, Args) ->
      end.
 
 %%------------------------------------------------------------------------------
-%% @doc Build User doc and save vmbox to kazoo storage
+%% @doc Build VMBox doc and save vmbox to kazoo storage
 %% @end
 %%------------------------------------------------------------------------------
 -spec prepare_and_save_vmbox(kz_type:ne_binary(), kz_tasks:args()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
@@ -394,7 +394,7 @@ is_mailbox_number_unique(AccountId, MailboxNumber) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc Build Device doc from CSV args
+%% @doc Build VMBox doc from CSV args
 %% @end
 %%------------------------------------------------------------------------------
 -spec generate_vmbox_doc(kz_type:ne_binary(), kz_tasks:args()) -> kz_doc:object().
@@ -451,13 +451,13 @@ add_private_fields(AccountId ,Doc ,Args) ->
 %%------------------------------------------------------------------------------
 -spec check_mailbox_number_length(kz_type:ne_binary(), kz_type:ne_binary()) -> 'ok' | {'error', kz_type:ne_binary()}.
 check_mailbox_number_length(AccountId, MailboxNumber) ->
-    CheckMinLength = kapps_config:get_is_true(<<"user">>, <<"enforce_min_length">>, 'false'),
+    CheckMinLength = kapps_config:get_is_true(<<"voicemail">>, <<"enforce_min_length">>, 'false'),
     check_mailbox_number_length(AccountId, MailboxNumber, CheckMinLength).
 
 -spec check_mailbox_number_length(kz_type:ne_binary(), kz_type:ne_binary(), boolean()) -> 'ok' | {'error', kz_type:ne_binary()}.
 check_mailbox_number_length(_AccountId, _MailboxNumber, 'false') -> 'ok';
 check_mailbox_number_length(AccountId, MailboxNumber, 'true') ->
-    MinLength = kapps_account_config:get_global(AccountId, <<"user">>, <<"min_user_length">>, 3),
+    MinLength = kapps_account_config:get_global(AccountId, <<"voicemail">>, <<"min_vmbox_length">>, 3),
     case length(MailboxNumber) of
         N when N < MinLength ->
             {'error', <<"mailbox number is not long enough, Min length required: ", MinLength/binary>>};
