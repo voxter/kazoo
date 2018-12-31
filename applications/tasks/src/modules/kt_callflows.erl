@@ -375,7 +375,7 @@ validate_callflow(AccountId, #{<<"numbers">> := Numbers}) ->
     case  validate_unique_numbers(AccountDb, NumbersList) of
         'true' ->
             validate_numbers_length(AccountId, NumbersList);
-        'false' -> {'error', <<"numbers are unique in account">>}
+        'false' -> {'error', <<"numbers are not unique in account">>}
     end.
 
 -spec validate_unique_numbers(kz_term:ne_binary(), kz_term:ne_binaries()) -> 'ok' | {'error', kz_type:ne_binary()}.
