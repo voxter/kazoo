@@ -409,12 +409,12 @@ doc_public_fields(Args) ->
        ,{<<"fax_to_email_enabled">>, <<"true">>}
        ])
     ,apps(
-        user_portal(props:filter_undefined(
-                      [{<<"label">>, <<"User Portal">>}
-                      ,{<<"icon">>, <<"userportal">>}
-                      ,{<<"api_url">>, maps:get(<<"api_url">>, Args)}
-                      ]))
-         )
+       user_portal(props:filter_undefined(
+                     [{<<"label">>, <<"User Portal">>}
+                     ,{<<"icon">>, <<"userportal">>}
+                     ,{<<"api_url">>, maps:get(<<"api_url">>, Args)}
+                     ]))
+      )
     ,[{<<"call_forward">>,
        {[{<<"keep_caller_id">>, <<"true">>}
         ,{<<"substitute">>, <<"false">>}
