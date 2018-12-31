@@ -421,8 +421,8 @@ generate_vmbox_doc(AccountId, Args) ->
     PubDoc = lists:foldl(fun({_, 'undefined'}, Doc) -> Doc;
                             ({Fun, Arg}, Doc) -> Fun(Doc, Arg)
                          end
-                         ,kzd_vmboxes:new()
-                         ,DocFuns),
+                        ,kzd_vmboxes:new()
+                        ,DocFuns),
 
     %% Values not exposed in kzd_vmboxes
     OtherPubValues = [{<<"hunt">>, 'true'}],
