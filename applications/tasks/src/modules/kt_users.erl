@@ -197,11 +197,11 @@ import(#{account_id := Account
       ) ->
     AccountId = select_account_id(AccountId0, Account),
     Resp = case is_authorized_account(AuthAccountId, AccountId) of
-        'true' ->
-            validate_and_save_user(AccountId, Args);
-        'false' ->
-            {'error', <<"Access denied, Auth Account does not have access to account">>}
-    end,
+               'true' ->
+                   validate_and_save_user(AccountId, Args);
+               'false' ->
+                   {'error', <<"Access denied, Auth Account does not have access to account">>}
+           end,
     Row = handle_result(Args, Resp, 'import'),
     {Row, sets:add_element(AccountId, AccountIds)}.
 
@@ -218,11 +218,11 @@ delete(#{account_id := Account
       ) ->
     AccountId = select_account_id(AccountId0, Account),
     Resp = case is_authorized_account(AuthAccountId, AccountId) of
-        'true' ->
-            delete_user(AccountId, Args);
-        'false' ->
-            {'error', <<"Access denied, Auth Account does not have access to account">>}
-    end,
+               'true' ->
+                   delete_user(AccountId, Args);
+               'false' ->
+                   {'error', <<"Access denied, Auth Account does not have access to account">>}
+           end,
     Row = handle_result(Args, Resp, 'delete'),
     {Row, sets:add_element(AccountId, AccountIds)}.
 
@@ -362,7 +362,7 @@ validate_and_save_user(AccountId, Args) ->
             Error;
         'ok' ->
             prepare_and_save_user(AccountId, Args)
-     end.
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Build User doc and save user to kazoo storage
@@ -396,27 +396,27 @@ generate_user_doc(AccountId, Args) ->
 -spec doc_public_fields(kz_tasks:args()) -> kz_type:proplist().
 doc_public_fields(Args) ->
     [props:filter_undefined(
-        [{<<"username">>,maps:get(<<"username">>, Args)}
-        ,{<<"email">>, maps:get(<<"email">>, Args)}
-        ,{<<"timezone">>, maps:get(<<"timezone">>, Args)}
-        ,{<<"first_name">>, maps:get(<<"first_name">>, Args)}
-        ,{<<"last_name">>, maps:get(<<"last_name">>, Args)}
-        ,{<<"enabled">>, <<"true">>}
-        ,{<<"priv_level">>, <<"user">>}
-        ,{<<"require_password_update">>, <<"false">>}
-        ,{<<"verified">>, <<"false">>}
-        ,{<<"vm_to_email_enabled">>, <<"true">>}
-        ,{<<"fax_to_email_enabled">>, <<"true">>}
-        ])
+       [{<<"username">>,maps:get(<<"username">>, Args)}
+       ,{<<"email">>, maps:get(<<"email">>, Args)}
+       ,{<<"timezone">>, maps:get(<<"timezone">>, Args)}
+       ,{<<"first_name">>, maps:get(<<"first_name">>, Args)}
+       ,{<<"last_name">>, maps:get(<<"last_name">>, Args)}
+       ,{<<"enabled">>, <<"true">>}
+       ,{<<"priv_level">>, <<"user">>}
+       ,{<<"require_password_update">>, <<"false">>}
+       ,{<<"verified">>, <<"false">>}
+       ,{<<"vm_to_email_enabled">>, <<"true">>}
+       ,{<<"fax_to_email_enabled">>, <<"true">>}
+       ])
     ,apps(
         user_portal(props:filter_undefined(
-            [{<<"label">>, <<"User Portal">>}
-            ,{<<"icon">>, <<"userportal">>}
-            ,{<<"api_url">>, maps:get(<<"api_url">>, Args)}
-            ]))
+                      [{<<"label">>, <<"User Portal">>}
+                      ,{<<"icon">>, <<"userportal">>}
+                      ,{<<"api_url">>, maps:get(<<"api_url">>, Args)}
+                      ]))
          )
     ,[{<<"call_forward">>,
-        {[{<<"keep_caller_id">>, <<"true">>}
+       {[{<<"keep_caller_id">>, <<"true">>}
         ,{<<"substitute">>, <<"false">>}
         ,{<<"direct_calls_only">>, <<"false">>}
         ,{<<"enabled">>, <<"false">>}
