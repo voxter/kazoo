@@ -385,11 +385,12 @@ validate_vmbox(AccountId, #{<<"mailbox">> := MailboxNumber}) ->
 -spec is_mailbox_number_unique(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
 is_mailbox_number_unique(AccountId, MailboxNumber) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    ViewOptions = [{'key', kz_term:to_lower_binary(MailboxNumber)}],
+    BoxNum = try kz_term:to_integer(MailboxNumber) catch _:_ -> 0 end,
+    ViewOptions = [{'key', BoxNum}],
     case kz_datamgr:get_results(AccountDb, <<"vmboxes/listing_by_mailbox">>, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [_JObj]} -> 'false';
         {'error', 'not_found'} -> 'true';
+        {'ok', [_JObj]} -> 'false';
         _ -> 'false'
     end.
 
