@@ -16,7 +16,6 @@
 
 %% Verifiers
 -export([verify_account_id/1
-%%        ,verify_flow/1
         ]).
 
 %% Appliers
@@ -59,7 +58,6 @@ init() ->
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".output_header">>, ?MODULE, 'output_header'),
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".cleanup">>, ?MODULE, 'cleanup'),
     _ = tasks_bindings:bind(<<"tasks."?CATEGORY".account_id">>, ?MODULE, 'verify_account_id'),
-%%    _ = tasks_bindings:bind(<<"tasks."?CATEGORY".flow">>, ?MODULE, 'verify_flow'),
     tasks_bindings:bind_actions(<<"tasks."?CATEGORY>>, ?MODULE, ?ACTIONS).
 
 -spec output_header(kz_term:ne_binary()) -> kz_tasks:output_header().
@@ -73,15 +71,13 @@ result_output_header() ->
 -spec output_header() -> kz_tasks:output_header().
 output_header() ->
     [<<"id">>
-%%    ,<<"flow">>
     ,<<"numbers">>
     ,<<"account_id">>
     ].
 
 -spec mandatory_import_fields() -> kz_type:proplist().
 mandatory_import_fields() ->
-    [%%<<"flow">>
-    <<"numbers">>
+    [<<"numbers">>
     ,<<"account_id">>
     ,<<"user_id">>
     ,<<"vmbox_id">>
@@ -158,10 +154,6 @@ action(<<"delete">>) ->
 verify_account_id(?MATCH_ACCOUNT_RAW(_)) -> 'true';
 verify_account_id(_) -> 'false'.
 
-%%-spec verify_flow(kz_term:ne_binary()) -> boolean().
-%%verify_flow(Value) ->
-%%    JObj = kz_json:decode(Value),
-%%    not kz_json:is_empty(JObj).
 
 %%%=============================================================================
 %%% Appliers
@@ -250,13 +242,11 @@ format_result(Args, Doc, Action) ->
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
     #{<<"id">> => <<"undefined">>
-%%     ,<<"flow">> => maps:get(<<"flow">>, Args)
      ,<<"numbers">> => maps:get(<<"numbers">>, Args)
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      };
 generate_return_values_from_args(Args ,'delete') ->
     #{<<"id">> => maps:get(<<"callflow_id">>, Args)
-%%     ,<<"flow">> => <<"undefined">>
      ,<<"numbers">> => <<"undefined">>
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      }.
@@ -268,13 +258,11 @@ generate_return_values_from_args(Args ,'delete') ->
 -spec generate_return_values_from_doc(kz_doc:object(), map(), atom()) -> map().
 generate_return_values_from_doc(Doc, Args, 'import') ->
     #{<<"id">> => kz_doc:id(Doc)
-%%     ,<<"flow">> => kzd_callflows:flow(Doc)
      ,<<"numbers">> => maps:get(<<"numbers">>, Args) %% Pull the numbers from the Args so they are returned in the same order they are inputed
      ,<<"account_id">> => kz_doc:account_id(Doc)
      };
 generate_return_values_from_doc(Doc, _Args, 'delete') ->
     #{<<"id">> => kz_doc:id(Doc)
-%%     ,<<"flow">> => <<"undefined">>
      ,<<"numbers">> => <<"undefined">>
      ,<<"account_id">> => kz_doc:account_id(Doc)
      }.
@@ -424,21 +412,21 @@ generate_callflow_doc(AccountId, Args) ->
                                                     ,{<<"timeout">>, 20}
                                                     ]
                                         }
-                                        ,{<<"module">>, <<"user">>}
-                                        ,{<<"children">>, [{<<"_">>, [{<<"data">>, [{<<"id">>, maps:get(<<"vmbox_id">>, Args)}
-                                                                                   ,{<<"action">>, <<"compose">>}
-                                                                                   ,{<<"callerid_match_login">>, 'false'}
-                                                                                   ,{<<"interdigit_timeout">>, 2000}
-                                                                                   ,{<<"max_message_length">>, 500}
-                                                                                   ,{<<"single_mailbox_login">>, 'false'}
-                                                                                   ]
-                                                                      }
-                                                                      ,{<<"module">>, <<"voicemail">>}
-                                                                      ,{<<"children">>, [{}]}
-                                                                     ]
+                                       ,{<<"module">>, <<"user">>}
+                                       ,{<<"children">>, [{<<"_">>, [{<<"data">>, [{<<"id">>, maps:get(<<"vmbox_id">>, Args)}
+                                                                                  ,{<<"action">>, <<"compose">>}
+                                                                                  ,{<<"callerid_match_login">>, 'false'}
+                                                                                  ,{<<"interdigit_timeout">>, 2000}
+                                                                                  ,{<<"max_message_length">>, 500}
+                                                                                  ,{<<"single_mailbox_login">>, 'false'}
+                                                                                  ]
+                                                                     }
+                                                                    ,{<<"module">>, <<"voicemail">>}
+                                                                    ,{<<"children">>, [{}]}
+                                                                    ]
                                                           }]
                                         }
-                                      ]),
+                                       ]),
     Numbers = binary:split(maps:get(<<"numbers">>, Args), ?NUMBER_SEPERATOR, [global]),
     DocFuns = [{fun kzd_callflows:set_flow/2, Flow}
               ,{fun kzd_callflows:set_numbers/2, Numbers}
