@@ -249,10 +249,9 @@ format_result(Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
-     Numbers = binary:replace(maps:get(<<"numbers">>, Args), ?NUMBER_SEPERATOR, <<",">>),
     #{<<"id">> => <<"undefined">>
 %%     ,<<"flow">> => maps:get(<<"flow">>, Args)
-     ,<<"numbers">> =>  Numbers
+     ,<<"numbers">> => maps:get(<<"numbers">>, Args)
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      };
 generate_return_values_from_args(Args ,'delete') ->
@@ -268,10 +267,9 @@ generate_return_values_from_args(Args ,'delete') ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_doc(kz_doc:object(), map(), atom()) -> map().
 generate_return_values_from_doc(Doc, Args, 'import') ->
-     Numbers = binary:replace(maps:get(<<"numbers">>, Args), ?NUMBER_SEPERATOR, <<",">>),
     #{<<"id">> => kz_doc:id(Doc)
 %%     ,<<"flow">> => kzd_callflows:flow(Doc)
-     ,<<"numbers">> => Numbers
+     ,<<"numbers">> => maps:get(<<"numbers">>, Args) %% Pull the numbers from the Args so they are returned in the same order they are inputed
      ,<<"account_id">> => kz_doc:account_id(Doc)
      };
 generate_return_values_from_doc(Doc, _Args, 'delete') ->
