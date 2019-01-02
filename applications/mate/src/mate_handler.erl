@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-, 2600Hz
+%%% @copyright (C) 2018-2019, 2600Hz
 %%% @doc Handler for push notification request from mattermost
 %%%
 %%% @author Ben Partridge
