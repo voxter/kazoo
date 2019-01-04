@@ -392,7 +392,7 @@ validate_numbers_length(AccountId, Numbers) ->
 -spec check_numbers_length(kz_type:ne_binarys(), integer()) -> 'ok' | {'error', kz_type:ne_binary()}.
 check_numbers_length([], _MinLength) -> 'ok';
 check_numbers_length([Number | Numbers], MinLength) ->
-    case length(Number) of
+    case byte_size(Number) of
         N when N < MinLength ->
             {'error', <<"Number ",Number/binary, " is not long enough, Min length required: ", MinLength/binary>>};
         _Else ->
