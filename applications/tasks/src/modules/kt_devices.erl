@@ -493,7 +493,7 @@ check_username_length(AccountId, Username) ->
 check_username_length(_AccountId, _Username, 'false') -> 'ok';
 check_username_length(AccountId, Username, 'true') ->
     MinLength = kapps_account_config:get_global(AccountId, <<"device">>, <<"min_device_length">>, 3),
-    case length(Username) of
+    case byte_size(Username) of
         N when N < MinLength ->
             {'error', <<"Username is not long enough, Min length required: ", MinLength/binary>>};
         _Else ->

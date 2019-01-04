@@ -463,7 +463,7 @@ check_mailbox_number_length(AccountId, MailboxNumber) ->
 check_mailbox_number_length(_AccountId, _MailboxNumber, 'false') -> 'ok';
 check_mailbox_number_length(AccountId, MailboxNumber, 'true') ->
     MinLength = kapps_account_config:get_global(AccountId, <<"voicemail">>, <<"min_vmbox_length">>, 3),
-    case length(MailboxNumber) of
+    case byte_size(MailboxNumber) of
         N when N < MinLength ->
             {'error', <<"mailbox number is not long enough, Min length required: ", MinLength/binary>>};
         _Else ->
