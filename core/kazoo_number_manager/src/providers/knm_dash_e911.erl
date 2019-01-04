@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018, 2600Hz
+%%% @copyright (C) 2011-2019, 2600Hz
 %%% @doc Handle e911 provisioning
 %%% @author Peter Defebvre
 %%% @end
@@ -275,7 +275,7 @@ remove_number(Number) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Make a REST request to dash e911 emergency provisiong API to preform
-%% the given verb (validatelocation, addlocation, ect).
+%% the given verb (validatelocation, addlocation, etc).
 %% @end
 %%------------------------------------------------------------------------------
 -type emergency_provisioning_error() :: 'authentication' |

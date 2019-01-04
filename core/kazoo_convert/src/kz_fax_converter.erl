@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2018, 2600Hz
+%%% @copyright (C) 2012-2019, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -21,8 +21,8 @@
 -type fax_convert_funs() :: [fun((kz_term:ne_binary(), map()) -> fax_converted())].
 
 %%------------------------------------------------------------------------------
-%% @doc Converts the data or file specified in `Content' from the `To' mime-type to the
-%% `From' mime-type.
+%% @doc Converts the data or file specified in `Content' from the `From' mime-type to the
+%% `To' mime-type.
 %%
 %% Arguments Description:
 %% <ul>
@@ -43,22 +43,16 @@
 %%   the contents of the file or `path' to receive a path to the converted file in the response.
 %%   The default is `path'.</li>
 %%   <li><strong>tmp_dir:</strong> the working directory where the conversion will take place.</li>
-%%   <li><strong>return_metadata:</strong>Include a third option in the output tuple which is a Proplist of metadata about the file.</li>
+%%   <li><strong>read_metadata:</strong>Include a third option in the output tuple which is a Proplist of metadata about the file.</li>
 %%   <li><strong>to_filename:</strong>The user requested destination file name for the converted file, if a full path is provided this will
 %%   be copied to the specified path, if a relative path is specified, it will be copied to the `tmp_dir' using the file name specified</li>
 %% </ul>
 %%
 %% @end
 %%------------------------------------------------------------------------------
--spec convert(kz_term:ne_binary(), kz_term:ne_binary(), binary()|{'file', kz_term:ne_binary()}, kz_term:proplist()) ->
+-spec convert(kz_term:ne_binary(), kz_term:ne_binary(), binary()|{'file', kz_term:ne_binary()}, map() | kz_term:proplist()) ->
                      gen_kz_converter:converted().
-convert(From, To, Content, Opts) ->
-    Options = maps:from_list(
-                [{<<"from_format">>, From}
-                ,{<<"to_format">>, To}
-                ,{<<"job_id">>, props:get_value(<<"job_id">>, Opts, kz_binary:rand_hex(12))}
-                 | props:delete_keys([<<"job_id">>], Opts)
-                ]),
+convert(From, To, Content, #{<<"from_format">> := From, <<"to_format">> := To, <<"job_id">> := _ }=Options) ->
     Filename = save_file(Content, Options),
     lager:info("converting document ~s from ~s to ~s", [Filename, From, To]),
     case run_convert(eval_format(From, To), To, Filename, Options) of
@@ -71,7 +65,20 @@ convert(From, To, Content, Opts) ->
         {'error', Message}=Error ->
             lager:error("conversion failed with error: ~p", [Message]),
             Error
-    end.
+    end;
+convert(From, To, Content, Options) when is_map(Options) ->
+    case maps:is_key(<<"job_id">>, Options) of
+        true -> convert(From, To, Content, Options#{<<"from_format">> => From, <<"to_format">> => To});
+        false -> convert(From, To, Content, Options#{<<"from_format">> => From, <<"to_format">> => To, <<"job_id">> => kz_binary:rand_hex(12)})
+    end;
+convert(From, To, Content, Opts) ->
+    Options = maps:from_list(
+                [{<<"from_format">>, From}
+                ,{<<"to_format">>, To}
+                ,{<<"job_id">>, props:get_value(<<"job_id">>, Opts, kz_binary:rand_hex(12))}
+                 | props:delete_keys([<<"job_id">>], Opts)
+                ]),
+    convert(From, To, Content, Options).
 
 %%------------------------------------------------------------------------------
 %% @doc Collects the fax related metadata from a file
@@ -164,6 +171,12 @@ image_to_tiff(FromPath, #{<<"from_format">> := <<"image/tiff">>, <<"tmp_dir">> :
     case select_tiff_command(Info) of
         'noop' ->
             rename_file(FromPath, filename:join(TmpDir, <<JobId/binary, ".tiff">>));
+        {'resample', Command} ->
+            case convert_file(Command, FromPath, <<".tiff">>, Options) of
+                {'ok', Converted} ->
+                    handle_resample(Converted, Options);
+                Error -> Error
+            end;
         {'convert', Command} ->
             convert_file(Command, FromPath, <<".tiff">>, Options)
     end;
@@ -223,30 +236,45 @@ run_convert_command(Command, FromPath, ToPath, TmpDir) ->
             {'error', <<"convert command failed">>}
     end.
 
+-spec handle_resample(kz_term:ne_binary(), map()) -> fax_converted().
+handle_resample(FromPath, #{<<"tmp_dir">> := TmpDir}=Options) ->
+    case rename_file(FromPath, filename:join(TmpDir, <<(kz_binary:rand_hex(12))/binary, ".tiff">>)) of
+        {'ok', NewPath} ->
+            lager:debug("resampled file to ~p, ensuring valid fax format", [NewPath]),
+            image_to_tiff(NewPath, Options);
+        Error -> Error
+    end.
 
 -spec select_tiff_command(map()) ->
                                  {'convert', kz_term:ne_binary()} |
+                                 {'resample', kz_term:ne_binary()} |
                                  'noop'.
-select_tiff_command(#{<<"length">> := Height}) when Height > 1078 ->
-    lager:debug("file is too long, resizing"),
+select_tiff_command(#{<<"res_x">> := X, <<"res_y">> := Y}=Map) when X =:= 0
+    orelse Y =:= 0 ->
+    lager:debug("file is unknown dpi, re-sampling info: ~p", [Map]),
+    {'resample', ?RESAMPLE_IMAGE_COMMAND};
+select_tiff_command(#{<<"res_x">> := X, <<"res_y">> := Y}=Map) when X > 204
+    orelse Y > 200 ->
+    lager:debug("file is too high a dpi, re-sampling info: ~p", [Map]),
+    {'resample', ?RESAMPLE_IMAGE_COMMAND};
+select_tiff_command(#{<<"length">> := Height}=Map) when Height > 2200 ->
+    lager:debug("file is too long, resizing with info: ~p", [Map]),
     {'convert', ?LARGE_TIFF_COMMAND};
-select_tiff_command(#{<<"width">> := Width}) when Width > 1728 ->
-    lager:debug("file is too wide, resizing"),
+select_tiff_command(#{<<"width">> := Width}=Map) when Width > 1728 ->
+    lager:debug("file is too wide, resizing with info: ~p", [Map]),
     {'convert', ?LARGE_TIFF_COMMAND};
-select_tiff_command(#{<<"width">> := Width}) when Width < 1728 ->
-    lager:debug("file is smaller than page, centering"),
+select_tiff_command(#{<<"width">> := Width}=Map) when Width < 1728 ->
+    lager:debug("file is smaller than page, centering with info: ~p", [Map]),
     {'convert', ?SMALL_TIFF_COMMAND};
-select_tiff_command(#{<<"res_x">> := X, <<"res_y">> := Y}) when X > 204
-                                                       orelse Y > 98  ->
-    lager:debug("file is wrong dpi, resampling"),
-    {'convert', ?CONVERT_IMAGE_COMMAND};
-select_tiff_command(#{<<"scheme">> := <<"CCITT Group 3">>, <<"has_pages">> := 'true'}) ->
+select_tiff_command(#{<<"scheme">> := <<"CCITT Group 3">>, <<"has_pages">> := 'true'}=Map) ->
+    lager:debug("file has pages and is valid format for group 3, not going to convert info: ~p", [Map]),
     'noop';
-select_tiff_command(#{<<"scheme">> := <<"CCITT Group 4">>, <<"has_pages">> := 'true'}) ->
+select_tiff_command(#{<<"scheme">> := <<"CCITT Group 4">>, <<"has_pages">> := 'true'}=Map) ->
+    lager:debug("file has pages and is valid format for group 4, not going to convert info: ~p", [Map]),
     'noop';
-select_tiff_command(#{}) ->
-    lager:debug("file has no pages, resampling to fix"),
-    {'convert', ?CONVERT_IMAGE_COMMAND}.
+select_tiff_command(Map) ->
+    lager:debug("file has no pages or is not ccitt fax encoding, re-sampling with info: ~p", [Map]),
+    {'resample', ?CONVERT_IMAGE_COMMAND}.
 
 %%%=============================================================================
 %%% validate functions

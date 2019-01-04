@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2016-2018, 2600Hz
+%%% @copyright (C) 2016-2019, 2600Hz
 %%% @doc Handle prepend feature
 %%% @author Peter Defebvre
 %%% @author Pierre Fenoll
@@ -114,7 +114,7 @@ e911_caller_name(Number, 'undefined') ->
     AccountId = knm_phone_number:assigned_to(knm_number:phone_number(Number)),
     case kzd_accounts:fetch_name(AccountId) of
         undefined -> ?E911_NAME_DEFAULT;
-        Name -> Name
+        Name -> kz_binary:pad(Name, 3, <<" ">>)
     end.
 -endif.
 

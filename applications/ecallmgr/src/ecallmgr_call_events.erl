@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2018, 2600Hz
+%%% @copyright (C) 2010-2019, 2600Hz
 %%% @doc Receive call events from freeSWITCH, publish to the call's event queue
 %%% @author James Aimonetti <james@2600hz.org>
 %%% @author Karl Anderson <karl@2600hz.org>
@@ -582,7 +582,7 @@ create_event(EventName, Props) ->
 create_event(EventName, ApplicationName, Props) ->
     props:filter_undefined(
       [{<<"Event-Name">>, EventName}
-       |specific_call_event_props(EventName, ApplicationName, Props)
+       | specific_call_event_props(EventName, ApplicationName, Props)
        ++ generic_call_event_props(Props)
        ++ specific_call_channel_vars_props(EventName, Props)
       ]).

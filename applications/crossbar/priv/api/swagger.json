@@ -31078,7 +31078,7 @@
                             "type": "integer"
                         },
                         "convert_image_command": {
-                            "default": "convert $FROM -resample 204x98 -units PixelsPerInch -resize 1728x1078\\! -compress group4 $TO",
+                            "default": "convert $FROM -resample 200x200 -units PixelsPerInch -resize 1728x2200 -compress group4 $TO",
                             "description": "The command to resample a tiff file to a fax compatible format or convert a supported image/* format to a tiff",
                             "type": "string"
                         },
@@ -31088,7 +31088,7 @@
                             "type": "string"
                         },
                         "convert_pdf_command": {
-                            "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg4 -sOutputFile=$TO -- $FROM",
+                            "default": "/usr/bin/gs -q -r200x200 -g1728x2200 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg4 -sOutputFile=$TO -- $FROM",
                             "description": "The command to convert pdf documents to tiff",
                             "type": "string"
                         },
@@ -31103,8 +31103,13 @@
                             "type": "boolean"
                         },
                         "large_tiff_command": {
-                            "default": "convert $FROM -resample 204x98 -units PixelsPerInch -resize 1728\\!x1078 -compress group4 $TO",
-                            "description": "The command to convert large tiffs to standard dimensions",
+                            "default": "convert $FROM -resample 200x200 -units PixelsPerInch -resize 1728\\!x2200 -compress group4 $TO",
+                            "description": "The command to resize large tiffs to standard dimensions",
+                            "type": "string"
+                        },
+                        "resample_image_command": {
+                            "default": "convert $FROM -resample 200x200 -page +0+0 -compress group4 $TO",
+                            "description": "The command to resample an image file into a fax compliant formatted tiff",
                             "type": "string"
                         },
                         "serialize_openoffice": {
@@ -31113,8 +31118,8 @@
                             "type": "boolean"
                         },
                         "small_tiff_command": {
-                            "default": "convert $FROM -gravity center -resample 204x98 -units PixelsPerInch -extent 1728x1078 -compress group4 $TO",
-                            "description": "The command to convert small tiffs to a fax compatible format",
+                            "default": "convert $FROM -gravity center -resample 200x200 -units PixelsPerInch -extent 1728x2200 -compress group4 $TO",
+                            "description": "The command to format small tiffs to a fax compatible format",
                             "type": "string"
                         },
                         "validate_pdf_command": {
@@ -31137,6 +31142,58 @@
                 "file_cache_path": {
                     "default": "/tmp/",
                     "description": "The default working directory to use when converting files",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.kazoo_convert.convertapi": {
+            "description": "Schema for kazoo_convert.convertapi system_config",
+            "properties": {
+                "api_url": {
+                    "default": "https://v2.convertapi.com",
+                    "description": "convertapi api_url",
+                    "type": "string"
+                },
+                "pdf_version": {
+                    "default": "1.7",
+                    "description": "Which pdf version files will be produced by convertapi service",
+                    "enum": [
+                        "1.2",
+                        "1.3",
+                        "1.4",
+                        "1.5",
+                        "1.6",
+                        "1.7"
+                    ],
+                    "type": "string"
+                },
+                "resolution": {
+                    "default": 200,
+                    "description": "Which document resolution is used for converted files",
+                    "maximum": 2400,
+                    "minimum": 10,
+                    "type": "integer"
+                },
+                "secret": {
+                    "description": "convertapi secret",
+                    "type": "string"
+                },
+                "timeout": {
+                    "default": 60,
+                    "description": "Document conversion timeout",
+                    "maximum": 1200,
+                    "minimum": 10,
+                    "type": "integer"
+                },
+                "try_openoffice": {
+                    "default": "for_msoffice_files_also",
+                    "description": "For which files types may be called openoffice",
+                    "enum": [
+                        "for_msoffice_files_also",
+                        "for_openoffice_files_only",
+                        "never"
+                    ],
                     "type": "string"
                 }
             },
@@ -34108,6 +34165,10 @@
                     },
                     "type": "array"
                 },
+                "enabled": {
+                    "description": "Whether the rule is enabled",
+                    "type": "boolean"
+                },
                 "interval": {
                     "default": 1,
                     "description": "The recurrence interval for this rule",
@@ -34146,6 +34207,12 @@
                     "type": "integer"
                 },
                 "time_window_start": {
+                    "description": "Seconds from the start of a day to consider this rule valid",
+                    "maximum": 86400,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "time_window_stop": {
                     "description": "Seconds from the start of a day to stop considering this rule valid",
                     "maximum": 86400,
                     "minimum": 0,

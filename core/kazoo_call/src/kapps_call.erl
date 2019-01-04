@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018, 2600Hz
+%%% @copyright (C) 2011-2019, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -63,7 +63,6 @@
 -export([set_fetch_id/2, fetch_id/1]).
 -export([set_bridge_id/2, bridge_id/1]).
 -export([set_language/2, language/1]).
--export([ccvs/1]).
 -export([get_prompt/2, get_prompt/3]).
 -export([set_to_tag/2, to_tag/1]).
 -export([set_from_tag/2, from_tag/1]).
@@ -1068,10 +1067,6 @@ bridge_id(#kapps_call{bridge_id=BridgeId}) -> BridgeId.
 -spec set_language(kz_term:ne_binary(), call()) -> call().
 set_language(Language, #kapps_call{}=Call) when is_binary(Language) ->
     Call#kapps_call{language=Language}.
-
--spec ccvs(call()) -> kz_json:object().
-ccvs(#kapps_call{ccvs=CCVs}) ->
-        CCVs.
 
 -spec language(call()) -> kz_term:api_binary().
 -ifdef(TEST).

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2018, 2600Hz
+%%% @copyright (C) 2012-2019, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @end
@@ -56,6 +56,8 @@ websocket_handle({'text', Data}, State) ->
         {'ok', NewState} -> {'ok', NewState, 'hibernate'};
         'error' -> {'ok', State, 'hibernate'}
     end;
+websocket_handle(ping, State) ->
+    {'ok', State, 'hibernate'};
 websocket_handle(_Other, State) ->
     lager:debug("not handling message : ~p", [_Other]),
     {'ok', State, 'hibernate'}.
@@ -65,6 +67,8 @@ websocket_info({'$gen_cast', _}, State) ->
     {'ok', State};
 websocket_info({'send_data', Data}, State) ->
     {'reply', {'text', kz_json:encode(Data)}, State};
+websocket_info(pong, State) ->
+    {'reply', pong, State};
 websocket_info(Info, State) ->
     lager:info("unhandled websocket info: ~p", [Info]),
     {'ok', State}.

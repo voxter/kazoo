@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-, 2600Hz
+%%% @copyright (C) 2018-2019, 2600Hz
 %%% @doc Data: {
 %%%   "id":"queue id",
 %%%   "window":900 // Window over which average wait time is calc'd

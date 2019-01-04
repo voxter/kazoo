@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2018, 2600Hz
+%%% @copyright (C) 2010-2019, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -71,10 +71,10 @@ handle_amqp_event(EventJObj, _Props, ?MODULE_REQ_ROUTING_KEY) ->
 handle_amqp_event(EventJObj, _Props, <<_/binary>> = RoutingKey) ->
     Evt = kz_util:get_event_type(EventJObj),
     lager:debug("recv event ~p (~s)", [Evt, RoutingKey]),
-    RK = <<"blackhole.event.", RoutingKey/binary, ".*">>,
-    Res = blackhole_bindings:map(RK, [RoutingKey, EventJObj]),
-    lager:debug("delivered the event ~p (~s) to ~b subscriptions"
-               ,[Evt, RoutingKey, length(Res)]
+    RK = <<"blackhole.event.", RoutingKey/binary>>,
+    {Time, Res} = timer:tc(blackhole_bindings, pmap, [RK, [RoutingKey, EventJObj]]),
+    lager:debug("delivered the event ~p (~s) to ~b subscriptions in ~b ms"
+               ,[Evt, RoutingKey, length(Res), Time div 1000]
                );
 handle_amqp_event(EventJObj, Props, BasicDeliver) ->
     handle_amqp_event(EventJObj, Props, gen_listener:routing_key_used(BasicDeliver)).

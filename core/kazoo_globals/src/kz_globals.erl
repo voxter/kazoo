@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2018, 2600Hz
+%%% @copyright (C) 2012-2019, 2600Hz
 %%% @doc
 %%% @author Luis Azedo
 %%% @end
@@ -150,8 +150,13 @@ where_is(Name) ->
 -spec lookup_name(kz_global:name()) -> kz_global:global() | 'undefined'.
 lookup_name(Name) ->
     case ets:lookup(?TAB_NAME, Name) of
-        [Global] -> Global;
-        [] -> 'undefined'
+        [Global] ->
+            case is_process_alive(kz_global:pid(Global)) of
+                'true' -> Global;
+                'false' -> 'undefined'
+            end;
+        [] ->
+            'undefined'
     end.
 
 -spec register_name(kz_global:name(), pid()) -> 'yes' | 'no'.

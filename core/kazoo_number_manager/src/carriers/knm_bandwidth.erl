@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018, 2600Hz
+%%% @copyright (C) 2011-2019, 2600Hz
 %%% @doc Handle client requests for phone_number documents
 %%% @author Karl Anderson
 %%% @end
@@ -220,7 +220,7 @@ should_lookup_cnam() -> 'true'.
 
 %%------------------------------------------------------------------------------
 %% @doc Make a REST request to Bandwidth.com Numbers API to preform the
-%% given verb (purchase, search, provision, ect).
+%% given verb (purchase, search, provision, etc).
 %% @end
 %%------------------------------------------------------------------------------
 -spec make_numbers_request(atom(), kz_term:proplist()) ->

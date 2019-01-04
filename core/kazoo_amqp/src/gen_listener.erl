@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018, 2600Hz
+%%% @copyright (C) 2011-2019, 2600Hz
 %%% @doc Behaviour for setting up an AMQP listener.
 %%% Add/remove responders for `Event-Cat'/`Event-Name' pairs. Each responder
 %%% corresponds to a module that has defined a `handle/1' function, receiving
@@ -1334,7 +1334,7 @@ declare_exchange(Channel, Exchange, Exchanges) ->
 -spec start_initial_bindings(state(), kz_term:proplist()) -> state().
 start_initial_bindings(State, Params) ->
     lists:foldl(fun({Binding, Props}, StateAcc) ->
-                        handle_add_binding(Binding, Props, StateAcc)
+                        handle_add_binding(kz_term:to_binary(Binding), Props, StateAcc)
                 end
                ,State
                ,props:get_value('bindings', Params, [])

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2018, 2600Hz
+%%% @copyright (C) 2010-2019, 2600Hz
 %%% @doc Store routing keys/`pid' bindings. When a binding is fired,
 %%% pass the payload to the `pid' for evaluation, accumulating
 %%% the results for the response to the running process.
@@ -755,7 +755,7 @@ pmap_processor_fold(#kz_binding{binding=Binding
                    ,_Options
                    ) ->
     lager:debug("exact match for ~s", [Binding]),
-    map_responders(Acc, Responders, Payload);
+    pmap_responders(Acc, Responders, Payload);
 pmap_processor_fold(#kz_binding{binding_parts=BParts
                                ,binding_responders=Responders
                                }
