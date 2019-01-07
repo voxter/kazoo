@@ -19,10 +19,11 @@
 handle(Data, Call) ->
     %% kvs_mode being deprecated, always doing JSON
     Data1 = kz_json:delete_key(<<"kvs_mode">>, Data),
-    Data2 = kz_json:set_value(<<"custom_application_vars">>
-                             ,eval_expressions(Data1, Call)
-                             ,kz_json:new()
-                             ),
+    Data2 = kz_json:set_values([{<<"custom_application_vars">>, eval_expressions(Data1, Call)}
+                               ,{<<"export">>, 'true'}
+                               ]
+                              ,kz_json:new()
+                              ),
     cf_set_variables:handle(Data2, Call).
 
 -spec eval_expressions(kz_json:object(), kapps_call:call()) -> kz_json:object().
