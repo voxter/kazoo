@@ -644,6 +644,18 @@ get_fs_key_and_value(<<"ringback">>=Key, Value, _UUID) ->
     ];
 get_fs_key_and_value(?CCV(Key), Val, UUID) ->
     get_fs_key_and_value(Key, Val, UUID);
+get_fs_key_and_value(?CAV(_)=CAV, Val, _UUID) ->
+    case kz_json:is_json_object(Val) of
+        'true' ->
+            {get_fs_key(CAV), maybe_sanitize_fs_value(CAV, kz_json:encode(Val))};
+        'false' when is_binary(Val);
+                     is_atom(Val);
+                     is_number(Val);
+                     is_list(Val);
+                     is_boolean(Val) ->
+            {get_fs_key(CAV), maybe_sanitize_fs_value(CAV, Val)};
+        'false' -> 'skip'
+    end;
 get_fs_key_and_value(Key, Val, _UUID)
   when is_binary(Val);
        is_atom(Val);
