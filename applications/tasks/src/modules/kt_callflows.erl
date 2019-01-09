@@ -455,13 +455,5 @@ add_private_fields(AccountId ,Doc) ->
 %%------------------------------------------------------------------------------
 -spec delete_callflow(kz_type:ne_binary(), kz_tasks:args()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
 delete_callflow(AccountId ,#{<<"callflow_id">> := CallflowId}) ->
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    case kz_datamgr:del_doc(AccountDb, CallflowId) of
-        {'error', Reason} ->
-            lager:error("failed to del doc, Reason: ~p, Doc id: ~p", [Reason, CallflowId]),
-            {'error', kz_term:to_binary(Reason)};
-        {'ok', _Doc} = Ok ->
-            Ok
-    end.
-
+    kz_tasks_utils:delete_doc(AccountId, CallflowId, <<"callflow">>).
 %%% End of Module.

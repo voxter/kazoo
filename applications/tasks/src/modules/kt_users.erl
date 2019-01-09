@@ -523,14 +523,7 @@ check_username_length(AccountId, Username, 'true') ->
 %%------------------------------------------------------------------------------
 -spec delete_user(kz_type:ne_binary(), kz_tasks:args()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
 delete_user(AccountId ,#{<<"user_id">> := UserId}) ->
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    case kz_datamgr:del_doc(AccountDb, UserId) of
-        {'error', Reason} ->
-            lager:error("failed to del doc, Reason: ~p, Doc id: ~p", [Reason, UserId]),
-            {'error', kz_term:to_binary(Reason)};
-        {'ok', _UserDoc} = Ok ->
-            Ok
-    end.
+    kz_tasks_utils:delete_doc(AccountId, UserId, <<"user">>).
 
 %%------------------------------------------------------------------------------
 %% @doc Generate MD5 and SHA1 hashes from a username and password
