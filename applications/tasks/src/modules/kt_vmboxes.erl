@@ -475,16 +475,8 @@ check_mailbox_number_length(AccountId, MailboxNumber, 'true') ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_vmbox(kz_type:ne_binary(), kz_tasks:args()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
-delete_vmbox(AccountId ,#{<<"vmbox_id">> := VmboxId}) ->
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    case kz_datamgr:del_doc(AccountDb, VmboxId) of
-        {'error', Reason} ->
-            lager:error("failed to del doc, Reason: ~p, Doc id: ~p", [Reason, VmboxId]),
-            {'error', kz_term:to_binary(Reason)};
-        {'ok', _} = Ok ->
-            Ok
-    end.
-
+delete_vmbox(AccountId ,#{<<"vmbox_id">> := VMBoxId}) ->
+    kz_tasks_utils:delete_doc(AccountId, VMBoxId, <<"vmbox">>).
 %%------------------------------------------------------------------------------
 %% @doc Generate alphanum from the vmbox name
 %% @end
