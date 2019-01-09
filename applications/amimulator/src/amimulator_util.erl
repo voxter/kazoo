@@ -256,9 +256,9 @@ find_agent_call_ids(Call) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req
-                                     ,fun kapi_acdc_agent:publish_stats_req/1
-                                     ,500
-                                     ) of
+                                    ,fun kapi_acdc_agent:publish_stats_req/1
+                                    ,500
+                                    ) of
         {'ok', RespJObjs} ->
             lists:foldl(fun(Resp, Acc) ->
                                 case kz_json:get_value(<<"Agent-Call-IDs">>, Resp) of

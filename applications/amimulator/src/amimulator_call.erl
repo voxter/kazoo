@@ -276,9 +276,9 @@ control_queue(#call{call_id=CallId
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     ReqResp = kz_amqp_worker:call(Req
-                                          ,fun kapi_amimulator:publish_control_queue_req/1
-                                          ,fun kapi_amimulator:control_queue_resp_v/1
-                                          ),
+                                 ,fun kapi_amimulator:publish_control_queue_req/1
+                                 ,fun kapi_amimulator:control_queue_resp_v/1
+                                 ),
     case ReqResp of
         {'error', 'timeout'} ->
             'undefined';

@@ -964,10 +964,10 @@ originate(<<"ChanSpy">>, Props) ->
 
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case kz_amqp_worker:call_collect(Prop
-                                     ,fun kapi_resource:publish_originate_req/1
-                                     ,fun until_callback/1
-                                     ,5000
-                                     ) of
+                                    ,fun kapi_resource:publish_originate_req/1
+                                    ,fun until_callback/1
+                                    ,5000
+                                    ) of
         {'ok', [JObj|_]} ->
             lager:debug("Successful originate, executing eavesdrop"),
             ServerId = kz_json:get_value(<<"Server-ID">>, JObj),

@@ -31,9 +31,9 @@ handle(Data, Call) ->
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_queue:publish_agents_available_req/1
-                                     ,fun kapi_acdc_queue:agents_available_resp_v/1
-                                     ) of
+                            ,fun kapi_acdc_queue:publish_agents_available_req/1
+                            ,fun kapi_acdc_queue:agents_available_resp_v/1
+                            ) of
         {'error', E} ->
             lager:debug("error ~p when getting agents availability in queue ~s", [E, QueueId]),
             cf_exe:attempt(?AVAILABLE_BRANCH_KEY, Call);

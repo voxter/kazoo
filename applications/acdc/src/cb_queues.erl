@@ -708,9 +708,9 @@ fetch_stats_summary(Context) ->
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_call_summary_req/1
-                                     ,fun kapi_acdc_stats:call_summary_resp_v/1
-                                     )
+                            ,fun kapi_acdc_stats:publish_call_summary_req/1
+                            ,fun kapi_acdc_stats:call_summary_resp_v/1
+                            )
     of
         {'error', E} ->
             crossbar_util:response('error', <<"stat request had errors">>, 400
@@ -843,9 +843,9 @@ list_members(Context, Id) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call(Req
-                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
-                                     ,fun kapi_acdc_stats:current_calls_resp_v/1
-                                     )
+                            ,fun kapi_acdc_stats:publish_current_calls_req/1
+                            ,fun kapi_acdc_stats:current_calls_resp_v/1
+                            )
     of
         {'error', E} ->
             lager:error("failed to recv resp from AMQP: ~p", [E]),
