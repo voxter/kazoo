@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2018, 2600Hz
+%%% @copyright (C) 2012-2019, 2600Hz
 %%% @doc Data: {
 %%%   "id":"queue id",
 %%%   "enter_as_callback","Boolean, if true, enter the queue as a callback from the start"

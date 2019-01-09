@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2018, 2600Hz
+%%% @copyright (C) 2010-2019, 2600Hz
 %%% @doc Execute call commands
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -474,9 +474,15 @@ get_fs_app(Node, UUID, JObj, <<"set">>) ->
             CallVars = kz_json:to_proplist(kz_json:get_json_value(<<"Custom-Call-Vars">>, JObj, kz_json:new())),
             AppVars = kz_json:to_proplist(kz_json:get_json_value(<<"Custom-Application-Vars">>, JObj, kz_json:new())),
 
+            Command = case kz_json:get_boolean_value(<<"Export-All">>, JObj) of
+                          'true' -> <<"kz_export">>;
+                          'false' -> <<"kz_multiset">>
+                      end,
+
             props:filter_undefined(
-              [{<<"kz_multiset">>, maybe_multi_set(Node, UUID, ChannelVars)}
-              ,{<<"kz_multiset">>, maybe_multi_set(Node, UUID, [{?CAV(K), V} || {K, V} <- AppVars])}
+              [{Command, maybe_multi_set(Node, UUID, ChannelVars)}
+              ,{Command, maybe_multi_set(Node, UUID, [{?CAV(K), V} || {K, V} <- AppVars])}
+               %% CallVars are always exported
               ,{<<"kz_export">>, maybe_multi_set(Node, UUID, CallVars)}
               ])
     end;

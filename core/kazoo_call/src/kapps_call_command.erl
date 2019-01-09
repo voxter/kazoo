@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2018, 2600Hz
+%%% @copyright (C) 2012-2019, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -44,7 +44,7 @@
         ,hangup/1, hangup/2
         ,break/1
         ,queued_hangup/1
-        ,set/3, set/4, set_terminators/2
+        ,set/3, set/4, set/5, set_terminators/2
         ,fetch/1, fetch/2
         ]).
 -export([echo/1]).
@@ -822,9 +822,12 @@ set(ChannelVars, CallVars, Call) ->
     set(ChannelVars, CallVars, 'undefined', Call).
 
 -spec set(kz_term:api_object(), kz_term:api_object(), kz_term:api_object(), kapps_call:call()) -> 'ok'.
-set('undefined', CallVars, AppVars, Call) -> set(kz_json:new(), CallVars, AppVars, Call);
-set(ChannelVars, 'undefined', AppVars, Call) -> set(ChannelVars, kz_json:new(), AppVars, Call);
-set(ChannelVars, CallVars, AppVars, Call) ->
+set(ChannelVars, CallVars, AppVars, Call) -> set(ChannelVars, CallVars, AppVars, 'false', Call).
+
+-spec set(kz_term:api_object(), kz_term:api_object(), kz_term:api_object(), boolean(), kapps_call:call()) -> 'ok'.
+set('undefined', CallVars, AppVars, ExportAll, Call) -> set(kz_json:new(), CallVars, AppVars, ExportAll, Call);
+set(ChannelVars, 'undefined', AppVars, ExportAll, Call) -> set(ChannelVars, kz_json:new(), AppVars, ExportAll, Call);
+set(ChannelVars, CallVars, AppVars, ExportAll, Call) ->
     case kz_json:is_empty(ChannelVars)
         andalso kz_json:is_empty(CallVars)
         andalso kz_json:is_empty(AppVars)
@@ -835,6 +838,7 @@ set(ChannelVars, CallVars, AppVars, Call) ->
                       ,{<<"Custom-Application-Vars">>, AppVars}
                       ,{<<"Custom-Call-Vars">>, CallVars}
                       ,{<<"Custom-Channel-Vars">>, ChannelVars}
+                      ,{<<"Export-All">>, ExportAll}
                       ,{<<"Insert-At">>, <<"now">>}
                       ],
             send_command(Command, Call)

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-, 2600Hz
+%%% @copyright (C) 2018-2019, 2600Hz
 %%% @doc Sets up a proxy for the mattermost push notification service.
 %%%
 %%% @author Ben Partridge

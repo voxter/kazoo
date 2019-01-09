@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-, Voxter Communications Inc
+%%% @copyright (C) 2018-2019, Voxter Communications Inc
 %%% @doc Handles branching the callflow based on the current average wait time
 %%% of a queue
 %%% Data: {

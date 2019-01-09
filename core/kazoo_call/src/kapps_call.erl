@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2018, 2600Hz
+%%% @copyright (C) 2011-2019, 2600Hz
 %%% @doc
 %%% @author Karl Anderson
 %%% @author James Aimonetti
@@ -68,7 +68,6 @@
 -export([set_fetch_id/2, fetch_id/1]).
 -export([set_bridge_id/2, bridge_id/1]).
 -export([set_language/2, language/1]).
--export([ccvs/1]).
 -export([get_prompt/2, get_prompt/3]).
 -export([set_to_tag/2, to_tag/1]).
 -export([set_from_tag/2, from_tag/1]).
@@ -93,7 +92,7 @@
 
 -export([set_custom_application_var/3
         ,insert_custom_application_var/3
-        ,set_custom_application_vars/2
+        ,set_custom_application_vars/2, set_custom_application_vars/3
         ,custom_application_var/3
         ,custom_application_var/2
         ,custom_application_vars/1
@@ -1121,10 +1120,6 @@ bridge_id(#kapps_call{bridge_id=BridgeId}) -> BridgeId.
 set_language(Language, #kapps_call{}=Call) when is_binary(Language) ->
     Call#kapps_call{language=Language}.
 
--spec ccvs(call()) -> kz_json:object().
-ccvs(#kapps_call{ccvs=CCVs}) ->
-        CCVs.
-
 -spec language(call()) -> kz_term:api_binary().
 -ifdef(TEST).
 language(#kapps_call{language=L}) -> L.
@@ -1274,19 +1269,24 @@ insert_custom_application_var(Key, Value, #kapps_call{cavs=CAVs}=Call) ->
     Call#kapps_call{cavs=kz_json:set_value(Key, Value, CAVs)}.
 
 -spec set_custom_application_vars(kz_term:proplist(), call()) -> call().
-set_custom_application_vars(Props, #kapps_call{cavs=CAVs}=Call) ->
+set_custom_application_vars(Props, Call) ->
+    set_custom_application_vars(Props, Call, 'false').
+
+-spec set_custom_application_vars(kz_term:proplist(), call(), boolean()) -> call().
+set_custom_application_vars(Props, #kapps_call{cavs=CAVs}=Call, Export) ->
     NewCAVs = kz_json:set_values(Props, CAVs),
 
-    maybe_update_call_cavs(Call, Props, kz_json:to_proplist(CAVs)),
+    maybe_update_call_cavs(Call, Props, kz_json:to_proplist(CAVs), Export),
 
     Call#kapps_call{cavs=NewCAVs}.
 
--spec maybe_update_call_cavs(call(), kz_term:proplist(), kz_term:proplist()) -> 'ok'.
-maybe_update_call_cavs(Call, NewCAVs, ExistingCAVs) ->
+-spec maybe_update_call_cavs(call(), kz_term:proplist(), kz_term:proplist(), boolean()) -> 'ok'.
+maybe_update_call_cavs(Call, NewCAVs, ExistingCAVs, Export) ->
     %% Modeled after updateable_ccvs/2
     case NewCAVs -- ExistingCAVs of
         [] -> 'ok';
-        Updates -> kapps_call_command:set('undefined', 'undefined', kz_json:from_list(Updates), Call)
+        Updates ->
+            kapps_call_command:set('undefined', 'undefined', kz_json:from_list(Updates), Export, Call)
     end.
 
 -spec custom_application_var(any(), Default, call()) -> Default | _.
