@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2016-2018, Voxter
+%%% @copyright (C) 2016-2019, Voxter
 %%% @doc
 %%% @author Ben Bradford
 %%% @end
@@ -14,7 +14,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_doc(kz_type:ne_binary(), kz_type:ne_binary(), kz_type:ne_binary()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
-delete_doc(AccountId ,DocId, DocType) ->
+delete_doc(AccountId, DocId, DocType) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     case verify_doc_type(AccountDb, DocId, DocType) of
         {'error', Cause} = Error ->
@@ -23,7 +23,7 @@ delete_doc(AccountId ,DocId, DocType) ->
         'false' ->
             lager:error("doc id supplied is not correct type, AccountId: ~p, Doc id: ~p, Expected Type: ~p", [AccountId, DocId, DocType]),
             {'error', <<"doc id supplied is not the correct type">>};
-         'true' ->
+        'true' ->
             do_delete_doc(AccountDb, DocId)
     end.
 
@@ -45,7 +45,7 @@ verify_doc_type(AccountDb, DocId, DocType) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec do_delete_doc(kz_type:ne_binary(), kz_type:ne_binary()) -> {'ok', kz_doc:object()}  | {'error', kz_type:ne_binary()}.
-do_delete_doc(AccountDb ,DocId) ->
+do_delete_doc(AccountDb, DocId) ->
     case kz_datamgr:del_doc(AccountDb, DocId) of
         {'error', Cause} ->
             lager:error("failed to del doc, Cause: ~p, Doc id: ~p", [Cause, DocId]),
