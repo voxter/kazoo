@@ -445,7 +445,7 @@ generate_device_doc(AccountId, Args) ->
               ,{fun kzd_devices:set_enabled/2, 'true'}
               ,{fun kzd_devices:set_exclude_from_queues/2, 'false'}
               ,{fun kzd_devices:set_music_on_hold/2, kz_json:new()}
-              ,{fun kzd_devices:set_mwi_unsolicitated_updates/2, 'true'}
+              ,{fun kzd_devices:set_mwi_unsolicited_updates/2, 'true'}
               ,{fun kzd_devices:set_register_overwrite_notify/2, 'false'}
               ,{fun kzd_devices:set_ringtones/2, kz_json:new()}
               ,{fun kzd_devices:set_suppress_unregister_notifications/2, 'false'}
