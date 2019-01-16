@@ -87,3 +87,7 @@ compile_commands.json
 core/kazoo_proper/priv/mp3.mp3
 *.md.bak
 *.md.new
+
+cscope.files
+cscope.out
+tags
