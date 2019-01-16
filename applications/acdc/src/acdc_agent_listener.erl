@@ -1253,6 +1253,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
 
     Prop = props:filter_undefined(
              [{<<"Msg-ID">>, kz_binary:rand_hex(6)}
+             ,{<<"Custom-Application-Vars">>, kapps_call:custom_application_vars(Call)}
              ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
              ,{<<"Timeout">>, Timeout}
              ,{<<"Endpoints">>, Endpoints}
@@ -1328,6 +1329,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
                                   ,{<<"Outbound-Caller-ID-Number">>, CIDNumber}
                                   ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                                   ,{<<"Continue-On-Fail">>, 'false'}
+                                  ,{<<"Custom-Application-Vars">>, kapps_call:custom_application_vars(Call)}
                                   ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                                   ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
                                                                       ,<<"Retain-CID">>
@@ -1400,6 +1402,7 @@ do_originate_callback_return(MyQ, Call, {CIDNumber, CIDName}) ->
                 ,{<<"Dial-Endpoint-Method">>, <<"single">>}
                 ,{<<"Msg-ID">>, MsgId}
                 ,{<<"Continue-On-Fail">>, 'true'}
+                ,{<<"Custom-Application-Vars">>, kapps_call:custom_application_vars(Call)}
                 ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                 ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
                                                     ,<<"Authorizing-Type">>, <<"Authorizing-ID">>
