@@ -301,7 +301,7 @@ update_user_kazoo(Context, UserDoc, MattermostUserData) ->
               ,{?MATTERMOST_EMAIL_KEY, kz_json:get_value(<<"email">>, MattermostUserData)}
               ,{?MATTERMOST_PASSWORD_KEY, kz_json:get_value(<<"password">>, MattermostUserData)}
               ],
-    kz_datamgr:update_doc(cb_context:account_db(Context), kz_doc:id(UserDoc), Updates).
+    kz_datamgr:update_doc(cb_context:account_db(Context), kz_doc:id(UserDoc), [{'update', Updates}]).
 
 -spec mattermost_authed_req(atom(), string(), kz_json:term()) -> kz_http:resp().
 mattermost_authed_req(Method, Path, Data) ->
