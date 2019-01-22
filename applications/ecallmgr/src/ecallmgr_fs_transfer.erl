@@ -26,7 +26,7 @@ attended(Node, UUID, JObj) ->
 
     Vars = [{<<"Ignore-Early-Media">>, <<"ring_ready">>}
            ,{<<"Simplify-Loopback">>, <<"false">>}
-           ,{<<"Loopback-Bowout">>, <<"true">>}
+           ,{<<"Loopback-Bowout">>, <<"false">>}
            ,{<<"Loopback-Request-URI">>, ReqURI}
            ,{<<"SIP-Invite-Domain">>, Realm}
            ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_ne_binary_value(<<"Caller-ID-Number">>, JObj)}
