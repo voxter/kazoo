@@ -424,9 +424,10 @@ normalize_channel(JObj) ->
 
 -spec maybe_transfer(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 maybe_transfer(Context, Transferor) ->
+    TransferType = cb_context:req_value(Context, <<"transfer-type">>, <<"blind">>),
     Channel = cb_context:resp_data(Context),
     case kz_json:get_value(<<"other_leg_call_id">>, Channel) of
-        'undefined' ->
+        'undefined' when TransferType =/= <<"pickup">> ->
             lager:debug("no transferee leg found"),
             cb_context:add_validation_error(<<"other_leg_call_id">>
                                            ,<<"required">>
@@ -437,7 +438,7 @@ maybe_transfer(Context, Transferor) ->
             maybe_transfer(Context, Transferor, Transferee)
     end.
 
--spec maybe_transfer(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
+-spec maybe_transfer(cb_context:context(), kz_term:ne_binary(), kz_term:api_ne_binary()) -> cb_context:context().
 maybe_transfer(Context, Transferor, Transferee) ->
     case cb_context:req_value(Context, <<"target">>) of
         'undefined' ->
@@ -451,7 +452,7 @@ maybe_transfer(Context, Transferor, Transferee) ->
             transfer(Context, Transferor, Transferee, Target)
     end.
 
--spec transfer(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
+-spec transfer(cb_context:context(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:ne_binary()) -> cb_context:context().
 transfer(Context, Transferor, _Transferee, Target) ->
     TransferType = cb_context:req_value(Context, <<"transfer-type">>, <<"blind">>),
     API = [{<<"Call-ID">>, Transferor}
@@ -465,7 +466,12 @@ transfer(Context, Transferor, _Transferee, Target) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
 
-    lager:debug("attempting ~s transfer ~s to ~s by ~s", [TransferType, _Transferee, Target, Transferor]),
+    case TransferType of
+        <<"pickup">> ->
+            lager:debug("attempting pickup of ~s by ~s", [Target, Transferor]);
+        _ ->
+            lager:debug("attempting ~s transfer ~s to ~s by ~s", [TransferType, _Transferee, Target, Transferor])
+    end,
     kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1),
     crossbar_util:response_202(<<"transfer initiated">>, Context).
 
