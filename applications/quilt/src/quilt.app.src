@@ -2,6 +2,7 @@
              [{applications,[acdc,kazoo,kazoo_amqp,kazoo_data,kazoo_stdlib,
                              kernel,lager,stdlib]},
               {description,"Asterisk queue_log translator for Kazoo"},
+              {env,[{is_kazoo_app,true}]},
               {vsn,"1"},
               {modules,[]},
               {registered,[]},
