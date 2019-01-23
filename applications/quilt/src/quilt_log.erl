@@ -40,7 +40,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     lager:debug("exited queue call lookup: ~p", [Call]),
     Ev = {kz_json:get_value(<<"Status">>, Call), kz_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
-        {<<"abandoned">>, <<"No agents left in queue">>} ->
+        {<<"abandoned">>, <<"member_exit_empty">>} ->
             quilt_sup:stop_member_fsm(CallId),
             EventName = "EXITEMPTY",
             WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
