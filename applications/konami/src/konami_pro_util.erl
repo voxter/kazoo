@@ -15,6 +15,11 @@
 -include_lib("kazoo_stdlib/include/kz_types.hrl").
 -include_lib("kazoo_stdlib/include/kz_log.hrl").
 
+-ignore_xref([{'konami_pro_hack', 'listen_on_other_leg', 2}
+             ,{'konami_pro_hack', 'send_hangup_req', 1}
+             ,{'konami_pro_hack', 'send_break_req', 1}
+             ]).
+
 -spec listen_on_other_leg(any(), any()) -> any().
 listen_on_other_leg(Arg1, Arg2) ->
     lager:debug("args: ~p", [[Arg1, Arg2]]),
