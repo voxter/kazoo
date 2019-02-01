@@ -22,7 +22,8 @@ attended(Node, UUID, JObj) ->
 
     ReqURI = <<TransferTo/binary, "@", Realm/binary>>,
 
-    Vars = [{<<"Ignore-Early-Media">>, <<"ring_ready">>}
+    Vars = [{<<"Force-Transfer-Dialplan">>, kz_json:get_ne_binary_value(<<"Force-Transfer-Dialplan">>, JObj)}
+           ,{<<"Ignore-Early-Media">>, <<"ring_ready">>}
            ,{<<"Simplify-Loopback">>, <<"false">>}
            ,{<<"Loopback-Bowout">>, <<"true">>}
            ,{<<"Loopback-Request-URI">>, ReqURI}
