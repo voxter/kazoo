@@ -249,6 +249,7 @@
                               ,{<<"Fax-Identity-Number">>, <<"fax_ident">>}
                               ,{<<"Fax-Timezone">>, <<"fax_timezone">>}
                               ,{<<"From-URI">>, <<"sip_from_uri">>}
+                              ,{<<"Force-Transfer-Dialplan">>, <<"force_transfer_dialplan">>}
                               ,{<<"Hangup-After-Pickup">>, <<"hangup_after_bridge">>}
                               ,{<<"Hold-Media">>, <<"hold_music">>}
                               ,{<<"Ignore-Completed-Elsewhere">>, <<"ignore_completed_elsewhere">>}
