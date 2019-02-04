@@ -175,7 +175,6 @@ maybe_set_e164_origination(_AccountId, _Timestamp, JObj) ->
 -spec maybe_set_did_classifier(kz_term:api_ne_binary(), kz_time:gregorian_seconds(), kz_call_event:doc()) -> kz_call_event:doc().
 maybe_set_did_classifier(_AccountId, _Timestamp, JObj) ->
     maybe_leak_ccv(JObj, <<"DID-Classifier">>).
->>>>>>> PISTON-616:Added did classifier to cdr for outgoing offnet calls
 
 -spec is_conference(kz_term:api_ne_binary(), kz_time:gregorian_seconds(), kz_call_event:doc()) -> kz_call_event:doc().
 is_conference(_AccountId, _Timestamp, JObj) ->
