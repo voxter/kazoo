@@ -34,6 +34,7 @@
             "type": "string"
         },
         "method": {
+            "default": "put",
             "description": "HTTP verb to use when sending the recording to the supplied URL",
             "enum": [
                 "put",
@@ -62,6 +63,11 @@
         "record_sample_rate": {
             "description": "What sampling rate to use on the recording",
             "type": "integer"
+        },
+        "should_follow_transfer": {
+            "default": true,
+            "description": "If true, the recording will continue after a transfer on the active leg",
+            "type": "boolean"
         },
         "time_limit": {
             "default": 3600,

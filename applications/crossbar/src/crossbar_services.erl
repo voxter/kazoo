@@ -60,7 +60,7 @@ should_dry_run(Context) ->
     cb_context:accepting_charges(Context) =/= 'true'
         andalso cb_context:api_version(Context) =/= ?VERSION_1.
 
--spec check_creditably(cb_context:context(), kz_services:services(), kz_services_invoices:invoices(), boolean()) ->
+-spec check_creditably(cb_context:context(), kz_services:services(), kz_services_invoices:invoices(), boolean() | number()) ->
                               cb_context:context().
 check_creditably(Context, _Services, _Quotes, 'false') ->
     Context;
@@ -82,9 +82,15 @@ check_creditably(Context, _Services, _Quotes, Amount) when Amount =< 0 ->
 check_creditably(Context, Services, _Quotes, Amount) ->
     Options = #{amount => kz_currency:dollars_to_units(Amount)},
     case kz_services:is_good_standing(Services, Options) of
-        'true' -> Context;
-        'false' ->
-            cb_context:add_system_error('no_credit', Context)
+        {'true', _} -> Context;
+        {'false', Reason} ->
+            Msg = io_lib:format("account ~s does not have enough credit to perform the operation"
+                               ,[kz_services:account_id(Services)]
+                               ),
+            ErrorJObj = kz_json:from_list([{<<"message">>, kz_term:to_binary(Msg)}
+                                          ,{<<"reason">>, Reason}
+                                          ]),
+            cb_context:add_system_error(402, 'no_credit', ErrorJObj, Context)
     end.
 
 %%------------------------------------------------------------------------------

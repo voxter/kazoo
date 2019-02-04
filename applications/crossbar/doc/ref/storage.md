@@ -14,7 +14,6 @@ Key | Description | Type | Default | Required | Support Level
 `connections` | Describes alternative connections to use (such as alternative CouchDB instances | [#/definitions/storage.connections](#storageconnections) |   | `false` |  
 `id` | ID of the storage document | `string()` |   | `false` |  
 `plan` | Describes how to store documents depending on the database or document type | [#/definitions/storage.plan](#storageplan) |   | `false` |  
-`ui_metadata` |   | `object()` |   | `false` |  
 
 ### storage.attachment.aws
 
@@ -56,7 +55,7 @@ schema for dropbox attachment entry
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('dropbox')` |   | `true` |  
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |  
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |  
 `settings` | Settings for the Dropbox account | `object()` |   | `true` |  
 
 ### storage.attachment.google_drive
@@ -68,7 +67,7 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('google_drive')` |   | `true` |  
 `settings.folder_id` | Folder ID in which to store the file, if any | `string()` |   | `false` |  
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |  
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |  
 `settings` | Settings for the Google Drive account | `object()` |   | `true` |  
 
 ### storage.attachment.google_storage
@@ -81,6 +80,20 @@ Key | Description | Type | Default | Required | Support Level
 `handler` | What handler module to use | `string('google_storage')` |   | `true` |  
 `settings` | Settings for the Google Storage account | `object()` |   | `true` |  
 
+### storage.attachment.http
+
+schema for HTTP(s) attachment entry
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`handler` | The handler interface to use | `string('http')` |   | `true` |  
+`name` | Friendly name for this attachment handler | `string()` |   | `false` |  
+`settings.send_multipart` | Toggle whether to send multipart payload when storing attachment - will include metadata JSON if true | `boolean()` |   | `false` |  
+`settings.url` | The base HTTP(s) URL to use when creating the request | `string()` |   | `true` |  
+`settings.verb` | The HTTP verb to use when sending the data | `string('post' | 'put')` | `put` | `false` |  
+`settings` | HTTP server settings | `object()` |   | `true` |  
+
 ### storage.attachment.onedrive
 
 schema for OneDrive attachment entry
@@ -89,7 +102,7 @@ schema for OneDrive attachment entry
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('onedrive')` |   | `true` |  
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |  
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |  
 `settings` | Settings for the OneDrive account | `object()` |   | `true` |  
 
 ### storage.attachments

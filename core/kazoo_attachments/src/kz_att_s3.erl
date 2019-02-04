@@ -15,6 +15,7 @@
 -export([fetch_attachment/4]).
 
 -define(AMAZON_S3_HOST, <<"s3.amazonaws.com">>).
+-define(AMAZON_S3_UPLOAD_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 30).
 
 -type s3_error() :: {'aws_error'
                     ,{'socket_error', binary()} |
@@ -39,18 +40,18 @@
 put_attachment(Params, DbName, DocId, AName, Contents, Options) ->
     {Bucket, FilePath, Config} = aws_bpc(Params, {DbName, DocId, AName}),
     case put_object(Bucket, FilePath, Contents, Config) of
-        {'ok', Props} ->
-            Metadata = [ convert_kv(KV) || KV <- Props, filter_kv(KV)],
+        {'ok', RespHeaders} ->
+            Metadata = create_metadata(RespHeaders),
             S3Key = encode_retrieval(Params, FilePath),
             {'ok', [{'attachment', [{<<"S3">>, S3Key}
                                    ,{<<"metadata">>, kz_json:from_list(Metadata)}
                                    ]}
-                   ,{'headers', Props}
+                   ,{'headers', RespHeaders}
                    ]};
         {'error', _FilePath, Error} ->
             Routines = [{fun kz_att_error:set_req_url/2, FilePath}
                         | kz_att_error:put_routines(Params, DbName, DocId, AName,
-                                                    Contents, Options)
+                                                    <<>>, Options)
                        ],
             handle_s3_error(Error, Routines)
     end.
@@ -69,8 +70,8 @@ fetch_attachment(Conn, DbName, DocId, AName) ->
         S3 ->
             {Bucket, FilePath, Config} = aws_bpc(S3, HandlerProps, {DbName, DocId, AName}),
             case get_object(Bucket, FilePath, Config) of
-                {'ok', Props} ->
-                    {'ok', props:get_value('content', Props)};
+                {'ok', RespHeaders} ->
+                    {'ok', props:get_value('content', RespHeaders)};
                 {'error', FilePath, Error} ->
                     NewRoutines = [{fun kz_att_error:set_req_url/2, FilePath}
                                    | Routines
@@ -97,24 +98,52 @@ fix_scheme(<<"https">> = Scheme) -> <<Scheme/binary, "://">>;
 fix_scheme(<<"http">> = Scheme) -> <<Scheme/binary, "://">>;
 fix_scheme(Scheme) -> <<Scheme/binary, "://">>.
 
+-spec aws_default_port(kz_term:ne_binary()) -> inet:port_number().
+aws_default_port(<<"https://">>) -> 443;
+aws_default_port(_Scheme) -> 80.
+
+-spec aws_region(map()) -> kz_term:api_ne_binary().
+aws_region(Map) ->
+    case maps:get('region', Map, 'undefined') of
+        'undefined' -> 'undefined';
+        Bin -> kz_term:to_list(Bin)
+    end.
+
+-spec aws_default_host(map()) -> kz_term:ne_binary().
+aws_default_host(Map) ->
+    case aws_region(Map) of
+        'undefined' -> ?AMAZON_S3_HOST;
+        Region -> list_to_binary(["s3.", Region, ".amazonaws.com"])
+    end.
+
+-spec aws_host(map()) -> kz_term:ne_binary().
+aws_host(Map) ->
+    maps:get('host', Map,  aws_default_host(Map)).
+
+-spec aws_default_bucket_access(map()) -> atom().
+aws_default_bucket_access(Map) ->
+    case aws_region(Map) of
+        'undefined' -> 'path';
+        _Region -> 'auto'
+    end.
+
+-spec aws_bucket_access(map()) -> atom().
+aws_bucket_access(Map) ->
+    kz_term:to_atom(maps:get('bucket_access_method', Map, aws_default_bucket_access(Map)), 'true').
+
 -spec aws_config(map()) -> aws_config().
 aws_config(#{'key' := Key
             ,'secret' := Secret
             }=Map) ->
+    Region = aws_region(Map),
     BucketAfterHost = kz_term:is_true(maps:get('bucket_after_host', Map, 'false')),
-    BucketAccess = kz_term:to_atom(maps:get('bucket_access_method', Map, 'auto'), 'true'),
-    Region = case maps:get('region', Map, 'undefined') of
-                 'undefined' -> 'undefined';
-                 Bin -> kz_term:to_list(Bin)
-             end,
+    BucketAccess = aws_bucket_access(Map),
+    Timeout = kz_term:to_integer(maps:get('upload_timeout', Map, ?AMAZON_S3_UPLOAD_TIMEOUT)),
+    HttpClient = kz_term:to_atom(maps:get('http_client', Map, 'httpc'), 'true'),
 
-    Host = maps:get('host', Map,  ?AMAZON_S3_HOST),
+    Host = aws_host(Map),
     Scheme = fix_scheme(maps:get('scheme', Map,  <<"https://">>)),
-    DefaultPort = case Scheme of
-                      <<"https://">> -> 443;
-                      <<"http://">> -> 80;
-                      _ -> 80
-                  end,
+    DefaultPort = aws_default_port(Scheme),
     Port = kz_term:to_integer(maps:get('port', Map,  DefaultPort)),
     #aws_config{access_key_id=kz_term:to_list(Key)
                ,secret_access_key=kz_term:to_list(Secret)
@@ -125,6 +154,8 @@ aws_config(#{'key' := Key
                ,s3_bucket_access_method=BucketAccess
                ,s3_follow_redirect=true
                ,s3_follow_redirect_count=3
+               ,timeout=Timeout
+               ,http_client=HttpClient
                ,aws_region=Region
                }.
 
@@ -198,6 +229,12 @@ decode_retrieval(S3) ->
         #{} = Map -> Map
     end.
 
+-spec create_metadata(kz_term:proplist()) -> kz_term:proplist().
+create_metadata(RespHeaders) ->
+    [convert_kv(KV) || KV <- RespHeaders,
+                       filter_kv(KV)
+    ].
+
 filter_kv({"x-amz" ++ _, _V}) -> 'true';
 filter_kv({"etag", _V}) -> 'true';
 filter_kv(_KV) -> 'false'.
@@ -221,7 +258,9 @@ put_object(Bucket, FilePath, Contents,Config)
 put_object(Bucket, FilePath, Contents, #aws_config{s3_host=Host} = Config) ->
     lager:debug("storing ~s to ~s", [FilePath, Host]),
     Options = ['return_all_headers'],
-    try erlcloud_s3:put_object(Bucket, FilePath, Contents, Options, [], Config) of
+    CT = kz_mime:from_filename(FilePath),
+    ReqHeaders = [{"content-type", kz_term:to_list(CT)}],
+    try erlcloud_s3:put_object(Bucket, FilePath, Contents, Options, ReqHeaders, Config) of
         Headers -> {'ok', Headers}
     catch
         'error':Error -> {'error', FilePath, Error}
@@ -234,7 +273,7 @@ get_object(Bucket, FilePath, #aws_config{s3_host=Host} = Config) ->
     lager:debug("retrieving ~s from ~s", [FilePath, Host]),
     Options = [],
     try erlcloud_s3:get_object(Bucket, kz_term:to_list(FilePath), Options, Config) of
-        Headers -> {'ok', Headers}
+        RespHeaders -> {'ok', RespHeaders}
     catch
         'error':Error -> {'error', FilePath, Error}
     end.
@@ -244,13 +283,15 @@ get_object(Bucket, FilePath, #aws_config{s3_host=Host} = Config) ->
 %% within `erlcloud_aws:request_to_return/1' and the return is also modified at
 %% `erlcloud_s3:s3_request2/8'.
 -spec handle_s3_error(s3_error(), kz_att_error:update_routines()) -> kz_att_error:error().
-handle_s3_error({'aws_error',
-                 {'http_error', RespCode, RespStatusLine, RespBody}} = _E
+handle_s3_error({'aws_error'
+                ,{'http_error', RespCode, RespStatusLine, RespBody}
+                } = _E
                ,Routines
                ) ->
     Reason = get_reason(RespCode, RespBody),
     NewRoutines = [{fun kz_att_error:set_resp_code/2, RespCode}
                   ,{fun kz_att_error:set_resp_body/2, RespBody}
+                  ,{fun kz_att_error:set_resp_headers/2, []}
                    | Routines
                   ],
     lager:error("S3 error: ~p (code: ~p)", [_E, RespCode]),
@@ -259,6 +300,10 @@ handle_s3_error({'aws_error', {'socket_error', RespBody}} = _E, Routines) ->
     lager:error("S3 request error: ~p", [_E]),
     RespBodyBin = list_to_binary(io_lib:format("~p", [RespBody])),
     Reason = <<"Socket error: ", RespBodyBin/binary>>,
+    kz_att_error:new(Reason, Routines);
+handle_s3_error(_E, Routines) ->
+    lager:error("S3 request error: ~p", [_E]),
+    Reason = <<"Unknown Error">>,
     kz_att_error:new(Reason, Routines).
 
 -spec get_reason(atom() | pos_integer(), kz_term:ne_binary()) -> kz_term:ne_binary().

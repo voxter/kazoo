@@ -404,6 +404,22 @@
             },
             "type": "object"
         },
+        "account_config.tasks.bill_early": {
+            "description": "Schema for tasks.bill_early account_config",
+            "properties": {
+                "bill_early_enabled": {
+                    "default": false,
+                    "description": "Controls whether we should bill early this account",
+                    "type": "boolean"
+                },
+                "reminder_enabled": {
+                    "default": false,
+                    "description": "Controls whether we should send bill reminder for this account a few days before due date",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "account_config.user": {
             "description": "Schema for user account_config",
             "properties": {
@@ -1282,6 +1298,26 @@
         "caller_id": {
             "description": "Defines caller ID settings based on the type of call being made",
             "properties": {
+                "asserted": {
+                    "description": "Used to convey the proven identity of the originator of a request within a trusted network.",
+                    "properties": {
+                        "name": {
+                            "description": "The asserted identity name for the object type",
+                            "maxLength": 35,
+                            "type": "string"
+                        },
+                        "number": {
+                            "description": "The asserted identity number for the object type",
+                            "maxLength": 35,
+                            "type": "string"
+                        },
+                        "realm": {
+                            "description": "The asserted identity realm for the object type",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                },
                 "emergency": {
                     "description": "The caller ID used when a resource is flagged as 'emergency'",
                     "properties": {
@@ -1291,7 +1327,7 @@
                             "type": "string"
                         },
                         "number": {
-                            "description": "The caller id name for the object type",
+                            "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
                         }
@@ -1307,7 +1343,7 @@
                             "type": "string"
                         },
                         "number": {
-                            "description": "The caller id name for the object type",
+                            "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
                         }
@@ -1323,7 +1359,7 @@
                             "type": "string"
                         },
                         "number": {
-                            "description": "The caller id name for the object type",
+                            "description": "The caller id number for the object type",
                             "maxLength": 35,
                             "type": "string"
                         }
@@ -2095,6 +2131,10 @@
                 "can_text_self": {
                     "description": "Toggle whether devices of the same owner can text each other",
                     "type": "boolean"
+                },
+                "custom_sip_headers": {
+                    "description": "KV Object where the name is the SIP header and the value is the SIP field",
+                    "type": "object"
                 },
                 "delay": {
                     "default": 0,
@@ -3132,6 +3172,7 @@
                     "type": "string"
                 },
                 "method": {
+                    "default": "put",
                     "description": "HTTP verb to use when sending the recording to the supplied URL",
                     "enum": [
                         "put",
@@ -3160,6 +3201,11 @@
                 "record_sample_rate": {
                     "description": "What sampling rate to use on the recording",
                     "type": "integer"
+                },
+                "should_follow_transfer": {
+                    "default": true,
+                    "description": "If true, the recording will continue after a transfer on the active leg",
+                    "type": "boolean"
                 },
                 "time_limit": {
                     "default": 3600,
@@ -3772,6 +3818,10 @@
                 "can_text_self": {
                     "description": "Toggle whether devices of this use can text each other",
                     "type": "boolean"
+                },
+                "custom_sip_headers": {
+                    "description": "KV Object where the name is the SIP header and the value is the SIP field",
+                    "type": "object"
                 },
                 "delay": {
                     "default": 0,
@@ -12328,6 +12378,15 @@
                     ],
                     "type": "string"
                 },
+                "Asserted-Identity-Name": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Number": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Realm": {
+                    "type": "string"
+                },
                 "B-Leg-Events": {
                     "items": {
                         "enum": [
@@ -12360,6 +12419,9 @@
                         "type": "string"
                     },
                     "type": "array"
+                },
+                "Bridge-Actions": {
+                    "type": "object"
                 },
                 "Call-ID": {
                     "type": "string"
@@ -17308,6 +17370,85 @@
             ],
             "type": "object"
         },
+        "kapi.notifications.bill_reminder": {
+            "description": "AMQP API for notifications.bill_reminder",
+            "properties": {
+                "Account-DB": {
+                    "type": "string"
+                },
+                "Account-ID": {
+                    "minLength": 1,
+                    "type": "string"
+                },
+                "Attachment-URL": {
+                    "type": "string"
+                },
+                "Bcc": {
+                    "type": "string"
+                },
+                "Cc": {
+                    "type": "string"
+                },
+                "Due-Date": {
+                    "minimum": 1,
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "notification"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "bill_reminder"
+                    ],
+                    "type": "string"
+                },
+                "From": {
+                    "type": "string"
+                },
+                "HTML": {
+                    "type": "string"
+                },
+                "Items": {
+                    "items": {
+                        "type": "object"
+                    },
+                    "type": "string"
+                },
+                "Payment-Token": {
+                    "type": "string"
+                },
+                "Preview": {
+                    "type": "boolean"
+                },
+                "Reply-To": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "Text": {
+                    "type": "string"
+                },
+                "Timestamp": {
+                    "minimum": 1,
+                    "type": "string"
+                },
+                "To": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Due-Date",
+                "Items",
+                "Payment-Token",
+                "Timestamp"
+            ],
+            "type": "object"
+        },
         "kapi.notifications.cnam_request": {
             "description": "AMQP API for notifications.cnam_request",
             "properties": {
@@ -20226,6 +20367,15 @@
                     ],
                     "type": "string"
                 },
+                "Asserted-Identity-Name": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Number": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Realm": {
+                    "type": "string"
+                },
                 "B-Leg-Events": {
                     "items": {
                         "enum": [
@@ -20379,6 +20529,9 @@
                 },
                 "Origination-Call-ID": {
                     "type": "string"
+                },
+                "Outbound-Actions": {
+                    "type": "object"
                 },
                 "Outbound-Call-ID": {
                     "type": "string"
@@ -21862,8 +22015,20 @@
                 "Application-Data": {
                     "type": "string"
                 },
+                "Asserted-Identity-Name": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Number": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Realm": {
+                    "type": "string"
+                },
                 "B-Leg-Events": {
                     "type": "string"
+                },
+                "Bridge-Actions": {
+                    "type": "object"
                 },
                 "Call-Restrictions-Enabled": {
                     "type": "string"
@@ -22101,8 +22266,20 @@
                     ],
                     "type": "string"
                 },
+                "Asserted-Identity-Name": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Number": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Realm": {
+                    "type": "string"
+                },
                 "B-Leg-Events": {
                     "type": "string"
+                },
+                "Bridge-Actions": {
+                    "type": "object"
                 },
                 "Call-Restrictions-Enabled": {
                     "type": "string"
@@ -23286,6 +23463,9 @@
                     },
                     "type": "array"
                 },
+                "Context": {
+                    "type": "string"
+                },
                 "Custom-Application-Vars": {
                     "type": "object"
                 },
@@ -23638,11 +23818,23 @@
                     ],
                     "type": "string"
                 },
+                "Asserted-Identity-Name": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Number": {
+                    "type": "string"
+                },
+                "Asserted-Identity-Realm": {
+                    "type": "string"
+                },
                 "B-Leg-Events": {
                     "type": "string"
                 },
                 "Body": {
                     "type": "string"
+                },
+                "Bridge-Actions": {
+                    "type": "object"
                 },
                 "Call-ID": {
                     "type": "string"
@@ -28301,9 +28493,6 @@
                 "plan": {
                     "$ref": "#/definitions/storage.plan",
                     "description": "Describes how to store documents depending on the database or document type"
-                },
-                "ui_metadata": {
-                    "type": "object"
                 }
             },
             "type": "object"
@@ -28449,6 +28638,8 @@
                     "properties": {
                         "oauth_doc_id": {
                             "description": "Doc ID in the system 'auth' database",
+                            "minLength": 1,
+                            "patern": "^[^\\s]*$",
                             "type": "string"
                         }
                     },
@@ -28483,6 +28674,8 @@
                         },
                         "oauth_doc_id": {
                             "description": "Doc ID in the system 'auth' database",
+                            "minLength": 1,
+                            "patern": "^[^\\s]*$",
                             "type": "string"
                         }
                     },
@@ -28544,6 +28737,53 @@
             ],
             "type": "object"
         },
+        "storage.attachment.http": {
+            "description": "schema for HTTP(s) attachment entry",
+            "properties": {
+                "handler": {
+                    "description": "The handler interface to use",
+                    "enum": [
+                        "http"
+                    ],
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Friendly name for this attachment handler",
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "HTTP server settings",
+                    "properties": {
+                        "send_multipart": {
+                            "description": "Toggle whether to send multipart payload when storing attachment - will include metadata JSON if true",
+                            "type": "boolean"
+                        },
+                        "url": {
+                            "description": "The base HTTP(s) URL to use when creating the request",
+                            "type": "string"
+                        },
+                        "verb": {
+                            "default": "put",
+                            "description": "The HTTP verb to use when sending the data",
+                            "enum": [
+                                "post",
+                                "put"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "url"
+                    ],
+                    "type": "object"
+                }
+            },
+            "required": [
+                "handler",
+                "settings"
+            ],
+            "type": "object"
+        },
         "storage.attachment.onedrive": {
             "description": "schema for OneDrive attachment entry",
             "properties": {
@@ -28559,6 +28799,8 @@
                     "properties": {
                         "oauth_doc_id": {
                             "description": "Doc ID in the system 'auth' database",
+                            "minLength": 1,
+                            "patern": "^[^\\s]*$",
                             "type": "string"
                         }
                     },
@@ -30933,6 +31175,11 @@
                     "description": "ecallmgr expires deviation time",
                     "type": "integer"
                 },
+                "failover_when_all_unreg": {
+                    "default": false,
+                    "description": "failover only when all devices are offline",
+                    "type": "boolean"
+                },
                 "fax_file_path": {
                     "default": "/tmp/",
                     "description": "ecallmgr fax file path",
@@ -31116,6 +31363,11 @@
                     "default": false,
                     "description": "ecallmgr restrict channel state publisher",
                     "type": "boolean"
+                },
+                "sanitize_fs_value_regex": {
+                    "default": "[^0-9\\w\\s-]",
+                    "description": "ecallmgr sanitize_fs_value_regex",
+                    "type": "string"
                 },
                 "should_detect_inband_dtmf": {
                     "default": false,
@@ -32247,6 +32499,11 @@
                         "type": "object"
                     },
                     "type": "array"
+                },
+                "rollover_monthly_balance": {
+                    "default": true,
+                    "description": "ledgers rollover_monthly_balance",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -34063,6 +34320,11 @@
                     "description": "services default allow updates",
                     "type": "boolean"
                 },
+                "enforce_good_standing": {
+                    "default": false,
+                    "description": "services enforce_good_standing",
+                    "type": "boolean"
+                },
                 "get_items_from_quantities": {
                     "description": "services get_items_from_quantities",
                     "type": "boolean"
@@ -34600,6 +34862,17 @@
             },
             "type": "object"
         },
+        "system_config.system_data": {
+            "description": "Schema for system_data system_config",
+            "properties": {
+                "allow_validation_overrides": {
+                    "default": false,
+                    "description": "Whether to allow storage plans to skip validating attachment settings",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "system_config.tasks": {
             "description": "Schema for tasks system_config",
             "properties": {
@@ -34717,6 +34990,27 @@
                     "description": "tasks wait after row in milliseconds",
                     "minimum": 0,
                     "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.tasks.bill_early": {
+            "description": "Schema for tasks.bill_early system_config",
+            "properties": {
+                "bill_early_enabled": {
+                    "default": false,
+                    "description": "Controls whether we should bill early the accounts",
+                    "type": "boolean"
+                },
+                "how_many_early_days": {
+                    "default": 5,
+                    "description": "How many days before first of the next month this task should start processing accounts",
+                    "type": "integer"
+                },
+                "reminder_enabled": {
+                    "default": false,
+                    "description": "Controls whether we should send bill reminder for the accounts a few days before due date",
+                    "type": "boolean"
                 }
             },
             "type": "object"

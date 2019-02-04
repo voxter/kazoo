@@ -48,4 +48,3 @@ does_system_has_network_subsystem() ->
             io:format("~n~nCRITICAL ERROR: ~s~n~n", [Reason]),
             throw({'error', Reason})
     end.
-

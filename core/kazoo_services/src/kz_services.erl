@@ -13,6 +13,7 @@
         ,set_current_services_jobj/2
         ]).
 -export([plans/1
+        ,has_plans/1
         ,plans_foldl/3
         ,hydrate_plans/1
         ,reset_plans/1
@@ -189,6 +190,12 @@ plans(#kz_services{plans='undefined'}=Services) ->
     kz_services_plans:fetch(Services);
 plans(#kz_services{plans=Plans}) ->
     Plans.
+
+-spec has_plans(services() | kz_term:ne_binary()) -> boolean().
+has_plans(?NE_BINARY = AccountId) ->
+    has_plans(fetch(AccountId));
+has_plans(#kz_services{}=Services) ->
+    not kz_services_plans:is_empty(plans(Services)).
 
 -spec plans_foldl(plans_foldl(), Acc, services()) -> Acc.
 plans_foldl(FoldFun, Acc, Services) ->
@@ -609,31 +616,59 @@ summary(?NE_BINARY=Account) ->
                    ],
     summary(fetch(Account, FetchOptions));
 summary(Services) ->
-    %% TODO: add status (IE: 'good_standing': true|false)
-    Quantities = kz_json:from_list(
-                   [{<<"account">>, account_quantities(Services)}
-                   ,{<<"cascade">>, cascade_quantities(Services)}
-                   ,{<<"manual">>, manual_quantities(Services)}
-                   ]
-                  ),
-    Reseller = kz_json:from_list(
-                 [{<<"id">>, kz_services_reseller:get_id(Services)}
-                 ,{<<"is_reseller">>, kz_services_reseller:is_reseller(Services)}
-                 ]
-                ),
-    Ratedeck = kz_services_ratedecks:fetch(Services),
+    kz_json:from_list(
+      [{<<"plans">>
+       ,kz_services_plans:assigned(Services)
+       }
+      ,{<<"invoices">>
+       ,kz_services_invoices:public_json(invoices(Services))
+       }
+      ,{<<"quantities">>
+       ,summary_quantities(Services)
+       }
+      ,{<<"reseller">>
+       ,summary_reseller(Services)
+       }
+      ,{<<"ratedeck">>
+       ,kz_services_ratedecks:fetch(Services)
+       }
+      ,{<<"billing_cycle">>
+       ,summary_billing_cycle(Services)
+       }
+      ,{<<"status">>
+       ,summary_status(Services)
+       }
+      ]
+     ).
 
-    Props = [{<<"plans">>, kz_services_plans:assigned(Services)}
-            ,{<<"invoices">>, kz_services_invoices:public_json(invoices(Services))}
-            ,{<<"quantities">>, Quantities}
-            ,{<<"reseller">>, Reseller}
-            ,{<<"ratedeck">>, Ratedeck}
-            ,{<<"billing_cycle">>, billing_cycle(Services)}
-            ],
-    kz_json:from_list(Props).
+-spec summary_reseller(services()) -> kz_json:object().
+summary_reseller(Services) ->
+    kz_json:from_list(
+      [{<<"id">>, kz_services_reseller:get_id(Services)}
+      ,{<<"is_reseller">>, kz_services_reseller:is_reseller(Services)}
+      ]
+     ).
 
--spec billing_cycle(services()) -> kz_json:object().
-billing_cycle(_Services) ->
+-spec summary_quantities(services()) -> kz_json:object().
+summary_quantities(Services) ->
+    kz_json:from_list(
+      [{<<"account">>, account_quantities(Services)}
+      ,{<<"cascade">>, cascade_quantities(Services)}
+      ,{<<"manual">>, manual_quantities(Services)}
+      ]
+     ).
+
+-spec summary_status(services()) -> kz_json:object().
+summary_status(Services) ->
+    {Status, Reason} = is_good_standing(Services),
+    kz_json:from_list(
+      [{<<"good_standing">>, Status}
+      ,{<<"reason">>, Reason}
+      ]
+     ).
+
+-spec summary_billing_cycle(services()) -> kz_json:object().
+summary_billing_cycle(_Services) ->
     {{Y, M, _}, _} = calendar:universal_time(),
     NextBillDate =
         calendar:datetime_to_gregorian_seconds(
@@ -648,11 +683,6 @@ billing_cycle(_Services) ->
       ]
      ).
 
-%% @equiv is_good_standing(Thing, 0)
--spec is_good_standing(kz_term:ne_binary() | services()) -> boolean().
-is_good_standing(Thing) ->
-    is_good_standing(Thing, #{}).
-
 %%------------------------------------------------------------------------------
 %% @doc Check if the account is in good standing.
 %%
@@ -666,12 +696,19 @@ is_good_standing(Thing) ->
 %% * All other cases the account is not in good standing
 %% @end
 %%------------------------------------------------------------------------------
--spec is_good_standing(kz_term:ne_binary() | services(), good_standing_options()) -> boolean().
+%% @equiv is_good_standing(Thing, 0)
+-spec is_good_standing(kz_term:ne_binary() | services()) -> {boolean(), kz_term:ne_binary()}.
+is_good_standing(Thing) ->
+    is_good_standing(Thing, #{}).
+
+-spec is_good_standing(kz_term:ne_binary() | services(), good_standing_options()) ->
+                              {boolean(), kz_term:ne_binary()}.
 is_good_standing(?NE_BINARY=Account, Options) ->
     FetchOptions = ['hydrate_plans'],
     is_good_standing(fetch(Account, FetchOptions), Options);
 is_good_standing(Services, Options) ->
-    GoodFuns = [fun no_plan_is_good/2
+    GoodFuns = [fun should_enforce_good_standing/2
+               ,fun no_plan_is_good/2
                ,fun has_no_expired_payment_tokens/2
                ,fun has_good_balance/2
                ],
@@ -680,33 +717,43 @@ is_good_standing(Services, Options) ->
     is_good_standing_fold(Services, NewOptions, GoodFuns).
 
 is_good_standing_fold(Services, _Options, []) ->
-    lager:debug("account ~s ran out of good funs, the ugly"
-               ,[account_id(Services)]
-               ),
-    'false';
+    Msg = io_lib:format("account ~s is delinquent, all checks have failed"
+                       ,[account_id(Services)]
+                       ),
+    lager:debug("~s", [Msg]),
+    {'false', Msg};
 is_good_standing_fold(Services, Options, [Fun | Funs]) ->
     case Fun(Services, Options) of
         {'true', Reason} = _TheGood ->
-            lager:debug("account ~s ~s, good standing"
+            lager:debug("account ~s is in good standing: ~s"
                        ,[account_id(Services), Reason]
                        ),
-            'true';
+            {'true', Reason};
         {'false', Reason} = _TheBad ->
-            lager:debug("account ~s ~s, bad standing"
+            lager:debug("account ~s is delinquent: ~s"
                        ,[account_id(Services), Reason]
                        ),
-            'false';
+            {'false', Reason};
         'not_applicable' -> is_good_standing_fold(Services, Options, Funs)
     end.
 
 -type good_funs_ret() :: {boolean(), kz_term:ne_binary()} |
                          'not_applicable'.
+
+-spec should_enforce_good_standing(services(), good_standing_options()) -> good_funs_ret().
+should_enforce_good_standing(_Services, _Options) ->
+    case ?KZ_SERVICE_ENFORCE_GOOD_STANDING of
+        'true' -> 'not_applicable';
+        'false' ->
+            {'true', <<"good standing not required">>}
+    end.
+
 -spec no_plan_is_good(services(), good_standing_options()) -> good_funs_ret().
 no_plan_is_good(Services, _Options) ->
-    case kz_services_plans:is_empty(plans(Services)) of
-        'true' ->
-            {'true', <<"has no plans assigned">>};
-        'false' -> 'not_applicable'
+    case has_plans(Services) of
+        'false' ->
+            {'true', <<"no service plans assigned">>};
+        'true' -> 'not_applicable'
     end.
 
 -spec has_no_expired_payment_tokens(services(), good_standing_options()) -> good_funs_ret().
@@ -737,20 +784,29 @@ has_good_balance(Services, #{amount := Amount}=Options) ->
 
 -spec has_good_balance(kz_currency:units(), kz_currency:units(), boolean(), kz_currency:units()) -> good_funs_ret().
 has_good_balance(Balance, Amount, 'false', _) when (Balance - Amount) > 0 ->
-    {'true', <<"has positive balance">>};
+    Msg = io_lib:format("debit of ~.2f from ~.2f results in a positive balance"
+                       ,[kz_currency:units_to_dollars(Amount)
+                        ,kz_currency:units_to_dollars(Balance)
+                        ]
+                       ),
+    {'true', kz_term:to_binary(Msg)};
 has_good_balance(Balance, Amount, 'false', _) when (Balance - Amount) =< 0 ->
-    Msg = io_lib:format("has negative balance, curr_balance: ~b amount: ~b proposed_balance: ~b"
-                       ,[Balance, Amount, Balance - Amount]
+    Msg = io_lib:format("debit of ~.2f from ~.2f results in a negative balance"
+                       ,[kz_currency:units_to_dollars(Amount)
+                        ,kz_currency:units_to_dollars(Balance)
+                        ]
                        ),
     {'false', kz_term:to_binary(Msg)};
 has_good_balance(Balance, Amount, 'true', MaxPostPay) ->
     case (Balance - Amount) > MaxPostPay of
         'true' ->
-            {'true', <<"has enough postpay balance">>};
+            {'true', <<"enough postpay balance">>};
         'false' ->
-            Msg = io_lib:format("has exceed the maximum postpay amount,"
-                                " curr_balance: ~b amount: ~b max_postpay: ~b proposed_balance: ~b"
-                               ,[Balance, Amount, MaxPostPay, Balance - Amount]
+            Msg = io_lib:format("debit of ~.2f from ~.2f exceeds the maximum postpay amount ~.2f"
+                               ,[kz_currency:units_to_dollars(Amount)
+                                ,kz_currency:units_to_dollars(Balance)
+                                ,kz_currency:units_to_dollars(MaxPostPay)
+                                ]
                                ),
             {'false', kz_term:to_binary(Msg)}
     end.
@@ -1118,7 +1174,7 @@ delete(?MATCH_ACCOUNT_RAW(AccountId)) ->
     delete(fetch(AccountId));
 delete(#kz_services{}=Services) ->
     %% TODO: cancel services with all bookkeepers...
-    {'ok', _} = kz_datamgr:del_doc(?KZ_SERVICES_DB, services_jobj(Services)),
+    {'ok', _} = kz_datamgr:del_doc(?KZ_SERVICES_DB, kz_doc:id(services_jobj(Services))),
     Services.
 
 %%------------------------------------------------------------------------------

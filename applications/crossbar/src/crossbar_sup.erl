@@ -88,4 +88,3 @@ upgrade() ->
 init([]) ->
     kz_util:set_startup(),
     {'ok', {{'one_for_one', 10, 10}, ?CHILDREN}}.
-

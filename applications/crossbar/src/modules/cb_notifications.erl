@@ -499,6 +499,12 @@ headers(Id) ->
     kapi_notifications:headers(Id).
 
 -spec maybe_add_extra_data(kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
+maybe_add_extra_data(<<"bill_reminder">>, API) ->
+    Now = kz_time:now_s(),
+    props:set_values([{<<"Items">>, []}
+                     ,{<<"Timestamp">>, Now}
+                     ,{<<"Due-Date">>, Now}
+                     ], API);
 maybe_add_extra_data(<<"fax_inbound_error_to_email">>, API) ->
     props:set_value(<<"Fax-Result-Code">>, <<"500">>, API);
 maybe_add_extra_data(<<"fax_inbound_error_to_email_filtered">>, API) ->
@@ -506,7 +512,7 @@ maybe_add_extra_data(<<"fax_inbound_error_to_email_filtered">>, API) ->
 maybe_add_extra_data(<<"fax_outbound_smtp_error_to_email">>, API) ->
     props:set_value(<<"Errors">>, [<<"Not Deliverable">>], API);
 maybe_add_extra_data(<<"service_added">>, API) ->
-    props:set_value(<<"Items">>, [kz_json:new()], API);
+    props:set_value(<<"Items">>, [], API);
 maybe_add_extra_data(<<"transaction">>, API) ->
     props:set_value(<<"Success">>, 'true', API);
 maybe_add_extra_data(<<"transaction_failed">>, API) ->
@@ -518,6 +524,8 @@ maybe_add_extra_data(_Id, API) -> API.
 -spec publish_fun(kz_term:ne_binary()) -> fun((kz_term:api_terms()) -> 'ok').
 publish_fun(<<"account_zone_change">>) ->
     fun kapi_notifications:publish_account_zone_change/1;
+publish_fun(<<"bill_reminder">>) ->
+    fun kapi_notifications:publish_bill_reminder/1;
 publish_fun(<<"cnam_request">>) ->
     fun kapi_notifications:publish_cnam_request/1;
 publish_fun(<<"customer_update">>) ->
@@ -1427,9 +1435,41 @@ leak_attachments_fold(_Attachment, Props, Acc) ->
 load_smtp_log_doc(?MATCH_MODB_PREFIX(YYYY,MM,_) = Id, Context) ->
     Year  = kz_term:to_integer(YYYY),
     Month = kz_term:to_integer(MM),
-    crossbar_doc:load(Id
-                     ,cb_context:set_account_modb(Context, Year, Month)
-                     ,?TYPE_CHECK_OPTION(?PVT_TYPE_SMTPLOG)).
+    IsSuperAdmin = cb_context:is_superduper_admin(Context),
+    C1 = crossbar_doc:load(Id
+                          ,cb_context:set_account_modb(Context, Year, Month)
+                          ,?TYPE_CHECK_OPTION(?PVT_TYPE_SMTPLOG)
+                          ),
+    case cb_context:resp_status(C1) of
+        'success' ->
+            TemplateId = kz_json:get_ne_binary_value(<<"template_id">>, cb_context:doc(C1)),
+            maybe_remove_private_comment(C1, TemplateId, IsSuperAdmin);
+        _ ->
+            C1
+    end.
+
+-spec maybe_remove_private_comment(cb_context:context(), kz_term:ne_binary(), boolean()) -> cb_context:context().
+maybe_remove_private_comment(Context, <<"port_comment">>, 'false') ->
+    case kz_json:is_true([<<"macros">>, <<"port_request">>, <<"comment">>, <<"superduper_comment">>]
+                        ,cb_context:doc(Context)
+                        ,'false'
+                        )
+    of
+        'true' ->
+            Doc = kz_json:delete_keys([[<<"macros">>, <<"port_request">>, <<"comment">>]
+                                      ,<<"rendered_templates">>
+                                      ]
+                                     ,cb_context:doc(Context)
+                                     ),
+            Setters = [{fun cb_context:set_doc/2, Doc}
+                      ,{fun cb_context:set_resp_data/2, Doc}
+                      ],
+            cb_context:setters(Context, Setters);
+        'false' ->
+            Context
+    end;
+maybe_remove_private_comment(Context, _, _) ->
+    Context.
 
 -spec maybe_update_db(cb_context:context()) -> cb_context:context().
 maybe_update_db(Context) ->

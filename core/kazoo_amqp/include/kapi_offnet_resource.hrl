@@ -40,6 +40,9 @@
 -define(KEY_OUTBOUND_CALLEE_ID_NUMBER, <<"Outbound-Callee-ID-Number">>).
 -define(KEY_OUTBOUND_CALLER_ID_NAME, <<"Outbound-Caller-ID-Name">>).
 -define(KEY_OUTBOUND_CALLER_ID_NUMBER, <<"Outbound-Caller-ID-Number">>).
+-define(KEY_ASSERTED_IDENTITY_NAME, <<"Asserted-Identity-Name">>).
+-define(KEY_ASSERTED_IDENTITY_NUMBER, <<"Asserted-Identity-Number">>).
+-define(KEY_ASSERTED_IDENTITY_REALM, <<"Asserted-Identity-Realm">>).
 -define(KEY_OUTBOUND_CALL_ID, <<"Outbound-Call-ID">>).
 -define(KEY_ORIGINATION_CALL_ID, <<"Origination-Call-ID">>).
 -define(KEY_PRESENCE_ID, <<"Presence-ID">>).
@@ -49,6 +52,7 @@
 -define(KEY_TIMEOUT, <<"Timeout">>).
 -define(KEY_TO_DID, <<"To-DID">>).
 -define(KEY_DENIED_CALL_RESTRICTIONS, <<"Denied-Call-Restrictions">>).
+-define(KEY_OUTBOUND_ACTIONS, <<"Outbound-Actions">>).
 
 -define(RESOURCE_TYPE_AUDIO, <<"audio">>).
 -define(RESOURCE_TYPE_ORIGINATE, <<"originate">>).

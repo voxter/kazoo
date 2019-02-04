@@ -70,6 +70,9 @@
         ,<<"Outbound-Callee-ID-Number">>
         ,<<"Outbound-Caller-ID-Name">>
         ,<<"Outbound-Caller-ID-Number">>
+        ,<<"Asserted-Identity-Name">>
+        ,<<"Asserted-Identity-Number">>
+        ,<<"Asserted-Identity-Realm">>
         ,<<"Ringback">>
         ,<<"SIP-Transport">>
         ,<<"SIP-Invite-Parameters">>
@@ -79,6 +82,7 @@
         ,<<"Loopback-Bowout">>
         ,<<"Export-Variables">>
         ,<<"Export-Bridge-Variables">>
+        ,<<"Bridge-Actions">>
         ]).
 -define(BRIDGE_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                            ,{<<"Event-Name">>, <<"command">>}
@@ -97,6 +101,7 @@
                           ,{<<"Endpoints">>, fun kz_json:are_json_objects/1}
                           ,{<<"SIP-Invite-Parameters">>, fun is_list/1}
                           ,{<<"Secure-RTP">>, fun kz_term:is_boolean/1}
+                          ,{<<"Bridge-Actions">>, fun kz_json:is_json_object/1}
                           ]).
 
 %% Bridge Endpoints
