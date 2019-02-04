@@ -13,7 +13,8 @@
 
 -include("ecallmgr.hrl").
 
--spec attended(atom(), kz_term:ne_binary(), kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec attended(atom(), kz_term:ne_binary(), kz_json:object()) ->
+                      {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), atom(), kz_term:proplist()}.
 attended(Node, UUID, JObj) ->
     TransferTo = kz_json:get_ne_binary_value(<<"Transfer-To">>, JObj),
     CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
@@ -39,7 +40,9 @@ attended(Node, UUID, JObj) ->
     Props = add_transfer_ccvs_to_vars(CCVs, Vars),
     [Export | Exports] = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'set'),
     Arg = [Export, [[",", Exported] || Exported <- Exports] ],
-    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, transfer_context(JObj)])}.
+    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, transfer_context(JObj)])
+    ,Node, [{"hold-bleg", "true"}]
+    }.
 
 -spec blind(atom(), kz_term:ne_binary(), kz_json:object()) ->
                    [{kz_term:ne_binary(), kz_term:ne_binary()}].
