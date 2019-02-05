@@ -15,6 +15,7 @@ fpm -s dir \
     -d "kazoo-sounds >= 4.3.0-1" \
     -d "bash-completion" \
     -d "esl-erlang >= 19.3" \
+    --rpm-auto-add-directories \
     --after-install scripts/rpm/after-install.sh \
     -C _rel/kazoo \
     $@ .
