@@ -254,7 +254,7 @@ format_result(Args, Reason=?NE_BINARY, Action) ->
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
 format_result(_Args, Doc, Action) ->
     Map = generate_return_values_from_doc(Doc, Action),
-    Map#{?OUTPUT_CSV_HEADER_ERROR =>  'undefined'}.
+    Map#{?OUTPUT_CSV_HEADER_ERROR => 'undefined'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate the csv return row values from the supplied csv inputs  (Error case)
