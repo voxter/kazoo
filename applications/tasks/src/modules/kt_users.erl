@@ -170,7 +170,7 @@ verify_user_id(_) -> 'false'.
 
 -spec verify_email(kz_term:ne_binary()) -> boolean().
 verify_email(Cell) ->
-    EmailRegExp = "^([a-zA-Z0-9_.]+)@([a-zA-Z0-9_.]+)\.([a-zA-Z]{2,5})$",
+    EmailRegExp = "^[-!#$%&'*+\\/0-9=?A-Z^_a-z{|}~](\\.?[-!#$%&'*+\\/0-9=?A-Z^_a-z`{|}~])*@[a-zA-Z0-9](-*\\.?[a-zA-Z0-9])*\\.[a-zA-Z](-?[a-zA-Z0-9])+$",
     case re:run(Cell, EmailRegExp) of
         {match, _} -> 'true';
         nomatch -> 'false'
