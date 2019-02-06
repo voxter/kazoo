@@ -254,7 +254,7 @@ format_result(Args, Reason=?NE_BINARY, Action) ->
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
 format_result(_Args, Doc, Action) ->
     Map = generate_return_values_from_doc(Doc, Action),
-    Map#{?OUTPUT_CSV_HEADER_ERROR => undefined}.
+    Map#{?OUTPUT_CSV_HEADER_ERROR =>  'undefined'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate the csv return row values from the supplied csv inputs  (Error case)
@@ -262,7 +262,7 @@ format_result(_Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
-    #{<<"id">> => <<"undefined">>
+    #{<<"id">> => 'undefined'
      ,<<"username">> => maps:get(<<"username">>, Args)
      ,<<"first_name">> => maps:get(<<"first_name">>, Args)
      ,<<"last_name">> => maps:get(<<"last_name">>, Args)
@@ -270,9 +270,9 @@ generate_return_values_from_args(Args ,'import') ->
      };
 generate_return_values_from_args(Args ,'delete') ->
     #{<<"id">> => maps:get(<<"user_id">>, Args)
-     ,<<"username">> => <<"undefined">>
-     ,<<"first_name">> => <<"undefined">>
-     ,<<"last_name">> => <<"undefined">>
+     ,<<"username">> => 'undefined'
+     ,<<"first_name">> => 'undefined'
+     ,<<"last_name">> => 'undefined'
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      }.
 
@@ -292,9 +292,9 @@ generate_return_values_from_doc(Doc, 'import') ->
 generate_return_values_from_doc(Doc, 'delete') ->
     lager:debug("generating delete resp row from doc: ~p", [Doc]),
     #{<<"id">> => kz_doc:id(Doc)
-     ,<<"username">> => <<"undefined">>
-     ,<<"first_name">> => <<"undefined">>
-     ,<<"last_name">> => <<"undefined">>
+     ,<<"username">> => 'undefined'
+     ,<<"first_name">> => 'undefined'
+     ,<<"last_name">> => 'undefined'
      ,<<"account_id">> => kz_doc:account_id(Doc)
      }.
 

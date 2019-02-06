@@ -239,7 +239,7 @@ format_result(Args, Reason=?NE_BINARY, Action) ->
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
 format_result(_Args, Doc, Action) ->
     Map = generate_return_values_from_doc(Doc, Action),
-    Map#{?OUTPUT_CSV_HEADER_ERROR => undefined}.
+    Map#{?OUTPUT_CSV_HEADER_ERROR => 'undefined'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate the csv return row values from the supplied csv inputs  (Error case)
@@ -247,7 +247,7 @@ format_result(_Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
-    #{<<"id">> => <<"undefined">>
+    #{<<"id">> => 'undefined'
      ,<<"mailbox">> => maps:get(<<"mailbox">>, Args)
      ,<<"name">> => maps:get(<<"name">>, Args)
      ,<<"owner_id">> => maps:get(<<"owner_id">>, Args)
@@ -255,9 +255,9 @@ generate_return_values_from_args(Args ,'import') ->
      };
 generate_return_values_from_args(Args ,'delete') ->
     #{<<"id">> => maps:get(<<"vmbox_id">>, Args)
-     ,<<"mailbox">> => <<"undefined">>
-     ,<<"name">> => <<"undefined">>
-     ,<<"owner_id">> => <<"undefined">>
+     ,<<"mailbox">> => 'undefined'
+     ,<<"name">> => 'undefined'
+     ,<<"owner_id">> => 'undefined'
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      }.
 
@@ -275,9 +275,9 @@ generate_return_values_from_doc(Doc, 'import') ->
      };
 generate_return_values_from_doc(Doc, 'delete') ->
     #{<<"id">> => kz_doc:id(Doc)
-     ,<<"mailbox">> => <<"undefined">>
-     ,<<"name">> => <<"undefined">>
-     ,<<"owner_id">> => <<"undefined">>
+     ,<<"mailbox">> => 'undefined'
+     ,<<"name">> => 'undefined'
+     ,<<"owner_id">> => 'undefined'
      ,<<"account_id">> => kz_doc:account_id(Doc)
      }.
 

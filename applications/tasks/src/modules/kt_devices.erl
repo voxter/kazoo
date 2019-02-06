@@ -239,7 +239,7 @@ format_result(Args, Reason=?NE_BINARY, Action) ->
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
 format_result(_Args, Doc, Action) ->
     Map = generate_return_values_from_doc(Doc, Action),
-    Map#{?OUTPUT_CSV_HEADER_ERROR => undefined}.
+    Map#{?OUTPUT_CSV_HEADER_ERROR => 'undefined'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate the csv return row values from the supplied csv inputs  (Error case)
@@ -247,7 +247,7 @@ format_result(_Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
-    #{<<"id">> => <<"undefined">>
+    #{<<"id">> => 'undefined'
      ,<<"name">> => maps:get(<<"name">>, Args)
      ,<<"owner_id">> => maps:get(<<"owner_id">>, Args)
      ,<<"sip_username">> => maps:get(<<"sip_username">>, Args)
@@ -255,9 +255,9 @@ generate_return_values_from_args(Args ,'import') ->
      };
 generate_return_values_from_args(Args ,'delete') ->
     #{<<"id">> => maps:get(<<"device_id">>, Args)
-     ,<<"name">> => <<"undefined">>
-     ,<<"owner_id">> => <<"undefined">>
-     ,<<"sip_username">> => <<"undefined">>
+     ,<<"name">> => 'undefined'
+     ,<<"owner_id">> => 'undefined'
+     ,<<"sip_username">> => 'undefined'
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      }.
 
@@ -277,9 +277,9 @@ generate_return_values_from_doc(Doc, 'import') ->
 generate_return_values_from_doc(Doc, 'delete') ->
     lager:debug("generating delete resp row from doc: ~p", [Doc]),
     #{<<"id">> => kz_doc:id(Doc)
-     ,<<"name">> => <<"undefined">>
-     ,<<"owner_id">> => <<"undefined">>
-     ,<<"sip_username">> => <<"undefined">>
+     ,<<"name">> => 'undefined'
+     ,<<"owner_id">> => 'undefined'
+     ,<<"sip_username">> => 'undefined'
      ,<<"account_id">> => kz_doc:account_id(Doc)
      }.
 
