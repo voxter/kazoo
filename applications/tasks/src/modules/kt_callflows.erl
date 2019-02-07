@@ -233,7 +233,7 @@ format_result(Args, Reason=?NE_BINARY, Action) ->
     Map#{?OUTPUT_CSV_HEADER_ERROR => Reason};
 format_result(Args, Doc, Action) ->
     Map = generate_return_values_from_doc(Doc, Args, Action),
-    Map#{?OUTPUT_CSV_HEADER_ERROR => undefined}.
+    Map#{?OUTPUT_CSV_HEADER_ERROR => 'undefined'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate the csv return row values from the supplied csv inputs  (Error case)
@@ -241,13 +241,13 @@ format_result(Args, Doc, Action) ->
 %%------------------------------------------------------------------------------
 -spec generate_return_values_from_args(map(), atom()) -> map().
 generate_return_values_from_args(Args ,'import') ->
-    #{<<"id">> => <<"undefined">>
+    #{<<"id">> => 'undefined'
      ,<<"numbers">> => maps:get(<<"numbers">>, Args)
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      };
 generate_return_values_from_args(Args ,'delete') ->
     #{<<"id">> => maps:get(<<"callflow_id">>, Args)
-     ,<<"numbers">> => <<"undefined">>
+     ,<<"numbers">> => 'undefined'
      ,<<"account_id">> => maps:get(<<"account_id">>, Args)
      }.
 
@@ -263,7 +263,7 @@ generate_return_values_from_doc(Doc, Args, 'import') ->
      };
 generate_return_values_from_doc(Doc, _Args, 'delete') ->
     #{<<"id">> => kz_doc:id(Doc)
-     ,<<"numbers">> => <<"undefined">>
+     ,<<"numbers">> => 'undefined'
      ,<<"account_id">> => kz_doc:account_id(Doc)
      }.
 
