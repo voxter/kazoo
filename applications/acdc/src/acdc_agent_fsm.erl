@@ -2246,11 +2246,7 @@ convert_to_endpoint(EPDoc) ->
 get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
         [] ->
-            %% Survive couch connection issue by using last list of valid endpoints
-            case OrigEPs of
-                [] -> {'error', 'no_endpoints'};
-                _ -> {'ok', [kz_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
-            end;
+            {'error', 'no_endpoints'};
         [_|_]=EPs ->
             AccountId = kapps_call:account_id(Call),
 
