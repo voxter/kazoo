@@ -13,7 +13,7 @@ The existing `/messages` API _should be_ used to manage messages in a voicemail 
 
 For more information about voicemail changes see documentation for kazoo_voicemail.
 
-## Schema
+#### Schema
 
 Schema for a voicemail box
 
@@ -23,9 +23,9 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `check_if_owner` | Determines if when the user calls their own voicemail they should be prompted to sign in | `boolean()` | `true` | `false` | `supported`
 `delete_after_notify` | Move the voicemail to delete folder after the notification has been sent | `boolean()` | `false` | `false` | `supported`
-`hunt` | Determines if the callers can dial internal extensions directly instead of leaving a message | `boolean()` | `true` | `false` |
-`hunt_allow` | A regular expression that an extension the caller dialed must match to be allowed to continue | `string(1..256)` |   | `false` |
-`hunt_deny` | A regular expression that if matched does not allow the caller to dial directly | `string(1..256)` |   | `false` |
+`hunt` | Determines if the callers can dial internal extensions directly instead of leaving a message | `boolean()` | `true` | `false` |  
+`hunt_allow` | A regular expression that an extension the caller dialed must match to be allowed to continue | `string(1..256)` |   | `false` |  
+`hunt_deny` | A regular expression that if matched does not allow the caller to dial directly | `string(1..256)` |   | `false` |  
 `is_setup` | Determines if the user has completed the initial configuration | `boolean()` | `false` | `false` | `supported`
 `mailbox` | The voicemail box number | `string(1..30)` |   | `true` | `supported`
 `media.unavailable` | The ID of a media object that should be used as the unavailable greeting | `string(32)` |   | `false` | `supported`
@@ -33,7 +33,7 @@ Key | Description | Type | Default | Required | Support Level
 `media_extension` | Voicemail audio format | `string('mp3' | 'mp4' | 'wav')` | `mp3` | `false` | `supported`
 `name` | A friendly name for the voicemail box | `string(1..128)` |   | `true` | `supported`
 `not_configurable` | Determines if the user can configure this voicemail. | `boolean()` | `false` | `false` | `supported`
-`notify.callback` |   | [#/definitions/notify.callback](#notifycallback) |   | `false` |
+`notify.callback` | Schema for a callback options | [#/definitions/notify.callback](#notifycallback) |   | `false` |  
 `notify` |   | `object()` |   | `false` | `supported`
 `notify_email_addresses.[]` |   | `string()` |   | `false` | `supported`
 `notify_email_addresses` | List of email addresses to send notifications to (in addition to owner's email, if any) | `array(string())` | `[]` | `false` | `supported`
@@ -53,12 +53,12 @@ Schema for a callback options
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`attempts` | How many attempts without answer will system do | `integer()` |   | `false` |
-`disabled` | Determines if the system will call to callback number | `boolean()` |   | `false` |
-`interval_s` | How long will system wait between call back notification attempts | `integer()` |   | `false` |
-`number` | Number for callback notifications about new messages | `string()` |   | `false` |
-`schedule` | Schedules interval between callbacks | `array(integer())` |   | `false` |
-`timeout_s` | How long will system wait for answer to callback | `integer()` |   | `false` |
+`attempts` | How many attempts without answer will system do | `integer()` |   | `false` |  
+`disabled` | Determines if the system will call to callback number | `boolean()` |   | `false` |  
+`interval_s` | How long will system wait between call back notification attempts | `integer()` |   | `false` |  
+`number` | Number for callback notifications about new messages | `string()` |   | `false` |  
+`schedule` | Schedules interval between callbacks | `array(integer())` |   | `false` |  
+`timeout_s` | How long will system wait for answer to callback | `integer()` |   | `false` |  
 
 
 

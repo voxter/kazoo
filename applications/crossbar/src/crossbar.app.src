@@ -1,6 +1,6 @@
 {application,crossbar,
              [{applications,[cowboy,cowlib,crypto,ecsv,erlang_localtime,gm,
-                             inets,jesse,kazoo,kazoo_amqp,kazoo_apps,
+                             inets,kazoo,kazoo_amqp,kazoo_apps,
                              kazoo_attachments,kazoo_auth,kazoo_bindings,
                              kazoo_caches,kazoo_call,kazoo_config,kazoo_csv,
                              kazoo_data,kazoo_documents,kazoo_endpoint,
