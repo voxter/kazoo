@@ -860,7 +860,8 @@
                           ,<<"Transfer-To">>
                           ,<<"Transfer-Type">>
                           ]).
--define(OPTIONAL_TRANSFER_HEADERS, [<<"Insert-At">>
+-define(OPTIONAL_TRANSFER_HEADERS, [<<"Force-Transfer-Dialplan">>
+                                   ,<<"Insert-At">>
                                    ,<<"Transfer-Leg">>
                                    ,<<"Transfer-Context">>
                                    ,<<"Caller-ID-Name">>

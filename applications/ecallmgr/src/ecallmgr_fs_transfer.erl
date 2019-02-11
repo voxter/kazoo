@@ -13,7 +13,8 @@
 
 -include("ecallmgr.hrl").
 
--spec attended(atom(), kz_term:ne_binary(), kz_json:object()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec attended(atom(), kz_term:ne_binary(), kz_json:object()) ->
+                      {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), atom(), kz_term:proplist()}.
 attended(Node, UUID, JObj) ->
     TransferTo = kz_json:get_ne_binary_value(<<"Transfer-To">>, JObj),
     CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
@@ -22,7 +23,8 @@ attended(Node, UUID, JObj) ->
 
     ReqURI = <<TransferTo/binary, "@", Realm/binary>>,
 
-    Vars = [{<<"Ignore-Early-Media">>, <<"ring_ready">>}
+    Vars = [{<<"Force-Transfer-Dialplan">>, kz_json:get_ne_binary_value(<<"Force-Transfer-Dialplan">>, JObj)}
+           ,{<<"Ignore-Early-Media">>, <<"ring_ready">>}
            ,{<<"Simplify-Loopback">>, <<"false">>}
            ,{<<"Loopback-Bowout">>, <<"false">>}
            ,{<<"Loopback-Request-URI">>, ReqURI}
@@ -41,7 +43,9 @@ attended(Node, UUID, JObj) ->
 
     lager:info("transferring to ~s @ ~s on context ~s", [TransferTo, Realm, TransferContext]),
 
-    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, TransferContext])}.
+    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, TransferContext])
+    ,Node, [{"hold-bleg", "true"}]
+    }.
 
 -spec blind(atom(), kz_term:ne_binary(), kz_json:object()) ->
                    [{kz_term:ne_binary(), kz_term:ne_binary()}].

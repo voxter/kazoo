@@ -207,8 +207,8 @@
 
 -export([attended_transfer/2, attended_transfer/3
         ,blind_transfer/2, blind_transfer/3
-        ,transfer/3, transfer/4
-        ,transfer_command/3, transfer_command/4
+        ,transfer/3, transfer/4, transfer/5
+        ,transfer_command/3, transfer_command/4, transfer_command/5
         ]).
 
 -export([play_macro/2, b_play_macro/2, play_macro_command/2
@@ -3422,7 +3422,11 @@ transfer(TransferType, To, Call) ->
 
 -spec transfer(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary(), kapps_call:call()) -> 'ok'.
 transfer(TransferType, To, TransferLeg, Call) ->
-    Command = transfer_command(TransferType, To, TransferLeg, Call),
+    transfer(TransferType, To, TransferLeg, 'undefined', Call).
+
+-spec transfer(kz_term:api_binary(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> 'ok'.
+transfer(TransferType, To, TransferLeg, ForceTransferDialplan, Call) ->
+    Command = transfer_command(TransferType, To, TransferLeg, ForceTransferDialplan, Call),
     send_command(Command, Call).
 
 -spec transfer_command(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> kz_term:api_terms().
@@ -3431,7 +3435,12 @@ transfer_command(TransferType, TransferTo, Call) ->
 
 -spec transfer_command(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> kz_term:api_terms().
 transfer_command(TransferType, TransferTo, TransferLeg, Call) ->
+    transfer_command(TransferType, TransferTo, TransferLeg, 'undefined', Call).
+
+-spec transfer_command(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> 'ok'.
+transfer_command(TransferType, TransferTo, TransferLeg, ForceTransferDialplan, Call) ->
     kz_json:from_list([{<<"Application-Name">>, <<"transfer">>}
+                      ,{<<"Force-Transfer-Dialplan">>, ForceTransferDialplan}
                       ,{<<"Transfer-Type">>, TransferType}
                       ,{<<"Transfer-To">>, TransferTo}
                       ,{<<"Transfer-Leg">>, TransferLeg}
