@@ -127,7 +127,7 @@ init([Node, JObj]) ->
     _ = kz_util:put_callid(JObj),
     ServerId = kz_api:server_id(JObj),
     ControllerQ = kz_api:queue_id(JObj),
-    _ = bind_to_events(freeswitch:version(Node), Node),
+    _ = bind_to_events(Node),
     case kapi_resource:originate_req_v(JObj) of
         'false' ->
             Error = <<"originate failed to execute as JObj did not validate">>,
@@ -141,10 +141,8 @@ init([Node, JObj]) ->
                          }}
     end.
 
--spec bind_to_events({'ok', kz_term:ne_binary()}, atom()) -> 'ok'.
-bind_to_events({'ok', <<"mod_kazoo", _/binary>>}, Node) ->
-    'ok' = freeswitch:event(Node, ['CUSTOM', 'loopback::bowout']);
-bind_to_events(_, Node) ->
+-spec bind_to_events(atom()) -> 'ok'.
+bind_to_events(Node) ->
     gproc:reg({'p', 'l', {'event', Node, <<"loopback::bowout">>}}).
 
 %%------------------------------------------------------------------------------
@@ -420,10 +418,13 @@ get_originate_action(_, _) ->
 get_transfer_action(_JObj, 'undefined') -> <<"error">>;
 get_transfer_action(JObj, Route) ->
     Context = ?DEFAULT_FREESWITCH_CONTEXT,
-    list_to_binary(["'m:^:", get_unset_vars(JObj)
-                   ,"transfer:", Route
-                   ," XML ", Context, "' inline"
-                   ]).
+    UnsetVars = get_unset_vars(JObj),
+    list_to_binary(
+      ["'m:^:", UnsetVars
+      ,"transfer:", Route
+      ," XML ", Context, "' inline"
+      ]
+     ).
 
 -spec intercept_unbridged_only(kz_term:ne_binary() | 'undefined', kz_json:object()) -> kz_term:ne_binary().
 intercept_unbridged_only('undefined', JObj) ->
@@ -442,7 +443,12 @@ get_bridge_action(JObj) ->
     case ecallmgr_util:build_channel(Data) of
         {'error', _} -> <<"error">>;
         {'ok', Channel} ->
-            list_to_binary(["'m:^:", get_unset_vars(JObj), "bridge:", Channel, "' inline"])
+            UnsetVars = get_unset_vars(JObj),
+            list_to_binary(
+              ["'m:^:", UnsetVars
+              ,"bridge:", Channel, "' inline"
+              ]
+             )
     end.
 
 -spec maybe_update_node(kz_json:object(), atom()) -> atom().
@@ -498,9 +504,10 @@ build_originate_args_from_endpoints(Action, Endpoints, JObj, FetchId) ->
 
 -spec get_channel_vars(kz_json:object(), kz_term:ne_binary()) -> iolist().
 get_channel_vars(JObj, FetchId) ->
+    InteractionId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<?CALL_INTERACTION_ID>>], JObj, ?CALL_INTERACTION_DEFAULT),
     CCVs = [{<<"Fetch-ID">>, FetchId}
            ,{<<"Ecallmgr-Node">>, kz_term:to_binary(node())}
-           ,{<<?CALL_INTERACTION_ID>>, ?CALL_INTERACTION_DEFAULT}
+           ,{<<?CALL_INTERACTION_ID>>, InteractionId}
            ],
     J = kz_json:from_list_recursive([{<<"Custom-Channel-Vars">>, add_ccvs(JObj, CCVs)}]),
     ecallmgr_fs_xml:get_channel_vars(kz_json:merge(JObj, J)).
@@ -612,14 +619,14 @@ create_uuid(Endpoint, _JObj, Node) ->
 get_unset_vars(JObj) ->
     %% Refactor (Karl wishes he had unit tests here for you to use)
     ExportProps = [{K, <<>>} || K <- kz_json:get_value(<<"Export-Custom-Channel-Vars">>, JObj, [])],
-    Export = [K || KV <- lists:foldr(fun ecallmgr_fs_xml:get_channel_vars/2
+    Export = [K || KV <- lists:foldr(fun ecallmgr_fs_xml:kazoo_var_to_fs_var/2
                                     ,[]
                                     ,[{<<"Custom-Channel-Vars">>, kz_json:from_list(ExportProps)}]
                                     ),
                    ([K, _] = string:tokens(binary_to_list(KV), "=")) =/= 'undefined'
              ],
     case ["unset:" ++ K
-          || KV <- lists:foldr(fun ecallmgr_fs_xml:get_channel_vars/2, [], kz_json:to_proplist(JObj))
+          || KV <- lists:foldr(fun ecallmgr_fs_xml:kazoo_var_to_fs_var/2, [], kz_json:to_proplist(JObj))
                  ,not lists:member(begin [K, _] = string:tokens(binary_to_list(KV), "="), K end, Export)]
     of
         [] -> "";

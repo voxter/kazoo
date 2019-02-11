@@ -47,6 +47,9 @@
         ,outbound_callee_id_number/1, outbound_callee_id_number/2
         ,outbound_caller_id_name/1, outbound_caller_id_name/2
         ,outbound_caller_id_number/1, outbound_caller_id_number/2
+        ,asserted_identity_name/1, asserted_identity_name/2
+        ,asserted_identity_number/1, asserted_identity_number/2
+        ,asserted_identity_realm/1, asserted_identity_realm/2
         ,presence_id/1, presence_id/2
         ,resource_type/1, resource_type/2
         ,ringback/1, ringback/2
@@ -54,6 +57,7 @@
         ,t38_enabled/1, t38_enabled/2
         ,to_did/1, to_did/2
         ,denied_call_restrictions/1, denied_call_restrictions/2
+        ,outbound_actions/1, outbound_actions/2
 
         ,msg_id/1
         ,server_id/1
@@ -126,6 +130,9 @@
         ,?KEY_ORIGINATION_CALL_ID
         ,?KEY_OUTBOUND_CALLER_ID_NAME
         ,?KEY_OUTBOUND_CALLER_ID_NUMBER
+        ,?KEY_ASSERTED_IDENTITY_NAME
+        ,?KEY_ASSERTED_IDENTITY_NUMBER
+        ,?KEY_ASSERTED_IDENTITY_REALM
         ,?KEY_OUTBOUND_CALL_ID
         ,?KEY_PRESENCE_ID
         ,?KEY_REQUESTOR_CCVS
@@ -134,6 +141,7 @@
         ,?KEY_T38_ENABLED
         ,?KEY_TIMEOUT
         ,?KEY_DENIED_CALL_RESTRICTIONS
+        ,?KEY_OUTBOUND_ACTIONS
         ]).
 -define(OFFNET_RESOURCE_REQ_VALUES
        ,[{?KEY_EVENT_CATEGORY, ?CATEGORY_REQ}
@@ -170,6 +178,7 @@
         ,{?KEY_TO_DID, fun kz_term:is_ne_binary/1}
         ,{?KEY_BYPASS_E164, fun kz_term:is_boolean/1}
         ,{?KEY_DENIED_CALL_RESTRICTIONS, fun kz_json:is_json_object/1}
+        ,{?KEY_OUTBOUND_ACTIONS, fun kz_json:is_json_object/1}
         ]).
 
 %% Offnet Resource Response
@@ -313,6 +322,30 @@ outbound_caller_id_name(Req) ->
 -spec outbound_caller_id_name(req(), Default) -> kz_term:ne_binary() | Default.
 outbound_caller_id_name(?REQ_TYPE(JObj), Default) ->
     kz_json:get_ne_value(?KEY_OUTBOUND_CALLER_ID_NAME, JObj, Default).
+
+-spec asserted_identity_number(req()) -> kz_term:api_binary().
+asserted_identity_number(Req) ->
+    asserted_identity_number(Req, 'undefined').
+
+-spec asserted_identity_number(req(), Default) -> kz_term:ne_binary() | Default.
+asserted_identity_number(?REQ_TYPE(JObj), Default) ->
+    kz_json:get_ne_value(?KEY_ASSERTED_IDENTITY_NUMBER, JObj, Default).
+
+-spec asserted_identity_name(req()) -> kz_term:api_binary().
+asserted_identity_name(Req) ->
+    asserted_identity_name(Req, 'undefined').
+
+-spec asserted_identity_name(req(), Default) -> kz_term:ne_binary() | Default.
+asserted_identity_name(?REQ_TYPE(JObj), Default) ->
+    kz_json:get_ne_value(?KEY_ASSERTED_IDENTITY_NAME, JObj, Default).
+
+-spec asserted_identity_realm(req()) -> kz_term:api_binary().
+asserted_identity_realm(Req) ->
+    asserted_identity_realm(Req, 'undefined').
+
+-spec asserted_identity_realm(req(), Default) -> kz_term:ne_binary() | Default.
+asserted_identity_realm(?REQ_TYPE(JObj), Default) ->
+    kz_json:get_ne_value(?KEY_ASSERTED_IDENTITY_REALM, JObj, Default).
 
 -spec emergency_caller_id_number(req()) -> kz_term:api_binary().
 emergency_caller_id_number(Req) ->
@@ -593,3 +626,11 @@ delete_keys(?REQ_TYPE(JObj), Keys) ->
 -spec set_values(req(), kz_term:proplist()) -> req().
 set_values(?REQ_TYPE(JObj), Props) ->
     ?REQ_TYPE(kz_json:set_values(Props, JObj)).
+
+-spec outbound_actions(req()) -> kz_term:api_object().
+outbound_actions(Req) ->
+    outbound_actions(Req, 'undefined').
+
+-spec outbound_actions(req(), Default) -> kz_json:object() | Default.
+outbound_actions(?REQ_TYPE(JObj), Default) ->
+    kz_json:get_json_value(?KEY_OUTBOUND_ACTIONS, JObj, Default).

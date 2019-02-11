@@ -15,6 +15,7 @@
 -export([get_fs_key/1]).
 -export([process_fs_kv/4, format_fs_kv/4]).
 -export([fs_args_to_binary/1, fs_args_to_binary/2, fs_args_to_binary/3]).
+-export([fs_arg_encode/1, fs_arg_encode/2]).
 -export([multi_set_args/3, multi_unset_args/3]).
 -export([multi_set_args/4, multi_unset_args/4]).
 -export([multi_set_args/5, multi_unset_args/5]).
@@ -30,7 +31,7 @@
 
 -export([eventstr_to_proplist/1, varstr_to_proplist/1, get_setting/1, get_setting/2]).
 -export([is_node_up/1, is_node_up/2]).
--export([build_bridge_string/1, build_bridge_string/2]).
+-export([build_bridge_string/1, build_bridge_string/2, build_bridge_string/3]).
 -export([build_channel/1]).
 -export([build_bridge_channels/1, build_simple_channels/1]).
 -export([create_masquerade_event/2, create_masquerade_event/3]).
@@ -59,6 +60,12 @@
 
 -define(FS_MULTI_VAR_SEP, kapps_config:get_ne_binary(?APP_NAME, <<"multivar_separator">>, <<"~">>)).
 -define(FS_MULTI_VAR_SEP_PREFIX, "^^").
+-define(SANITIZE_FS_VALUE_REGEX,
+        kapps_config:get_ne_binary(?APP_NAME, <<"sanitize_fs_value_regex">>, <<"[^0-9\\w\\s-]">>)).
+
+%% HELP-34627 Preserve default failover behavior.
+-define(FAIL_IF_ALL_UNREG, 'true').
+
 
 -type send_cmd_ret() :: fs_sendmsg_ret() | fs_api_ret().
 -export_type([send_cmd_ret/0]).
@@ -551,6 +558,49 @@ fs_args_to_binary(Args, Sep, Prefix) ->
     Bins = [list_to_binary([Sep, Arg]) || Arg <- Args],
     list_to_binary([Prefix, Bins]).
 
+-spec fs_arg_encode(kz_term:ne_binary()) -> kz_term:ne_binary().
+fs_arg_encode(Source = ?NE_BINARY) ->
+    fs_arg_encode(Source, <<>>, <<>>).
+
+-spec fs_arg_encode(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
+fs_arg_encode(Source = ?NE_BINARY, Sep) ->
+    fs_arg_encode(Source, Sep, <<>>).
+
+-spec fs_arg_encode(kz_term:ne_binary(), kz_term:ne_binary(), binary()) -> kz_term:ne_binary().
+fs_arg_encode(<<>>, _Sep, Acc) -> Acc;
+
+fs_arg_encode(<<C, R/binary>>, C, Acc) ->
+    SafeChar = fs_arg_encode_char(C),
+    fs_arg_encode(R, C, <<Acc/binary, "%", SafeChar/binary>>);
+
+fs_arg_encode(<<C, R/binary>>, Sep, Acc) ->
+    case C of
+        $\s -> fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        $. -> fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        $- -> fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        $= -> fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        $_ -> fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        C when C >= $0
+               andalso C=< $9 ->
+            fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        C when C >= $a
+               andalso C=< $z ->
+            fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        C when C >= $A
+               andalso C=< $Z ->
+            fs_arg_encode(R, Sep, <<Acc/binary, C>>);
+        _NotSafe ->
+            SafeChar = fs_arg_encode_char(C),
+            fs_arg_encode(R, Sep, <<Acc/binary, "%", SafeChar/binary>>)
+    end.
+
+-spec fs_arg_encode_char(integer()) -> binary().
+fs_arg_encode_char(Char) ->
+    case integer_to_list(Char, 16) of
+        Val when length(Val) < 2 -> list_to_binary(["0", Val]);
+        ProperLen                -> list_to_binary(ProperLen)
+    end.
+
 -spec process_fs_kv(atom(), kz_term:ne_binary(), kz_term:proplist(), atom()) -> [binary()].
 process_fs_kv(_, _, [], _) -> [];
 process_fs_kv(Node, UUID, [{_K, 'undefined'} | KVs], Action) ->
@@ -669,14 +719,11 @@ get_fs_key_and_value(_, _, _) -> 'skip'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_sanitize_fs_value(kz_term:text(), kz_term:text()) -> binary().
-maybe_sanitize_fs_value(<<"Outbound-Caller-ID-Name">>, Val) ->
-    re:replace(Val, <<"[^a-zA-Z0-9-\s]">>, <<>>, ['global', {'return', 'binary'}]);
-maybe_sanitize_fs_value(<<"Outbound-Callee-ID-Name">>, Val) ->
-    re:replace(Val, <<"[^a-zA-Z0-9-\s]">>, <<>>, ['global', {'return', 'binary'}]);
-maybe_sanitize_fs_value(<<"Caller-ID-Name">>, Val) ->
-    re:replace(Val, <<"[^a-zA-Z0-9-\s]">>, <<>>, ['global', {'return', 'binary'}]);
-maybe_sanitize_fs_value(<<"Callee-ID-Name">>, Val) ->
-    re:replace(Val, <<"[^a-zA-Z0-9-\s]">>, <<>>, ['global', {'return', 'binary'}]);
+maybe_sanitize_fs_value(Key, Val) when Key =:= <<"Outbound-Caller-ID-Name">>
+                                       orelse Key =:= <<"Outbound-Callee-ID-Name">>
+                                       orelse Key =:= <<"Caller-ID-Name">>
+                                       orelse Key =:= <<"Callee-ID-Name">> ->
+    re:replace(Val, ?SANITIZE_FS_VALUE_REGEX, <<>>, ['ucp', 'global', 'unicode', {'return', 'binary'}]);
 maybe_sanitize_fs_value(<<"Export-Bridge-Variables">>, Val) ->
     kz_binary:join(Val, <<",">>);
 maybe_sanitize_fs_value(<<"Export-Variables">>, Val) ->
@@ -707,11 +754,66 @@ build_bridge_string(Endpoints) ->
 
 -spec build_bridge_string(kz_json:objects(), kz_term:ne_binary()) -> kz_term:ne_binary().
 build_bridge_string(Endpoints, Separator) ->
+    %% HELP-34627: Branch here to handle only failover when all endpoints are unregistered.
+    build_bridge_string(Endpoints, Separator, kapps_config:get_boolean(?APP_NAME, <<"failover_when_all_unreg">>, 'false')).
+
+-spec build_bridge_string(kz_json:objects(), kz_term:ne_binary(), kz_term:api_boolean()) -> kz_term:ne_binary().
+build_bridge_string(Endpoints, Separator, ?FAIL_IF_ALL_UNREG) ->
+    lager:info("system_config.ecallmgr.failover_when_all_unreg is enabled."),
+    %% De-dupe the bridge strings by matching those with the same
+    %%  Invite-Format, To-IP, To-User, To-realm, To-DID, and Route.
+    %% Additionally split bridge strings out and only return failover endpoints if no devices registered.
+    BridgeStrings = filter_bridge_strings(build_bridge_channels(Endpoints)),
+    %% NOTE: don't use binary_join here as it will crash on an empty list...
+    kz_binary:join(lists:reverse(BridgeStrings), Separator);
+build_bridge_string(Endpoints, Separator, _DefaultFailover) ->
     %% De-dupe the bridge strings by matching those with the same
     %%  Invite-Format, To-IP, To-User, To-realm, To-DID, and Route
     BridgeStrings = build_bridge_channels(Endpoints),
     %% NOTE: don't use binary_join here as it will crash on an empty list...
     kz_binary:join(lists:reverse(BridgeStrings), Separator).
+
+-spec filter_bridge_strings(bridge_channels()) -> bridge_channels().
+filter_bridge_strings(Endpoints) ->
+    case classify_endpoints(Endpoints) of
+        {[], Failover} ->
+            lager:info("No device endpoints available, using failover routes."),
+            Failover;
+        {Devices, _} ->
+            lager:info("Device endpoints registered, ignoring failover routes."),
+            Devices
+    end.
+
+-spec classify_endpoints(bridge_channels()) -> {bridge_channels(), bridge_channels()}.
+classify_endpoints(Endpoints) ->
+    classify_endpoints(Endpoints, [], []).
+
+-spec classify_endpoints(bridge_channels(), bridge_channels(), bridge_channels()) -> {bridge_channels(), bridge_channels()}.
+classify_endpoints([], Devices, Failover) ->
+    {Devices, Failover};
+classify_endpoints([Endpoint | Endpoints], Devices, Failover) ->
+    case string:str(unicode:characters_to_list(Endpoint), "ecallmgr_Call-Forward='true'") of
+        %% Not a forwarding endpoint move along.
+        0 -> classify_endpoints(Endpoints, [Endpoint | Devices], Failover);
+        %% Determine if we should add the call forwarding route.
+        _ ->
+            F2 = maybe_use_fwd_endpoint(Failover, Endpoint) ++ Failover,
+            classify_endpoints(Endpoints, Devices, F2)
+    end.
+
+-spec maybe_use_fwd_endpoint(bridge_channels(), bridge_channel()) -> bridge_channel().
+maybe_use_fwd_endpoint([], Destination) ->
+    [Destination];
+maybe_use_fwd_endpoint([Endpoint | Endpoints], Destination) ->
+    SD = unicode:characters_to_list(Destination),
+    FwdDest = string:sub_string(SD
+                               ,string:str(unicode:characters_to_list(SD), "loopback/")
+                               ,string:len(unicode:characters_to_list(SD))
+                               ),
+    case string:str(unicode:characters_to_list(Endpoint), FwdDest) of
+        0 -> maybe_use_fwd_endpoint(Endpoints, Destination);
+        _ -> []
+    end.
 
 -spec endpoint_jobjs_to_records(kz_json:objects()) -> bridge_endpoints().
 endpoint_jobjs_to_records(Endpoints) ->

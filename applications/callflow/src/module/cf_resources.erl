@@ -105,6 +105,8 @@ handle_bridge_failure(Cause, Code, Call) ->
 -spec build_offnet_request(kz_json:object(), kapps_call:call()) -> kz_term:proplist().
 build_offnet_request(Data, Call) ->
     {ECIDNum, ECIDName} = kz_attributes:caller_id(<<"emergency">>, Call),
+    {AssertedNumber, AssertedName, AssertedRealm} =
+        get_asserted_identity(Data, Call),
     {CIDNumber, CIDName} = get_caller_id(Data, Call),
     props:filter_undefined(
       [{?KEY_ACCOUNT_ID, kapps_call:account_id(Call)}
@@ -131,13 +133,17 @@ build_offnet_request(Data, Call) ->
       ,{?KEY_MSG_ID, kz_binary:rand_hex(6)}
       ,{?KEY_OUTBOUND_CALLER_ID_NAME, CIDName}
       ,{?KEY_OUTBOUND_CALLER_ID_NUMBER, CIDNumber}
-      ,{?KEY_PRESENCE_ID, kz_attributes:presence_id(Call)}
+      ,{?KEY_PRESENCE_ID, maybe_presence_id(Call)}
+      ,{?KEY_ASSERTED_IDENTITY_NAME, AssertedName}
+      ,{?KEY_ASSERTED_IDENTITY_NUMBER, AssertedNumber}
+      ,{?KEY_ASSERTED_IDENTITY_REALM, AssertedRealm}
       ,{?KEY_RESOURCE_TYPE, ?RESOURCE_TYPE_AUDIO}
       ,{?KEY_RINGBACK, kz_json:get_ne_binary_value(<<"ringback">>, Data)}
       ,{?KEY_T38_ENABLED, get_t38_enabled(Call)}
       ,{?KEY_TIMEOUT, kz_json:get_integer_value(<<"timeout">>, Data)}
       ,{?KEY_TO_DID, get_to_did(Data, Call)}
       ,{?KEY_DENIED_CALL_RESTRICTIONS, kapps_call:kvs_fetch('denied_call_restrictions', Call)}
+      ,{?KEY_OUTBOUND_ACTIONS, kapps_call:kvs_fetch('outbound_actions', Call)}
        | kz_api:default_headers(cf_exe:queue_name(Call), ?APP_NAME, ?APP_VERSION)
       ]).
 
@@ -154,6 +160,13 @@ get_channel_vars(Call) ->
                       ,GetterFuns
                       ),
     kz_json:from_list(CCVs).
+
+-spec maybe_presence_id(kapps_call:call()) -> kz_term:api_ne_binary().
+maybe_presence_id(Call) ->
+    case kapps_call:is_call_forward(Call) of
+        'true' -> kz_attributes:presence_id(Call);
+        'false' -> 'undefined'
+    end.
 
 -spec add_privacy_flags(kapps_call:call(), kz_term:proplist()) -> kz_term:proplist().
 add_privacy_flags(Call, Acc) ->
@@ -201,7 +214,7 @@ maybe_get_call_from_realm(Call) ->
 
 -spec maybe_set_bridge_generate_comfort_noise(kapps_call:call(), kz_term:proplist()) -> kz_term:proplist().
 maybe_set_bridge_generate_comfort_noise(Call, Acc) ->
-    case kz_endpoint:get(Call) of
+    case get_endpoint(Call) of
         {'ok', Endpoint} ->
             maybe_has_comfort_noise_option_enabled(Endpoint, Acc);
         {'error', _E} ->
@@ -216,10 +229,25 @@ maybe_has_comfort_noise_option_enabled(Endpoint, Acc) ->
         'false' -> Acc
     end.
 
--spec get_caller_id(kz_json:object(), kapps_call:call()) -> {kz_term:api_binary(), kz_term:api_binary()}.
+-spec get_caller_id(kz_json:object(), kapps_call:call()) ->
+                           {kz_term:api_binary(), kz_term:api_binary()}.
 get_caller_id(Data, Call) ->
     Type = kz_json:get_value(<<"caller_id_type">>, Data, <<"external">>),
     kz_attributes:caller_id(Type, Call).
+
+-spec get_asserted_identity(kz_json:object(), kapps_call:call()) ->
+                                   {kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary()}.
+get_asserted_identity(_Data, Call) ->
+    case get_endpoint(Call) of
+        {'error', _E} -> {'undefined', 'undefined', 'undefined'};
+        {'ok', Endpoint} ->
+            DefaultRealm = kapps_call:account_realm(Call),
+            CallerId = kzd_devices:caller_id(Endpoint),
+            {kzd_caller_id:asserted_number(CallerId)
+            ,kzd_caller_id:asserted_name(CallerId)
+            ,kzd_caller_id:asserted_realm(CallerId, DefaultRealm)
+            }
+    end.
 
 -spec get_hunt_account_id(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 get_hunt_account_id(Data, Call) ->
@@ -248,11 +276,7 @@ get_request_did(Data, Call) ->
 maybe_use_capture_group(Data, Call) ->
     case kapps_call:kvs_fetch('cf_capture_group', Call) of
         'undefined' ->
-            AuthId = kapps_call:authorizing_id(Call),
-            EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, AuthId, Call),
-            case EndpointId =/= 'undefined'
-                andalso kz_endpoint:get(EndpointId, kapps_call:account_db(Call))
-            of
+            case get_endpoint(Call) of
                 {'ok', Endpoint} -> maybe_apply_dialplan(Endpoint, Data, Call);
                 _Else -> maybe_bypass_e164(Data, Call)
             end;
@@ -366,6 +390,13 @@ get_flow_dynamic_flags(Data, Call, Flags) ->
 get_inception(Call) ->
     kz_json:get_value(<<"Inception">>, kapps_call:custom_channel_vars(Call)).
 
+
+-spec get_endpoint(kapps_call:call()) -> kz_endpoint:std_return().
+get_endpoint(Call) ->
+    AuthId = kapps_call:authorizing_id(Call),
+    EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, AuthId, Call),
+    kz_endpoint:get(EndpointId, kapps_call:account_db(Call)).
+
 %%------------------------------------------------------------------------------
 %% @doc Consume Erlang messages and return on offnet response
 %% @end
@@ -419,7 +450,7 @@ check_inception(Call) ->
 
 -spec get_privacy_prefs_from_endpoint(kapps_call:call()) -> kz_term:proplist().
 get_privacy_prefs_from_endpoint(Call) ->
-    get_privacy_prefs_from_endpoint(Call, kz_endpoint:get(Call)).
+    get_privacy_prefs_from_endpoint(Call, get_endpoint(Call)).
 
 -spec get_privacy_prefs_from_endpoint(kapps_call:call(), {'ok', kz_json:object()} | {'error', any()}) -> kz_term:proplist().
 get_privacy_prefs_from_endpoint(Call, {'ok', Endpoint}) ->

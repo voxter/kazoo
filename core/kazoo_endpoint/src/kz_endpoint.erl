@@ -83,19 +83,20 @@
 -type sms_route() :: {binary(), kz_term:proplist()}.
 -type sms_routes() :: [sms_route(), ...].
 
--type api_std_return() :: {'ok', kz_json:object()} |
-                          {'error', 'invalid_endpoint_id'} |
-                          kz_datamgr:data_error().
+-type std_return() :: {'ok', kz_json:object()} |
+                      {'error', 'invalid_endpoint_id'} |
+                      kz_datamgr:data_error().
+-export_type([std_return/0]).
 
 %%------------------------------------------------------------------------------
 %% @doc Fetches a endpoint definition from the database or cache
 %% @end
 %%------------------------------------------------------------------------------
 
--spec get(kapps_call:call()) -> api_std_return().
+-spec get(kapps_call:call()) -> std_return().
 get(Call) -> get(kapps_call:authorizing_id(Call), Call).
 
--spec get(kz_term:api_binary(), kz_term:ne_binary() | kapps_call:call()) -> api_std_return().
+-spec get(kz_term:api_binary(), kz_term:ne_binary() | kapps_call:call()) -> std_return().
 get('undefined', _Call) ->
     {'error', 'invalid_endpoint_id'};
 get(EndpointId, ?MATCH_ACCOUNT_RAW(AccountId)) ->
@@ -1373,10 +1374,13 @@ create_mobile_audio_endpoint(Endpoint, Properties, Call) ->
         Route ->
             Codecs = kapps_config:get(?MOBILE_CONFIG_CAT, <<"codecs">>, ?DEFAULT_MOBILE_CODECS),
             SIPInterface = kapps_config:get_binary(?MOBILE_CONFIG_CAT, <<"custom_sip_interface">>),
+            SIPSettings = kz_json:get_json_value(<<"sip">>, Endpoint, kz_json:new()),
             kz_json:from_list(
               [{<<"Invite-Format">>, <<"route">>}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
               ,{<<"Route">>, Route}
+              ,{<<"To-User">>, get_to_user(SIPSettings, Properties)}
+              ,{<<"To-Username">>, get_to_username(SIPSettings)}
               ,{<<"To-Realm">>, get_sip_realm(Endpoint, kapps_call:account_id(Call))}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
               ,{<<"Endpoint-Timeout">>, get_timeout(Properties)}
@@ -1387,6 +1391,8 @@ create_mobile_audio_endpoint(Endpoint, Properties, Call) ->
               ,{<<"Custom-Channel-Vars">>, generate_ccvs(Endpoint, Call, kz_json:new())}
               ,{<<"SIP-Interface">>, SIPInterface}
               ,{<<"Bypass-Media">>, get_bypass_media(Endpoint)}
+              ,{<<"Metaflows">>, kz_json:get_json_value(<<"metaflows">>, Endpoint)}
+              ,{<<"Endpoint-Actions">>, endpoint_actions(Endpoint, Call)}
               ])
     end.
 

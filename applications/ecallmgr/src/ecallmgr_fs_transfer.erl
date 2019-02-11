@@ -21,8 +21,6 @@ attended(Node, UUID, JObj) ->
 
     Realm = transfer_realm(UUID, CCVs),
 
-    lager:info("transferring to ~s @ ~s", [TransferTo, Realm]),
-
     ReqURI = <<TransferTo/binary, "@", Realm/binary>>,
 
     Vars = [{<<"Force-Transfer-Dialplan">>, kz_json:get_ne_binary_value(<<"Force-Transfer-Dialplan">>, JObj)}
@@ -40,7 +38,12 @@ attended(Node, UUID, JObj) ->
     Props = add_transfer_ccvs_to_vars(CCVs, Vars),
     [Export | Exports] = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'set'),
     Arg = [Export, [[",", Exported] || Exported <- Exports] ],
-    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, transfer_context(JObj)])
+
+    TransferContext = transfer_context(JObj),
+
+    lager:info("transferring to ~s @ ~s on context ~s", [TransferTo, Realm, TransferContext]),
+
+    {<<"att_xfer">>, list_to_binary(["{", Arg, "}loopback/", TransferTo, <<"/">>, TransferContext])
     ,Node, [{"hold-bleg", "true"}]
     }.
 
@@ -55,7 +58,7 @@ blind(Node, UUID, JObj) ->
 
     lager:info("transferring to ~s @ ~s", [TransferTo, Realm]),
 
-    KVs = [{<<"SIP-Refer-To">>, <<"<sip:", TransferTo/binary, "@", Realm/binary>>}
+    KVs = [{<<"SIP-Refer-To">>, <<"<sip:", TransferTo/binary, "@", Realm/binary, ">">>}
           ,{<<"SIP-Referred-By">>, transfer_referred(UUID, TransferLeg)}
           ],
     Args = kz_binary:join(ecallmgr_util:process_fs_kv(Node, TargetUUID, KVs, 'set'), <<";">>),

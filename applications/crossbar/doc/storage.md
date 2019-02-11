@@ -50,7 +50,6 @@ Key | Description | Type | Default | Required | Support Level
 `connections` | Describes alternative connections to use (such as alternative CouchDB instances | [#/definitions/storage.connections](#storageconnections) |   | `false` |
 `id` | ID of the storage document | `string()` |   | `false` |
 `plan` | Describes how to store documents depending on the database or document type | [#/definitions/storage.plan](#storageplan) |   | `false` |
-`ui_metadata` |   | `object()` |   | `false` |
 
 ### storage.attachment.aws
 
@@ -92,7 +91,7 @@ schema for dropbox attachment entry
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('dropbox')` |   | `true` |
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |
 `settings` | Settings for the Dropbox account | `object()` |   | `true` |
 
 ### storage.attachment.google_drive
@@ -104,7 +103,7 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('google_drive')` |   | `true` |
 `settings.folder_id` | Folder ID in which to store the file, if any | `string()` |   | `false` |
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |
 `settings` | Settings for the Google Drive account | `object()` |   | `true` |
 
 ### storage.attachment.google_storage
@@ -117,6 +116,20 @@ Key | Description | Type | Default | Required | Support Level
 `handler` | What handler module to use | `string('google_storage')` |   | `true` |
 `settings` | Settings for the Google Storage account | `object()` |   | `true` |
 
+### storage.attachment.http
+
+schema for HTTP(s) attachment entry
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`handler` | The handler interface to use | `string('http')` |   | `true` |
+`name` | Friendly name for this attachment handler | `string()` |   | `false` |
+`settings.send_multipart` | Toggle whether to send multipart payload when storing attachment - will include metadata JSON if true | `boolean()` |   | `false` |
+`settings.url` | The base HTTP(s) URL to use when creating the request | `string()` |   | `true` |
+`settings.verb` | The HTTP verb to use when sending the data | `string('post' | 'put')` | `put` | `false` |
+`settings` | HTTP server settings | `object()` |   | `true` |
+
 ### storage.attachment.onedrive
 
 schema for OneDrive attachment entry
@@ -125,7 +138,7 @@ schema for OneDrive attachment entry
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `handler` | What handler module to use | `string('onedrive')` |   | `true` |
-`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string()` |   | `true` |
+`settings.oauth_doc_id` | Doc ID in the system 'auth' database | `string(1..)` |   | `true` |
 `settings` | Settings for the OneDrive account | `object()` |   | `true` |
 
 ### storage.attachments
@@ -351,6 +364,36 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
 ```
 
+For instance, setting up your HTTP server to receive new voicemails for the account:
+
+```json
+{
+  "data": {
+    "attachments": {
+      "{UUID}": {
+        "handler": "http",
+        "name": "My HTTP server",
+        "settings": {
+          "url": "http://my.http.server:37635/some_prefix",
+          "verb": "post"
+        }
+      }
+    },
+    "plan": {
+      "modb": {
+        "types": {
+          "mailbox_message": {
+            "attachments": {
+              "handler": "{UUID}"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ## Change
 
 > POST /v2/accounts/{ACCOUNT_ID}/storage
@@ -440,3 +483,30 @@ curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
 ```
+
+## Skipping attachment settings validation
+
+When a storage plan is PUT/POSTed to Crossbar, KAZOO will attempt to use the attachments' settings and store a small text file to verify that files can be stored remotely. KAZOO will then issue a GET request to read the file back to test retrieval.
+
+For "dumb" storage backends this is typically a non-issue as storing/retrieving files is what the backend does!
+
+For "smart" backends, where a custom handler (like an HTTP web app) is accepting the files, adding code to handle this test file's storage/retrieval could place an unnecessary burden on the backend or be redundant after the first test if using the same destination for all accounts. As such, a request parameter can be included to skip this portion of the validation:
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"data":{...}}' \
+  http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage?validate_settings=false
+```
+
+!!! danger
+If the storage backend is unable to process the storage request, you could lose the data attempting to be stored.
+
+### Enabling This Feature
+
+By default, Kazoo will not allow clients to skip settings validation. Clients that include the `validate_settings` request parameter on these systems will receive a 400 validation error indicating attachment storage settings must be tested.
+
+Sysadmins can allow clients by setting a `system_config` flag: `sup kzs_plan allow_validation_overrides`
+
+Disabling it later is similar: `sup kzs_plan disallow_validation_overrides`

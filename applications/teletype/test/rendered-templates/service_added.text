@@ -2,7 +2,7 @@
 
 Date: Monday, July 17, 2017 10:17
 
-There have been some changes to your VoIP services in account Sub Account.
+There have been some changes to your VoIP services in account Sub-Sub Account.
 
 Here is the invoice based on the service plan applied to your account. Your account
 will be billed at the start of each month.
@@ -28,7 +28,7 @@ will be billed at the start of each month.
 + Service Name: Inbound Trunk                                              $27.96 |
 | Quantity: 4                                                                     |
 | Rate: $6.99                                                                     |
-| Newly started billed by your service plan                                       |
+| New service added to your service plan                                          |
 |                                                                                 |
 + Service Name: Mobile                                                    $119.96 |
 | Quantity: 4                                                                     |
@@ -45,7 +45,7 @@ will be billed at the start of each month.
 + Service Name: US Tollfree Phone Number                                    $4.99 |
 | Quantity: 1                                                                     |
 | Rate: $4.99                                                                     |
-| 1 item(s) stopped billed by your service plan                                   |
+| Service removed from your plan|ljust:80}}|
 |                                                                                 |
 + Service Name: Users/All                                                  $20.00 |
 | Quantity: 2                                                                     |
@@ -70,14 +70,23 @@ Thank you for your business!
 
 Agent Information
 
-    Name: User Two
-    Email: user-2001@2600hz.local
+    Name: User Three
+    Email: user-3001@2600hz.local
 
 Account Information
 
     Account ID: account0000000000000000000000002
     Account Name: Sub Account
     Account Realm: 3237c8.sip.2600hz.local
+
+Cascade Account Information
+    Changes to your services is result of the changes to this account:
+
+    Account ID:  account0000000000000000000000003
+    Account Name:  Sub-Sub Account
+    Account Realm:  paustu8.sip.2600hz.local
+
+
 
 
 

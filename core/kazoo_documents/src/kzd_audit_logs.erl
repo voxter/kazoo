@@ -148,5 +148,3 @@ authenticating_user_id(Doc, Default) ->
 -spec set_authenticating_user_id(doc(), binary()) -> doc().
 set_authenticating_user_id(Doc, AuthenticatingUserUserId) ->
     kz_json:set_value([<<"authenticating_user">>, <<"auth_user_id">>], AuthenticatingUserUserId, Doc).
-
-
