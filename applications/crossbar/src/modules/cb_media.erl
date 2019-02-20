@@ -712,7 +712,7 @@ prompt_start_key(Context, PromptId) ->
 -spec normalize_prompt_results(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 normalize_prompt_results(JObj, Acc) ->
     HasAttachments =
-        case kz_doc:attachments(kz_json:get_value(<<"doc">>, JObj)) of
+        case kz_doc:attachments(kz_json:get_value(<<"value">>, JObj)) of
             'undefined' -> 'false';
             As -> not kz_json:is_empty(As)
         end,
