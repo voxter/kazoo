@@ -675,7 +675,7 @@ load_media_docs_by_prompt(Context, PromptId, 'undefined') ->
                             ,[{'startkey_fun', fun(Ctx) -> prompt_start_key(Ctx, PromptId) end}
                              ,{'endkey', [PromptId, kz_json:new()]}
                              ,{'reduce', 'false'}
-                             ,{'include_docs', 'false'}
+                             ,'include_docs'
                              ]
                             ,cb_context:set_account_db(Context, ?KZ_MEDIA_DB)
                             ,fun normalize_prompt_results/2
@@ -687,7 +687,7 @@ load_media_docs_by_prompt(Context, PromptId, _AccountId) ->
                             ,[{'startkey_fun', fun(Ctx) -> prompt_start_key(Ctx, PromptId) end}
                              ,{'endkey', [PromptId, kz_json:new()]}
                              ,{'reduce', 'false'}
-                             ,{'include_docs', 'false'}
+                             ,'include_docs'
                              ]
                             ,Context
                             ,fun normalize_prompt_results/2
@@ -712,7 +712,7 @@ prompt_start_key(Context, PromptId) ->
 -spec normalize_prompt_results(kz_json:object(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 normalize_prompt_results(JObj, Acc) ->
     HasAttachments =
-        case kz_doc:attachments(kz_json:get_value(<<"value">>, JObj)) of
+        case kz_doc:attachments(kz_json:get_value(<<"doc">>, JObj)) of
             'undefined' -> 'false';
             As -> not kz_json:is_empty(As)
         end,
