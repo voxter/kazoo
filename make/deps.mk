@@ -69,8 +69,7 @@ dep_nklib = git https://github.com/voxter/nklib v0.4.1-parse-uri-quoted-contact-
 dep_plists = hex 1.0.0
 dep_pqueue = hex 1.7.2
 
-dep_erlcloud = git https://github.com/lazedo/erlcloud 54fe6b96eb0bc591b80161fc552afb821072222c
-## waiting on pull request https://github.com/erlcloud/erlcloud/pull/437
+dep_erlcloud = git https://github.com/erlcloud/erlcloud 3.2.4
 
 dep_erlazure = git https://github.com/lazedo/erlazure.git add-start-link
 
