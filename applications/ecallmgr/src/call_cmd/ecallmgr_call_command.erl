@@ -9,6 +9,7 @@
 
 -export([exec_cmd/4]).
 -export([fetch_dialplan/4]).
+-export([add_ringback/5]).
 
 -ifdef(TEST).
 -export([get_conference_flags/1
@@ -1490,3 +1491,30 @@ normalize_event_action_char(C) when is_integer(C), $A =< C, C =< $Z -> C + 32;
 normalize_event_action_char(C) when is_integer(C), 16#C0 =< C, C =< 16#D6 -> C + 32; % from string:to_lower
 normalize_event_action_char(C) when is_integer(C), 16#D8 =< C, C =< 16#DE -> C + 32; % so we only loop once
 normalize_event_action_char(C) -> C.
+
+-spec add_ringback(kz_term:proplist(), atom(), kz_term:ne_binary(), channel(), kz_json:object()) -> kz_term:proplist().
+add_ringback(DP, Node, UUID, _Channel, JObj) ->
+    case kz_json:get_first_defined([<<"Ringback">>
+                                   ,[<<"Custom-Channel-Vars">>, <<"Ringback">>]
+                                   ]
+                                  ,JObj
+                                  )
+    of
+        'undefined' ->
+            {'ok', Default} = ecallmgr_util:get_setting(<<"default_ringback">>),
+            Props = [{<<"ringback">>, Default}],
+            Exports = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'export'),
+            Args = ecallmgr_util:fs_args_to_binary(Exports),
+            [{"application", <<"kz_export_encoded ", Args/binary>>}
+             |DP
+            ];
+        Media ->
+            Stream = ecallmgr_util:media_path(Media, 'extant', UUID, JObj),
+            lager:debug("bridge has custom ringback: ~s", [Stream]),
+            Props = [{<<"ringback">>, Stream}],
+            Exports = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'export'),
+            Args = ecallmgr_util:fs_args_to_binary(Exports),
+            [{"application", <<"kz_export_encoded ", Args/binary>>}
+             |DP
+            ]
+    end.

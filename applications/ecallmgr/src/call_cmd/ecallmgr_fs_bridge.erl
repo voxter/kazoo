@@ -40,7 +40,7 @@ call_command(Node, UUID, JObj) ->
 
             BridgeJObj = add_endpoints_channel_actions(Node, UUID, JObj),
 
-            Routines = [fun handle_ringback/5
+            Routines = [fun ecallmgr_call_command:add_ringback/5
                        ,fun maybe_early_media/5
                        ,fun handle_hold_media/5
                        ,fun handle_secure_rtp/5
@@ -82,33 +82,6 @@ unbridge(UUID, JObj) ->
 %% @doc Bridge command helpers
 %% @end
 %%------------------------------------------------------------------------------
--spec handle_ringback(kz_term:proplist(), atom(), kz_term:ne_binary(), channel(), kz_json:object()) -> kz_term:proplist().
-handle_ringback(DP, Node, UUID, _Channel, JObj) ->
-    case kz_json:get_first_defined([<<"Ringback">>
-                                   ,[<<"Custom-Channel-Vars">>, <<"Ringback">>]
-                                   ]
-                                  ,JObj
-                                  )
-    of
-        'undefined' ->
-            {'ok', Default} = ecallmgr_util:get_setting(<<"default_ringback">>),
-            Props = [{<<"ringback">>, Default}],
-            Exports = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'export'),
-            Args = ecallmgr_util:fs_args_to_binary(Exports),
-            [{"application", <<"kz_export_encoded ", Args/binary>>}
-             |DP
-            ];
-        Media ->
-            Stream = ecallmgr_util:media_path(Media, 'extant', UUID, JObj),
-            lager:debug("bridge has custom ringback: ~s", [Stream]),
-            Props = [{<<"ringback">>, Stream}],
-            Exports = ecallmgr_util:process_fs_kv(Node, UUID, Props, 'export'),
-            Args = ecallmgr_util:fs_args_to_binary(Exports),
-            [{"application", <<"kz_export_encoded ", Args/binary>>}
-             |DP
-            ]
-    end.
-
 -spec maybe_early_media(kz_term:proplist(), atom(), kz_term:ne_binary(), channel(), kz_json:object()) -> kz_term:proplist().
 maybe_early_media(DP, _Node, _UUID, _Channel, JObj) ->
     Endpoints = kz_json:get_list_value(<<"Endpoints">>, JObj, []),
