@@ -6214,6 +6214,7 @@
                     "enum": [
                         "de",
                         "en-nz",
+                        "en-us",
                         "mi"
                     ],
                     "type": "string"

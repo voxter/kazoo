@@ -11,7 +11,7 @@ Hero user preferences JSON schema
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `custom_hero_groups` | the user's custom user groupings for Hero | `array()` |   | `false` |  
-`locale` | The local that should be used for i18n | `string('de' | 'en-nz' | 'mi')` |   | `false` |  
+`locale` | The local that should be used for i18n | `string('de' | 'en-nz' | 'en-us' | 'mi')` |   | `false` |  
 
 
 
