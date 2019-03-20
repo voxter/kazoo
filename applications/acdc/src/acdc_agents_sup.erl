@@ -52,25 +52,29 @@ status() ->
 
 -spec new(kz_json:object()) -> kz_types:sup_startchild_ret().
 new(JObj) ->
-    acdc_agent_manager:start_agent(kz_doc:account_id(JObj)
-                                  ,kz_doc:id(JObj)
-                                  ,[JObj]
-                                  ).
+    case find_agent_supervisor(kz_doc:account_id(JObj)
+                              ,kz_doc:id(JObj)
+                              )
+    of
+        'undefined' -> supervisor:start_child(?MODULE, [JObj]);
+        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
+    end.
 
 -spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 new(AcctId, AgentId) ->
-    {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
-    acdc_agent_manager:start_agent(AcctId
-                                  ,AgentId
-                                  ,[Agent]
-                                  ).
+    case find_agent_supervisor(AcctId, AgentId) of
+        'undefined' ->
+            {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
+            supervisor:start_child(?MODULE, [Agent]);
+        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
+    end.
 
 -spec new(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_term:ne_binaries()) -> kz_types:sup_startchild_ret() | 'ok'.
 new(AcctId, AgentId, AgentJObj, Queues) ->
-    acdc_agent_manager:start_agent(AcctId
-                                  ,AgentId
-                                  ,[AgentJObj, AcctId, AgentId, Queues]
-                                  ).
+    case find_agent_supervisor(AcctId, AgentId) of
+        'undefined' -> supervisor:start_child(?MODULE, [AgentJObj, AcctId, AgentId, Queues]);
+        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
+    end.
 
 -spec new_thief(kapps_call:call(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 new_thief(Call, QueueId) -> supervisor:start_child(?SERVER, [Call, QueueId]).
