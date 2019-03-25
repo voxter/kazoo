@@ -48,6 +48,7 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".voicemail">>).
 -define(NORMALIZATION_FORMAT, kapps_config:get_ne_binary(?MOD_CONFIG_CAT, <<"normalization_format">>, <<"mp3">>)).
+-define(TRANSCRIBE_FORMAT, kapps_config:get_ne_binary(?MOD_CONFIG_CAT, <<"transcribe_format">>)).
 
 %%%=============================================================================
 %%% API
@@ -641,7 +642,7 @@ validate_unique_vmbox(VMBoxId, Context, _AccountDb) ->
 -spec check_vmbox_schema(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 check_vmbox_schema(VMBoxId, Context) ->
     Context1 = maybe_migrate_notification_emails(Context),
-    OnSuccess = fun(C) -> on_successful_validation(VMBoxId, C) end,
+    OnSuccess = fun(C) -> validate_media_extension(VMBoxId, C) end,
     update_user_creds(Context),
     CheckMinLength = kapps_config:get_is_true(<<"voicemail">>, <<"enforce_min_length">>, 'false') and is_mailbox_changed(VMBoxId, Context), % and check if should check min length by sys admin config
     check_vmbox_schema(Context1, CheckMinLength, OnSuccess).
@@ -733,6 +734,22 @@ maybe_migrate_notification_emails(Context) ->
                                ]
                               );
         'false' -> Context
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec validate_media_extension(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
+validate_media_extension(VMBoxId, Context) ->
+    MediaExt = ?TRANSCRIBE_FORMAT,
+    case MediaExt /= 'undefined'
+        andalso cb_context:req_value(Context, <<"transcribe">>, 'false')
+        andalso cb_context:req_value(Context, <<"media_extension">>) /= MediaExt of
+        'true' ->
+            Resp = [{<<"message">>, <<"if you want transcribe message, then use '", MediaExt/binary, "' media extension">>}],
+            cb_context:add_validation_error(<<"media_extension">>, <<"invalid">>, kz_json:from_list(Resp), Context);
+        'false' -> on_successful_validation(VMBoxId, Context)
     end.
 
 %%------------------------------------------------------------------------------
