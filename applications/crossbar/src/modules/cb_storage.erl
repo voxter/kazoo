@@ -399,7 +399,7 @@ maybe_check_storage_settings(Context, ReqVerb) when ReqVerb =:= ?HTTP_PUT
     case cb_context:resp_status(Context) of
         'success' ->
             lager:debug("validating storage settings"),
-            Attachments = kz_json:get_json_value(<<"attachments">>, cb_context:doc(Context)),
+            Attachments = kz_json:get_json_value(<<"attachments">>, cb_context:doc(Context), kz_json:new()),
             validate_attachments_settings(Attachments, Context);
         _ ->
             Context
