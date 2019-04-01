@@ -44,6 +44,10 @@
             "description": "How long, in milliseconds, before ringing back",
             "type": "integer"
         },
+        "skip_module": {
+            "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+            "type": "boolean"
+        },
         "slot": {
             "description": "Static slot number to use",
             "type": "string"

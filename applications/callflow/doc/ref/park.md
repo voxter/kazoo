@@ -17,6 +17,7 @@ Key | Description | Type | Default | Required | Support Level
 `default_ringback_timeout` | How long, in milliseconds, before ringing back | `integer()` |   | `false` |  
 `presence_id` | use this presence_id | `string()` |   | `false` |  
 `ringback_timeout` | How long, in milliseconds, before ringing back | `integer()` |   | `false` |  
+`skip_module` | When set to true this callflow action is skipped, advancing to the wildcard branch (if any) | `boolean()` |   | `false` |  
 `slot` | Static slot number to use | `string()` |   | `false` |  
 `slots` | Statically define slots and their configuration | `object()` | `{}` | `false` |  
 

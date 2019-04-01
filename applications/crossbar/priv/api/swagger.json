@@ -1448,6 +1448,10 @@
                     ],
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "timeout": {
                     "description": "Time, in seconds, for 'paused' state",
                     "type": [
@@ -1486,6 +1490,10 @@
                     "description": "assign a priority to the caller",
                     "type": "integer"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "var": {
                     "description": "Custom variable to check for queue ID",
                     "type": "string"
@@ -1507,6 +1515,10 @@
                 "id": {
                     "description": "Queue ID",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -1533,6 +1545,10 @@
                 "id": {
                     "description": "Queue ID",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "var": {
                     "description": "Custom KV whose value to use instead of \"id\"",
@@ -1588,6 +1604,10 @@
                         "string",
                         "boolean"
                     ]
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -1691,6 +1711,10 @@
                     },
                     "minItems": 1,
                     "type": "array"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "terminators": {
                     "default": [
@@ -1864,7 +1888,12 @@
         },
         "callflows.branch_bnumber": {
             "description": "Validator for the branch_bnumber callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.branch_variable": {
@@ -1881,6 +1910,10 @@
                         "user"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "variable": {
                     "default": "",
@@ -1906,6 +1939,10 @@
                         "menu"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -1931,6 +1968,10 @@
                         "user"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -1942,6 +1983,10 @@
                     "description": "The Callflow ID to branch to",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "var": {
                     "description": "Custom variable to check for callflow ID",
                     "type": "string"
@@ -1951,7 +1996,12 @@
         },
         "callflows.camping_feature": {
             "description": "Validator for the camping_feature callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.check_cid": {
@@ -1980,6 +2030,10 @@
                     "description": "Determine match/nomatch when use_absolute_mode is false",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "use_absolute_mode": {
                     "default": false,
                     "description": "If true, direct call down a branch that matches the caller ID",
@@ -1998,6 +2052,10 @@
                 "id": {
                     "description": "CallerID List ID",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2019,6 +2077,10 @@
                     "description": "How many DTMFs to collect from the caller",
                     "minimum": 1,
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "terminator": {
                     "default": "#",
@@ -2102,6 +2164,10 @@
                         "string"
                     ]
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "welcome_prompt": {
                     "description": "Describes how the caller is greeted on entering a conference",
                     "properties": {
@@ -2122,7 +2188,12 @@
         },
         "callflows.dead_air": {
             "description": "Validator for the dead_air callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.device": {
@@ -2157,6 +2228,10 @@
                     "description": "Device ID",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "static_invite": {
                     "description": "Override the SIP Username",
                     "type": "string"
@@ -2183,13 +2258,22 @@
                 "id": {
                     "description": "Directory ID",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
         },
         "callflows.disa": {
             "description": "Validator for the DISA callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.do_not_disturb": {
@@ -2207,6 +2291,10 @@
                 "id": {
                     "description": "Document ID on which to update DND settings",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2267,6 +2355,10 @@
                     "description": "Minimum number of digits that must match the regex to collected DTMF",
                     "type": "integer"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "whitelist_regex": {
                     "description": "Regex to match collected Caller ID Number",
                     "type": "string"
@@ -2293,6 +2385,10 @@
                     "description": "Device ID to eavesdrop",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "user_id": {
                     "description": "User ID to eavesdrop",
                     "type": "string"
@@ -2318,13 +2414,22 @@
                 "group_id": {
                     "description": "ID of the group/user/device to eavesdrop",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
         },
         "callflows.edr": {
             "description": "Validator for the edr callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.fax_detect": {
@@ -2333,6 +2438,10 @@
                 "duration": {
                     "description": "How long, in seconds, to try detecting fax tones",
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2364,6 +2473,10 @@
                         }
                     },
                     "type": "object"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2375,6 +2488,10 @@
                     "default": "default",
                     "description": "Flush collected DTMF in a named key",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2426,6 +2543,10 @@
                     },
                     "type": "object"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "strategy": {
                     "default": "simultaneous",
                     "description": "How to ring the endpoints",
@@ -2466,6 +2587,10 @@
                     "description": "Group in which to find a call to pickup",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "user_id": {
                     "description": "User in which to find a call to pickup",
                     "type": "string"
@@ -2476,6 +2601,10 @@
         "callflows.group_pickup_feature": {
             "description": "Validator for the group_pickup_feature callflow data object",
             "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "type": {
                     "description": "The type of collection to pickup",
                     "enum": [
@@ -2491,7 +2620,12 @@
         },
         "callflows.hangup": {
             "description": "Validator for the hangup callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.hotdesk": {
@@ -2514,6 +2648,10 @@
                 "interdigit_timeout": {
                     "description": "How long, in seconds, to wait between keypresses",
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2541,6 +2679,10 @@
                     "description": "Group in which to find a call to intercept",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "user_id": {
                     "description": "User in which to find a call to intercept",
                     "type": "string"
@@ -2563,6 +2705,10 @@
                     "description": "Requires the calling device to be part of the User",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "type": {
                     "description": "The scope of devices to intercept",
                     "enum": [
@@ -2581,6 +2727,10 @@
                 "barge_calls": {
                     "description": "Whether to barge in on the callee",
                     "type": "boolean"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -2597,6 +2747,10 @@
                     "description": "The language to default to for the rest of the call",
                     "pattern": "^[A-Za-z]{2}(-[A-Za-z]{2})?$",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -2614,6 +2768,10 @@
                         "type": "string"
                     },
                     "type": "array"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -2627,6 +2785,10 @@
                 "presence_id": {
                     "description": "The Presence ID to send a presence notification about",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "status": {
                     "default": "idle",
@@ -2654,6 +2816,10 @@
                 "interdigit_timeout": {
                     "description": "Amount of time, in milliseconds, to wait between keypresses",
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "var": {
                     "description": "Custom variable to check for menu ID",
@@ -2692,6 +2858,10 @@
                         "type": "object"
                     },
                     "type": "array"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -2701,7 +2871,12 @@
         },
         "callflows.move": {
             "description": "Validator for the move callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.nomorobo": {
@@ -2712,6 +2887,10 @@
                     "maxLength": 1000,
                     "minLength": 1,
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "username": {
                     "description": "Username to the NoMoRobo service",
@@ -2802,6 +2981,10 @@
                     "description": "Tone or file to play while waiting for the leg to be answered",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "timeout": {
                     "description": "How long, in seconds, to wait for the call to be answered",
                     "type": "integer"
@@ -2880,6 +3063,10 @@
                     "minItems": 1,
                     "type": "array"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "timeout": {
                     "default": 5,
                     "description": "How long to ring the ring group before continuing, in seconds",
@@ -2936,6 +3123,10 @@
                     "description": "How long, in milliseconds, before ringing back",
                     "type": "integer"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "slot": {
                     "description": "Static slot number to use",
                     "type": "string"
@@ -2990,6 +3181,10 @@
                     ],
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "var": {
                     "description": "Custom variable to check for pivot URL",
                     "type": "string"
@@ -3025,6 +3220,10 @@
                     "description": "How many times to loop the media",
                     "minimum": 1,
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "terminators": {
                     "default": [
@@ -3084,6 +3283,10 @@
                     "default": "",
                     "description": "Prefix caller ID number",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -3110,6 +3313,10 @@
                         "yes"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -3137,6 +3344,10 @@
                 "owner_id": {
                     "description": "User ID to send fax to",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -3210,6 +3421,10 @@
                     "description": "If true, the recording will continue after a transfer on the active leg",
                     "type": "boolean"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "time_limit": {
                     "default": 3600,
                     "description": "Time limit, in seconds, for the recording",
@@ -3247,6 +3462,10 @@
                         "post"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "time_limit": {
                     "default": 3600,
@@ -3340,6 +3559,10 @@
                     "description": "Tone or file to play while waiting for the leg to be answered",
                     "type": "string"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "timeout": {
                     "description": "How long, in seconds, to wait for the call to be answered",
                     "type": "integer"
@@ -3372,6 +3595,10 @@
                 "message": {
                     "description": "The SIP Hangup cause to respond with",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -3460,6 +3687,10 @@
                     },
                     "type": "object"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "strategy": {
                     "default": "simultaneous",
                     "description": "How to ring the members of the group",
@@ -3495,6 +3726,10 @@
                 "callflow_id": {
                     "description": "The callflow containing the ring group to log in and out of",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -3535,6 +3770,10 @@
                     "description": "Endpoint types to perform search: user, device",
                     "type": "array"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "static_invite": {
                     "description": "Override the SIP Username",
                     "type": "string"
@@ -3570,6 +3809,10 @@
                         "string",
                         "integer"
                     ]
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -3579,7 +3822,12 @@
         },
         "callflows.set": {
             "description": "Validator for the set callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.set_alert_info": {
@@ -3588,6 +3836,10 @@
                 "alert_info": {
                     "description": "Set `Alert-Info` header inside b-leg channel. Used for distinctive ring.",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -3607,6 +3859,10 @@
                     "default": "",
                     "description": "Set caller ID number",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -3622,6 +3878,10 @@
                         "both"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "value": {
                     "description": "The value to set 'variable'",
@@ -3645,6 +3905,10 @@
                 "export": {
                     "description": "When true the provided custom_application_vars are set on the channel and any channel bridged to it later",
                     "type": "boolean"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -3654,7 +3918,12 @@
         },
         "callflows.skel": {
             "description": "Validator for the skel callflow data object",
-            "properties": {},
+            "properties": {
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
             "type": "object"
         },
         "callflows.sleep": {
@@ -3666,6 +3935,10 @@
                     "maximum": 86400000,
                     "minimum": 0,
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "unit": {
                     "default": "s",
@@ -3711,6 +3984,10 @@
                     },
                     "type": "array"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "timezone": {
                     "description": "Timezone to use when processing temporal rules",
                     "type": "string"
@@ -3735,6 +4012,10 @@
                         "bleg"
                     ],
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "target": {
                     "description": "The target destination (extension or DID)",
@@ -3772,6 +4053,10 @@
                 "language": {
                     "description": "The language of the speaker",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "terminators": {
                     "default": [
@@ -3838,6 +4123,10 @@
                 "id": {
                     "description": "User ID",
                     "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "static_invite": {
                     "description": "Override the SIP Username",
@@ -3911,6 +4200,10 @@
                     "description": "Allow login if caller has a single mailbox",
                     "type": "boolean"
                 },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                },
                 "var": {
                     "description": "Custom variable to check for vmbox ID",
                     "type": "string"
@@ -3936,6 +4229,10 @@
                 "retries": {
                     "description": "How many times to retry the request if the host isn't available",
                     "type": "integer"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
                 },
                 "uri": {
                     "description": "The HTTP URI to send the request",
@@ -4314,6 +4611,59 @@
                 "extension",
                 "name"
             ],
+            "type": "object"
+        },
+        "comment": {
+            "description": "Schema for a single comment",
+            "properties": {
+                "account_id": {
+                    "description": "Account ID of the commenter.",
+                    "type": "string"
+                },
+                "action_required": {
+                    "default": false,
+                    "description": "Specficied if an action is required by the user.",
+                    "type": "boolean"
+                },
+                "author": {
+                    "description": "Full name of the author",
+                    "type": "string"
+                },
+                "content": {
+                    "description": "Content of the comment",
+                    "type": "string"
+                },
+                "is_private": {
+                    "default": false,
+                    "description": "Specified if this comment is private",
+                    "type": "boolean"
+                },
+                "timestamp": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "description": "User ID of the commenter",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "author",
+                "content",
+                "timestamp"
+            ],
+            "type": "object"
+        },
+        "comments": {
+            "description": "Schema for comments",
+            "properties": {
+                "comments": {
+                    "description": "The history of comments made on a object",
+                    "items": {
+                        "$ref": "#/definitions/comment"
+                    },
+                    "type": "array"
+                }
+            },
             "type": "object"
         },
         "conferences": {
@@ -9661,6 +10011,99 @@
             ],
             "type": "object"
         },
+        "kapi.bookkeepers.collect_recurring_req_definition": {
+            "description": "AMQP API for bookkeepers.collect_recurring_req_definition",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Audit-Log": {
+                    "type": "string"
+                },
+                "Bookkeeper-ID": {
+                    "type": "string"
+                },
+                "Bookkeeper-Type": {
+                    "type": "string"
+                },
+                "Due-Timestamp": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "bookkeepers"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "collect_recurring_req"
+                    ],
+                    "type": "string"
+                },
+                "Vendor-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Bookkeeper-ID",
+                "Bookkeeper-Type",
+                "Vendor-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.bookkeepers.collect_recurring_resp_definition": {
+            "description": "AMQP API for bookkeepers.collect_recurring_resp_definition",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Bookkeeper-ID": {
+                    "type": "string"
+                },
+                "Bookkeeper-Type": {
+                    "type": "string"
+                },
+                "Details": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "bookkeepers"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "collect_recurring_resp"
+                    ],
+                    "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "Reason": {
+                    "type": "string"
+                },
+                "Status": {
+                    "type": "string"
+                },
+                "Transaction-DB": {
+                    "type": "string"
+                },
+                "Transaction-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Bookkeeper-ID",
+                "Bookkeeper-Type",
+                "Status"
+            ],
+            "type": "object"
+        },
         "kapi.bookkeepers.refund_req_definition": {
             "description": "AMQP API for bookkeepers.refund_req_definition",
             "properties": {
@@ -9828,6 +10271,83 @@
                 "Status",
                 "Transaction-DB",
                 "Transaction-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.bookkeepers.standing_req_definition": {
+            "description": "AMQP API for bookkeepers.standing_req_definition",
+            "properties": {
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Bookkeeper-ID": {
+                    "type": "string"
+                },
+                "Bookkeeper-Type": {
+                    "type": "string"
+                },
+                "Estimated-Withdrawal": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "bookkeepers"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "standing_req"
+                    ],
+                    "type": "string"
+                },
+                "Items": {
+                    "type": "string"
+                },
+                "Vendor-ID": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Bookkeeper-ID",
+                "Bookkeeper-Type",
+                "Estimated-Withdrawal",
+                "Items",
+                "Vendor-ID"
+            ],
+            "type": "object"
+        },
+        "kapi.bookkeepers.standing_resp_definition": {
+            "description": "AMQP API for bookkeepers.standing_resp_definition",
+            "properties": {
+                "Details": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "bookkeepers"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "standing_resp"
+                    ],
+                    "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "Reason": {
+                    "type": "string"
+                },
+                "Status": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Status"
             ],
             "type": "object"
         },
@@ -12625,6 +13145,15 @@
                 "Outbound-Caller-ID-Number": {
                     "type": "string"
                 },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
+                    "type": "string"
+                },
                 "Ringback": {
                     "type": "string"
                 },
@@ -12834,6 +13363,15 @@
                     "type": "string"
                 },
                 "Presence-ID": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
                     "type": "string"
                 },
                 "Proxy-IP": {
@@ -18920,6 +19458,9 @@
                 },
                 "To": {
                     "type": "string"
+                },
+                "Version": {
+                    "type": "string"
                 }
             },
             "required": [
@@ -19000,6 +19541,9 @@
                     "type": "string"
                 },
                 "To": {
+                    "type": "string"
+                },
+                "Version": {
                     "type": "string"
                 }
             },
@@ -19159,6 +19703,9 @@
                     "type": "string"
                 },
                 "To": {
+                    "type": "string"
+                },
+                "Version": {
                     "type": "string"
                 }
             },
@@ -19483,6 +20030,9 @@
                     "type": "string"
                 },
                 "To": {
+                    "type": "string"
+                },
+                "Version": {
                     "type": "string"
                 }
             },
@@ -20608,6 +21158,15 @@
                     "type": "string"
                 },
                 "Presence-ID": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
                     "type": "string"
                 },
                 "Requestor-Custom-Channel-Vars": {
@@ -22253,6 +22812,15 @@
                 "Outbound-Caller-ID-Number": {
                     "type": "string"
                 },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
+                    "type": "string"
+                },
                 "Ringback": {
                     "type": "string"
                 },
@@ -22517,6 +23085,15 @@
                 "Outbound-Caller-ID-Number": {
                     "type": "string"
                 },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
+                    "type": "string"
+                },
                 "Ringback": {
                     "type": "string"
                 },
@@ -22688,6 +23265,15 @@
                     "type": "string"
                 },
                 "Presence-ID": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
                     "type": "string"
                 },
                 "Proxy-IP": {
@@ -24038,6 +24624,15 @@
                 "Outbound-Caller-ID-Number": {
                     "type": "string"
                 },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
+                    "type": "string"
+                },
                 "Ringback": {
                     "type": "string"
                 },
@@ -24226,6 +24821,15 @@
                     "type": "string"
                 },
                 "Presence-ID": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Name": {
+                    "type": "string"
+                },
+                "Privacy-Hide-Number": {
+                    "type": "string"
+                },
+                "Privacy-Method": {
                     "type": "string"
                 },
                 "Proxy-IP": {
@@ -26654,12 +27258,16 @@
                 "bill": {
                     "description": "Billing information of the losing carrier",
                     "properties": {
-                        "carrier": {
-                            "description": "The name of the losing carrier",
+                        "account_number": {
+                            "description": "Account Number to identify account",
                             "type": "string"
                         },
-                        "extended_address": {
-                            "description": "The suite/floor/apt of the billing address the losing carrier has on record",
+                        "btn": {
+                            "description": "Billing Telephone Number (BTN) to identify account",
+                            "type": "string"
+                        },
+                        "carrier": {
+                            "description": "The name of the losing carrier",
                             "type": "string"
                         },
                         "locality": {
@@ -26668,6 +27276,10 @@
                         },
                         "name": {
                             "description": "The losing carrier billing/account name",
+                            "type": "string"
+                        },
+                        "pin": {
+                            "description": "Personal Identification Number (PIN) to identify account",
                             "type": "string"
                         },
                         "postal_code": {
@@ -26679,7 +27291,43 @@
                             "type": "string"
                         },
                         "street_address": {
-                            "description": "The address of the billing address the losing carrier has on record",
+                            "description": "The street name of the billing address the losing carrier has on record",
+                            "type": "string"
+                        },
+                        "street_number": {
+                            "description": "The street number of the billing address the losing carrier has on record",
+                            "type": "string"
+                        },
+                        "street_post_dir": {
+                            "description": "Street Post-Direction",
+                            "enum": [
+                                "E",
+                                "N",
+                                "NE",
+                                "NW",
+                                "S",
+                                "SE",
+                                "SW",
+                                "W"
+                            ],
+                            "type": "string"
+                        },
+                        "street_pre_dir": {
+                            "description": "Street Pre-Direction",
+                            "enum": [
+                                "E",
+                                "N",
+                                "NE",
+                                "NW",
+                                "S",
+                                "SE",
+                                "SW",
+                                "W"
+                            ],
+                            "type": "string"
+                        },
+                        "street_type": {
+                            "description": "The street type of the billing address the losing carrier has on record",
                             "type": "string"
                         }
                     },
@@ -26688,7 +27336,7 @@
                 "comments": {
                     "description": "The history of comments made on a port request",
                     "items": {
-                        "type": "object"
+                        "$ref": "#/definitions/comment"
                     },
                     "type": "array"
                 },
@@ -26727,23 +27375,25 @@
                     "minProperties": 1,
                     "type": "object"
                 },
-                "port_state": {
-                    "default": "unconfirmed",
-                    "description": "What state the port request is currently in",
-                    "enum": [
-                        "unconfirmed",
-                        "pending",
-                        "submitted",
-                        "scheduled",
-                        "completed",
-                        "rejected",
-                        "canceled"
-                    ],
+                "reference_number": {
+                    "description": "Winning carrier reference number or order ID",
                     "type": "string"
+                },
+                "signee_name": {
+                    "description": "The name of the person authorizing the release of numbers from the losing carrier",
+                    "type": "string"
+                },
+                "signing_date": {
+                    "description": "The date in Gregorian timestamp on which the document releasing the numbers from the losing carrier was signed",
+                    "type": "integer"
                 },
                 "transfer_date": {
                     "description": "Requested transfer date in Gregorian timestamp",
                     "type": "integer"
+                },
+                "winning_carrier": {
+                    "description": "The name of winning carrier",
+                    "type": "string"
                 }
             },
             "required": [
@@ -29882,9 +30532,14 @@
         "system_config.callflow.resources": {
             "description": "Schema for callflow.resources system_config",
             "properties": {
+                "default_asserted_identity": {
+                    "default": false,
+                    "description": "When set to true, the asserted identity will have defaults and force the use of P-Asserted-Identity (instead of RPID) on all outbound offnet calls.  When set to false, P-Asserted-Identity is only used if explicitly set in the account/user/device hierarchy.",
+                    "type": "boolean"
+                },
                 "default_emit_account_id": {
                     "default": false,
-                    "description": "callflow.resources default emit account id",
+                    "description": "When set to true, all outbound offnet calls will include a SIP header X-Account-ID with a value of the Kazoo account UUID.",
                     "type": "boolean"
                 }
             },
@@ -30984,6 +31639,27 @@
             },
             "type": "object"
         },
+        "system_config.crossbar.users": {
+            "description": "Schema for crossbar.users system_config",
+            "properties": {
+                "generate_password_if_empty": {
+                    "default": false,
+                    "description": "crossbar users generate_password_if_empty",
+                    "type": "boolean"
+                },
+                "generate_username_if_empty": {
+                    "default": true,
+                    "description": "crossbar users generate_username_if_empty",
+                    "type": "boolean"
+                },
+                "reset_identity_secret_on_rehash": {
+                    "default": true,
+                    "description": "crossbar users reset_identity_secret_on_rehash",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "system_config.crossbar.voicemail": {
             "description": "Schema for crossbar.voicemail system_config",
             "properties": {
@@ -30996,6 +31672,10 @@
                     "default": false,
                     "description": "Whether or not normalize voicemail audio file",
                     "type": "boolean"
+                },
+                "transcribe_format": {
+                    "description": "crossbar voicemail transcribe_format",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -31161,6 +31841,11 @@
                     "default": {},
                     "description": "ecallmgr acls",
                     "type": "object"
+                },
+                "allow_endless_recording": {
+                    "default": false,
+                    "description": "ecallmgr allow_endless_recording",
+                    "type": "boolean"
                 },
                 "authz_default_action": {
                     "default": "deny",
@@ -32164,6 +32849,11 @@
         "system_config.jonny5": {
             "description": "Schema for jonny5 system_config",
             "properties": {
+                "check_service_standing": {
+                    "default": true,
+                    "description": "jonny5 check_service_standing",
+                    "type": "boolean"
+                },
                 "default_allow_postpay": {
                     "description": "jonny5 default_allow_postpay",
                     "type": "boolean"
@@ -32194,6 +32884,16 @@
                     "default": false,
                     "description": "lookup flat rate regexps per resource",
                     "type": "boolean"
+                },
+                "service_standing_cache_acceptable": {
+                    "default": true,
+                    "description": "jonny5 service_standing_cache_acceptable",
+                    "type": "boolean"
+                },
+                "service_standing_cache_expiration_s": {
+                    "default": 1800,
+                    "description": "jonny5 service_standing_cache_expiration_s",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -34142,6 +34842,21 @@
                     "description": "use the anonymous_cid_numbers values to check if a name is anonymous",
                     "type": "boolean"
                 },
+                "default_privacy_name": {
+                    "default": "Anonymous",
+                    "description": "privacy default_privacy_name",
+                    "type": "string"
+                },
+                "default_privacy_number": {
+                    "default": "anonymous",
+                    "description": "privacy default_privacy_number",
+                    "type": "string"
+                },
+                "method": {
+                    "default": "kazoo",
+                    "description": "privacy method",
+                    "type": "string"
+                },
                 "privacy_mode": {
                     "default": "kazoo",
                     "description": "Default privacy mode for anonymous calls",
@@ -34544,6 +35259,11 @@
                 },
                 "get_items_from_quantities": {
                     "description": "services get_items_from_quantities",
+                    "type": "boolean"
+                },
+                "hydrate_cascade_commits": {
+                    "default": true,
+                    "description": "When an account makes a change it triggers a propagation up the account hiearchy updating the cascade quantities, if this is set to false the cascade quantities are summed with the account update deltas.  If this is set to true then the views will be invoked to fully reconcile the quantities (hydrate) during the cascade commits, a more expensive DB operation but provides self-corrective quantities.",
                     "type": "boolean"
                 },
                 "master_account_bookkeeper": {
@@ -36789,7 +37509,7 @@
                     "description": "Parameters related to white-labeling port requests",
                     "properties": {
                         "authority": {
-                            "description": "The email(s) to be used for admin port requests",
+                            "description": "The account ID(s) to be used for administrating port requests",
                             "oneOf": [
                                 {
                                     "type": "string"
@@ -39202,6 +39922,14 @@
             "put": {
                 "parameters": [
                     {
+                        "in": "body",
+                        "name": "comments",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comments"
+                        }
+                    },
+                    {
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
@@ -39254,6 +39982,14 @@
             },
             "post": {
                 "parameters": [
+                    {
+                        "in": "body",
+                        "name": "comments",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/comments"
+                        }
+                    },
                     {
                         "$ref": "#/parameters/auth_token_header"
                     },
@@ -43379,126 +44115,7 @@
                 }
             }
         },
-        "/accounts/{ACCOUNT_ID}/port_requests/canceled": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/completed": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
         "/accounts/{ACCOUNT_ID}/port_requests/last_submitted": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/pending": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/rejected": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/scheduled": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/submitted": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/accounts/{ACCOUNT_ID}/port_requests/unconfirmed": {
             "get": {
                 "parameters": [
                     {
