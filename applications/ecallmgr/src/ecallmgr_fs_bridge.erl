@@ -34,7 +34,7 @@ call_command(Node, UUID, JObj) ->
 
             {'ok', Channel} = ecallmgr_fs_channel:fetch(UUID, 'record'),
 
-            _ = handle_ringback(Node, UUID, JObj),
+            ecallmgr_call_command:set_ringback(Node, UUID, JObj),
             _ = maybe_early_media(Node, UUID, JObj, Endpoints),
             _ = maybe_b_leg_events(Node, UUID, JObj),
             BridgeJObj = add_endpoints_channel_actions(Node, UUID, JObj),
@@ -79,42 +79,6 @@ unbridge(UUID, JObj) ->
 %% @doc Bridge command helpers
 %% @end
 %%------------------------------------------------------------------------------
--spec handle_ringback(atom(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
-handle_ringback(Node, UUID, JObj) ->
-    case kz_json:get_first_defined([<<"Ringback">>
-                                   ,[<<"Custom-Channel-Vars">>, <<"Ringback">>]
-                                   ]
-                                  ,JObj
-                                  )
-    of
-        'undefined' -> maybe_ringback_from_language(Node, UUID, JObj);
-        Media ->
-            Stream = ecallmgr_util:media_path(Media, 'extant', UUID, JObj),
-            lager:debug("bridge has custom ringback: ~s", [Stream]),
-            ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Stream}])
-    end.
-
--spec maybe_ringback_from_language(atom(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
-maybe_ringback_from_language(Node, UUID, JObj) ->
-    case kz_json:get_ne_binary_value(<<"Language">>, JObj) of
-        'undefined' ->
-            {'ok', Default} = ecallmgr_util:get_setting(<<"default_ringback">>),
-            ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, kz_term:to_binary(Default)}]);
-        <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
-        <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
-        <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);
-        <<"fr-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
-        <<Lang:2/binary, _/binary>> ->
-            ringback_from_language(Node, UUID, <<"${", Lang/binary, "-ring}">>);
-        Lang ->
-            lager:error("invalid language ~s for ringback", [Lang]),
-            'ok'
-    end.
-
--spec ringback_from_language(atom(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
-ringback_from_language(Node, UUID, Ringback) ->
-    ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Ringback}]).
-
 -spec maybe_early_media(atom(), kz_term:ne_binary(), kz_json:object(), kz_json:objects()) -> ecallmgr_util:send_cmd_ret().
 maybe_early_media(Node, UUID, JObj, Endpoints) ->
     Separator = ecallmgr_util:get_dial_separator(JObj, Endpoints),

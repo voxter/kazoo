@@ -9,6 +9,7 @@
 
 -export([exec_cmd/4]).
 -export([fetch_dialplan/4]).
+-export([set_ringback/3]).
 
 -ifdef(TEST).
 -export([get_conference_flags/1
@@ -1781,3 +1782,39 @@ add_page_conference_app(Dialplan, ConferenceName) ->
     [{"application", <<"conference ", ConferenceName/binary>>}
      | Dialplan
     ].
+
+-spec set_ringback(atom(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+set_ringback(Node, UUID, JObj) ->
+    case kz_json:get_first_defined([<<"Ringback">>
+                                   ,[<<"Custom-Channel-Vars">>, <<"Ringback">>]
+                                   ]
+                                  ,JObj
+                                  )
+    of
+        'undefined' -> maybe_ringback_from_language(Node, UUID, JObj);
+        Media ->
+            Stream = ecallmgr_util:media_path(Media, 'extant', UUID, JObj),
+            lager:debug("bridge has custom ringback: ~s", [Stream]),
+            ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Stream}])
+    end.
+
+-spec maybe_ringback_from_language(atom(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+maybe_ringback_from_language(Node, UUID, JObj) ->
+    case kz_json:get_ne_binary_value(<<"Language">>, JObj) of
+        'undefined' ->
+            {'ok', Default} = ecallmgr_util:get_setting(<<"default_ringback">>),
+            ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, kz_term:to_binary(Default)}]);
+        <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
+        <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
+        <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);
+        <<"fr-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
+        <<Lang:2/binary, _/binary>> ->
+            ringback_from_language(Node, UUID, <<"${", Lang/binary, "-ring}">>);
+        Lang ->
+            lager:error("invalid language ~s for ringback", [Lang]),
+            'ok'
+    end.
+
+-spec ringback_from_language(atom(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+ringback_from_language(Node, UUID, Ringback) ->
+    ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Ringback}]).

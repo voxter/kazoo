@@ -23,6 +23,8 @@ attended(Node, UUID, JObj) ->
 
     ReqURI = <<TransferTo/binary, "@", Realm/binary>>,
 
+    ecallmgr_call_command:set_ringback(Node, UUID, JObj),
+
     Vars = [{<<"Force-Transfer-Dialplan">>, kz_json:get_ne_binary_value(<<"Force-Transfer-Dialplan">>, JObj)}
            ,{<<"Ignore-Early-Media">>, <<"ring_ready">>}
            ,{<<"Simplify-Loopback">>, <<"false">>}

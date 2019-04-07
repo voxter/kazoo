@@ -868,6 +868,7 @@
                           ]).
 -define(OPTIONAL_TRANSFER_HEADERS, [<<"Force-Transfer-Dialplan">>
                                    ,<<"Insert-At">>
+                                   ,<<"Language">>
                                    ,<<"Transfer-Leg">>
                                    ,<<"Transfer-Context">>
                                    ,<<"Caller-ID-Name">>
