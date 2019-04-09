@@ -87,6 +87,7 @@
         ,{<<"media_server">>, fun col_media_server/3}
         ,{<<"call_priority">>, fun col_call_priority/3}
         ,{<<"interaction_id">>, fun col_interaction_id/3}
+        ,{<<"to_uri">>, fun col_to_uri/3}
         ]).
 
 -define(COLUMNS_RESELLER
@@ -524,6 +525,7 @@ col_reseller_cost(JObj, _Timestamp, _Context) -> kz_term:to_binary(reseller_cost
 col_reseller_call_type(JObj, _Timestamp, _Context) -> kz_json:get_value([?KEY_CCV, <<"reseller_billing">>], JObj, <<>>).
 
 col_interaction_id(JObj, _Timestamp, _Context) -> kzd_cdrs:interaction_id(JObj, <<>>).
+col_to_uri(JObj, _Timestamp, _Context) -> kzd_cdrs:to_uri(JObj, <<>>).
 
 -spec pretty_print_datetime(kz_time:datetime() | kz_time:gregorian_second()) -> kz_term:ne_binary().
 pretty_print_datetime(Timestamp) when is_integer(Timestamp) ->
