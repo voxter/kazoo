@@ -512,11 +512,11 @@ merge_call_restrictions([Classifier|Classifiers], Account, Endpoint, Owner) ->
 -spec merge_parent_call_restrictions(kz_json:object()) -> kz_json:object().
 merge_parent_call_restrictions(Account) ->
     Fun = fun(Parent, Acc) ->
-        case kzd_accounts:fetch(Parent) of
-            {'ok', ParentAccount} -> merge_attributes([<<"call_restriction">>], ParentAccount, Acc, kz_json:new());
-            {'error', _} -> Acc
-        end
-    end,
+                  case kzd_accounts:fetch(Parent) of
+                      {'ok', ParentAccount} -> merge_attributes([<<"call_restriction">>], ParentAccount, Acc, kz_json:new());
+                      {'error', _} -> Acc
+                  end
+          end,
     lists:foldl(Fun, kz_json:new(), [kzd_accounts:id(Account) | kzd_accounts:tree(Account)]).
 
 -spec get_user(kz_term:ne_binary(), kz_term:api_binary() | kz_json:object()) -> kz_json:object().
