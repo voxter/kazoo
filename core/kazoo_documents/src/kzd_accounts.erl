@@ -114,7 +114,6 @@
 -export_type([doc/0]).
 
 -define(SCHEMA, <<"accounts">>).
--define(KEY_ID, <<"_id">>).
 
 -spec new() -> doc().
 new() ->
