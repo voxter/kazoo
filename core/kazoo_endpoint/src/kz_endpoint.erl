@@ -513,7 +513,8 @@ merge_call_restrictions([Classifier|Classifiers], Account, Endpoint, Owner) ->
 merge_parent_call_restrictions(Account) ->
     Fun = fun(Parent, Acc) ->
                   case kzd_accounts:fetch(Parent) of
-                      {'ok', ParentAccount} -> merge_attributes([<<"call_restriction">>], ParentAccount, Acc, kz_json:new());
+                      {'ok', ParentAccount} ->
+                          merge_attributes([<<"call_restriction">>], ParentAccount, Acc, kz_json:new());
                       {'error', _} -> Acc
                   end
           end,

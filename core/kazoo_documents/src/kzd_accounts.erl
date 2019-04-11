@@ -114,6 +114,7 @@
 -export_type([doc/0]).
 
 -define(SCHEMA, <<"accounts">>).
+-define(KEY_ID, <<"_id">>).
 
 -spec new() -> doc().
 new() ->
@@ -335,9 +336,25 @@ music_on_hold_media_id(Doc, Default) ->
 set_music_on_hold_media_id(Doc, MusicOnHoldMediaId) ->
     kz_json:set_value([<<"music_on_hold">>, <<"media_id">>], MusicOnHoldMediaId, Doc).
 
--spec id(doc()) -> kz_term:api_ne_binary().
+-spec id(doc()) -> kz_term:api_binary().
 id(Doc) ->
-    kz_json:get_value([<<"_id">>], Doc).
+    id(Doc, 'undefined').
+
+-spec id(doc(), Default) -> kz_term:ne_binary() | Default.
+id(Doc, Default) ->
+    Id = kz_json:get_first_defined([?KEY_ID
+                                   ,<<"id">>
+                                   ,<<"ID">>
+                                   ,[<<"value">>, <<"id">>]
+                                   ,[<<"doc">>, <<"_id">>]
+                                   ]
+                                  ,Doc
+                                  ,Default
+                                  ),
+    case kz_term:is_empty(Id) of
+        'true' -> Default;
+        'false' -> Id
+    end.
 
 -spec name(doc()) -> kz_term:api_ne_binary().
 name(Doc) ->
