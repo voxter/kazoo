@@ -338,23 +338,7 @@ set_music_on_hold_media_id(Doc, MusicOnHoldMediaId) ->
 
 -spec id(doc()) -> kz_term:api_binary().
 id(Doc) ->
-    id(Doc, 'undefined').
-
--spec id(doc(), Default) -> kz_term:ne_binary() | Default.
-id(Doc, Default) ->
-    Id = kz_json:get_first_defined([?KEY_ID
-                                   ,<<"id">>
-                                   ,<<"ID">>
-                                   ,[<<"value">>, <<"id">>]
-                                   ,[<<"doc">>, <<"_id">>]
-                                   ]
-                                  ,Doc
-                                  ,Default
-                                  ),
-    case kz_term:is_empty(Id) of
-        'true' -> Default;
-        'false' -> Id
-    end.
+    kz_doc:id(Doc).
 
 -spec name(doc()) -> kz_term:api_ne_binary().
 name(Doc) ->
