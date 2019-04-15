@@ -116,7 +116,7 @@
 
 -export([originate_resource_publish/1, originate_resource_publish/2]).
 
--export([offnet_resource_publish/1, offnet_resource_publish/2]).
+-export([offnet_resource_publish/1, offnet_resource_publish/2, offnet_resource_publish/3]).
 
 -export([configuration_exchange/0
         ,configuration_publish/2, configuration_publish/3, configuration_publish/4
@@ -391,7 +391,11 @@ offnet_resource_publish(Payload) ->
 
 -spec offnet_resource_publish(amqp_payload(), kz_term:ne_binary()) -> 'ok'.
 offnet_resource_publish(Payload, ContentType) ->
-    basic_publish(?EXCHANGE_RESOURCE, ?KEY_OFFNET_RESOURCE_REQ, Payload, ContentType).
+    offnet_resource_publish(Payload, ContentType, ?KEY_OFFNET_RESOURCE_REQ).
+
+-spec offnet_resource_publish(amqp_payload(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+offnet_resource_publish(Payload, ContentType, RoutingKey) ->
+    basic_publish(?EXCHANGE_RESOURCE, RoutingKey, Payload, ContentType).
 
 %% monitor
 -spec monitor_publish(amqp_payload(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
@@ -1337,11 +1341,19 @@ is_host_available() -> kz_amqp_connections:is_available().
 
 %%------------------------------------------------------------------------------
 %% @doc Specify quality of service.
+%%
+%%
+%% global: https://www.rabbitmq.com/amqp-0-9-1-reference.html#basic.qos.global
+%% global=false applies QoS settings to new consumers on the channel (existing are unaffected).
+%% global=true applies per-channel
 %% @end
 %%------------------------------------------------------------------------------
 -spec basic_qos(non_neg_integer()) -> 'ok'.
 basic_qos(PreFetch) when is_integer(PreFetch) ->
-    kz_amqp_channel:command(#'basic.qos'{prefetch_count = PreFetch}).
+    kz_amqp_channel:command(#'basic.qos'{prefetch_count = PreFetch
+                                        ,prefetch_size = 0
+                                        ,global = 'false'
+                                        }).
 
 %%------------------------------------------------------------------------------
 %% @doc Encode a key so characters like dot won't interfere with routing separator.
