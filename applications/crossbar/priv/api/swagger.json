@@ -2496,6 +2496,29 @@
             },
             "type": "object"
         },
+        "callflows.follow_me": {
+            "description": "Validator for the follow_me callflow data object",
+            "properties": {
+                "action": {
+                    "description": "What action to perform",
+                    "enum": [
+                        "activate",
+                        "deactivate",
+                        "toggle"
+                    ],
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Document ID on which to update Follow-Me settings",
+                    "type": "string"
+                },
+                "skip_module": {
+                    "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "callflows.group": {
             "description": "Validator for the group callflow data object",
             "properties": {
