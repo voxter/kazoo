@@ -26,12 +26,16 @@
             "description": "Number to call back",
             "type": "string"
         },
-        "cid_name": {
+        "callee_id_name": {
             "description": "Caller ID name that the user should see when they receive the callback",
             "type": "string"
         },
-        "cid_number": {
+        "callee_id_number": {
             "description": "Caller ID number that the user should see when they receive the callback",
+            "type": "string"
+        },
+        "caller_id_name": {
+            "description": "Caller ID name that the agent should see when they receive the callback",
             "type": "string"
         },
         "priority": {

@@ -897,14 +897,15 @@ register_callback(Context, QueueId) ->
 -spec kapps_call_from_register_callback_req(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
                                                    kapps_call:call().
 kapps_call_from_register_callback_req(Context, QueueId, CallId, CallbackNumber) ->
-    CallerIdNumber = cb_context:req_value(Context, <<"cid_number">>),
-    CallerIdName = cb_context:req_value(Context, <<"cid_name">>, CallerIdNumber),
+    CalleeIdNumber = cb_context:req_value(Context, <<"callee_id_number">>),
+    CalleeIdName = cb_context:req_value(Context, <<"callee_id_name">>, CalleeIdNumber),
+    CallerIdName = cb_context:req_value(Context, <<"caller_id_name">>, CallbackNumber),
     JObj = kz_json:from_list([{<<"Account-DB">>, cb_context:account_db(Context)}
                              ,{<<"Account-ID">>, cb_context:account_id(Context)}
                              ,{<<"Call-ID">>, CallId}
-                             ,{<<"Callee-ID-Name">>, CallerIdName}
-                             ,{<<"Callee-ID-Number">>, CallerIdNumber}
-                             ,{<<"Caller-ID-Name">>, CallbackNumber}
+                             ,{<<"Callee-ID-Name">>, CalleeIdName}
+                             ,{<<"Callee-ID-Number">>, CalleeIdNumber}
+                             ,{<<"Caller-ID-Name">>, CallerIdName}
                              ,{<<"Caller-ID-Number">>, CallbackNumber}
                              ,{<<"Inception">>, <<"offnet">>}
                              ,{<<"Resource-Type">>, <<"audio">>}

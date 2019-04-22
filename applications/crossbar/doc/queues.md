@@ -347,8 +347,9 @@ Key | Description | Type | Default | Required
 `average_wait_time_estimation.window` | Window over which average wait time is calculated (in seconds) | `integer()` |   | `false`
 `average_wait_time_estimation` | Options for the average_wait_time_estimation for a callback registered via API | `object()` |   | `false`
 `callback_number` | Number to call back | `string()` |   | `true`
-`cid_name` | Caller ID name that the user should see when they receive the callback | `string()` |   | `false`
-`cid_number` | Caller ID number that the user should see when they receive the callback | `string()` |   | `false`
+`callee_id_name` | Caller ID name that the user should see when they receive the callback | `string()` |   | `false`
+`callee_id_number` | Caller ID number that the user should see when they receive the callback | `string()` |   | `false`
+`caller_id_name` | Caller ID name that the agent should see when they receive the callback | `string()` |   | `false`
 `priority` | assign a priority to the caller | `integer()` |   | `false`
 `required_skills` | Array of skills required for an agent to be able to ring for the call | `array(string())` |   | `false`
 
