@@ -11,5 +11,7 @@ chmod +x /usr/bin/sup
 
 # Systemd and launch
 ln -s $CONFIG_ROOT/system/sbin/kazoo-applications /usr/sbin/kazoo-applications
+ln -s $CONFIG_ROOT/system/sbin/kazoo-ecallmgr /usr/sbin/kazoo-ecallmgr
 cp $CONFIG_ROOT/system/systemd/kazoo-applications.service /etc/systemd/system/
+cp $CONFIG_ROOT/system/systemd/kazoo-ecallmgr.service /etc/systemd/system/
 systemctl daemon-reload
