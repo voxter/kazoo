@@ -70,10 +70,14 @@ init([]) ->
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call({'auth', Context}, _From, State) ->
+    put_callid(Context),
     NewContext = ensure_team_exists(Context, fun(C) -> auth(C) end),
+    reset_callid(),
     {'reply', NewContext, State};
 handle_call({'users_summary', Context}, _From, State) ->
+    put_callid(Context),
     NewContext = ensure_team_exists(Context, fun(C) -> users_summary(C) end),
+    reset_callid(),
     {'reply', NewContext, State};
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
@@ -352,3 +356,11 @@ mattermost_api_req(Method, Path, Data, AdditionalHeaders) ->
     lager:debug("sending request to ~p with data ~p", [Url, EncodedData]),
     lager:debug("headers ~p", [Headers]),
     kz_http:req(Method, Url, Headers, EncodedData, []).
+
+-spec put_callid(cb_context:context()) -> 'ok'.
+put_callid(Context) ->
+    kz_util:put_callid(cb_context:req_id(Context)).
+
+-spec reset_callid() -> 'ok'.
+reset_callid() ->
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID).

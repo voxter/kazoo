@@ -80,17 +80,20 @@ init([]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
-handle_call({'get_account_server', AccountId}, _From, State) ->
-    case ets:lookup(?PROC_TABLE, AccountId) of
-        [{AccountId, Pid}] ->
-            lager:debug("found ~p for account ~s", [Pid, AccountId]),
-            {'reply', Pid, State};
-        [] ->
-            {'ok', Pid} = crossbar_mattermost_account:start_link(AccountId),
-            lager:debug("started ~p for account ~s", [Pid, AccountId]),
-            ets:insert(?PROC_TABLE, {AccountId, Pid}),
-            {'reply', Pid, State}
-    end;
+handle_call({'get_account_server', AccountId, ReqId}, _From, State) ->
+    kz_util:put_callid(ReqId),
+    Result = case ets:lookup(?PROC_TABLE, AccountId) of
+                 [{AccountId, Pid}] ->
+                     lager:debug("found ~p for account ~s", [Pid, AccountId]),
+                     {'reply', Pid, State};
+                 [] ->
+                     {'ok', Pid} = crossbar_mattermost_account:start_link(AccountId),
+                     lager:debug("started ~p for account ~s", [Pid, AccountId]),
+                     ets:insert(?PROC_TABLE, {AccountId, Pid}),
+                     {'reply', Pid, State}
+             end,
+    kz_util:put_callid(?DEFAULT_LOG_SYSTEM_ID),
+    Result;
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -153,7 +156,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec call(atom(), cb_context:context()) -> cb_context:context().
 call(Method, Context) ->
     AccountId = cb_context:account_id(Context),
-    AccountServer = gen_server:call(?SERVER, {'get_account_server', AccountId}),
+    AccountServer = gen_server:call(?SERVER, {'get_account_server', AccountId, cb_context:req_id(Context)}),
     try gen_server:call(AccountServer, {Method, Context}, ?ACCOUNT_TIMEOUT) of
         NewContext -> NewContext
     catch
