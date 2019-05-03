@@ -185,7 +185,7 @@ users_summary(Context) ->
     Created = plists:map(fun(U) -> user_summary(Context, U) end, UsersNotExist),
     %% Combine those which already existed with newly created
     Resp = [user_summary(Context, U) || U <- UsersExist] ++ Created,
-    crossbar_util:response(Resp, Context).
+    crossbar_util:response(Resp, ViewContext).
 
 -spec user_summary(cb_context:context(), kzd_user:doc()) -> kz_json:object().
 user_summary(Context, PartialUserDoc) ->
