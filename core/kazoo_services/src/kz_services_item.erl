@@ -33,6 +33,7 @@
         ,set_cumulative_discount_rate/2
         ]).
 -export([changes/1
+        ,changes/2
         ,set_changes/2
         ]).
 -export([taxes/1
@@ -40,6 +41,9 @@
         ]).
 -export([display_name/1]).
 -export([rate/1]).
+-export([activation_charge/1
+        ,activation_charge/2
+        ]).
 -export([minimum/1
         ,maximum/1
         ]).
@@ -243,7 +247,15 @@ set_cumulative_discount_rate(#kz_service_item{}=Item, Rate) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec changes(item()) -> kz_term:api_ne_binaries().
-changes(#kz_service_item{changes=Changes}) -> Changes.
+changes(Item) -> changes(Item, 'undefined').
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec changes(item(), Default) -> kz_term:ne_binaries() | Default.
+changes(#kz_service_item{changes='undefined'}, Default) -> Default;
+changes(#kz_service_item{changes=Changes}, _Default) -> Changes.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -298,6 +310,18 @@ default_display_name(Item) ->
 -spec rate(item()) -> float().
 rate(Item) ->
     kzd_item_plan:rate(item_plan(Item)).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+-spec activation_charge(item()) -> float().
+activation_charge(Item) ->
+    activation_charge(Item, 0.0).
+
+-spec activation_charge(item(), float() | Default) -> float() | Default.
+activation_charge(Item, Default) ->
+    kzd_item_plan:activation_charge(item_plan(Item), Default).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -593,24 +617,13 @@ calculate_quantity_rate(_Services, Item) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec calculate_discounts(kz_services:services(), item()) -> item().
-calculate_discounts(Services, Item) ->
-    calculate_single_discount(Services, Item).
-
--spec calculate_single_discount(kz_services:services(), item()) -> item().
-calculate_single_discount(_Services, Item) ->
-    DiscountPlan = kzd_item_plan:single_discount(item_plan(Item)),
-    case should_set_discount(Item, DiscountPlan) of
-        'false' -> Item;
-        'true' ->
-            Rate = kz_json:get_float_value(<<"rate">>, DiscountPlan, rate(Item)),
-            set_single_discount_rate(Item, Rate)
-    end.
+calculate_discounts(_Services, Item) ->
+    maybe_set_discounts(Item, item_plan(Item)).
 
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
-
 -type discount_routine() :: fun((kzd_item_plan:doc(), item()) ->
                                        item()).
 
@@ -666,7 +679,8 @@ set_cumulative_discount(Item, DiscountPlan) ->
 cumulative_rate(Item, DiscountPlan, BillableQuantity) ->
     Rates = kz_json:get_value(<<"rates">>, DiscountPlan, []),
     case find_tiered_rate(Rates, BillableQuantity) of
-        'undefined' -> rate(Item);
+        'undefined' ->
+            kz_json:get_float_value(<<"rate">>, DiscountPlan, rate(Item));
         Rate -> Rate
     end.
 
