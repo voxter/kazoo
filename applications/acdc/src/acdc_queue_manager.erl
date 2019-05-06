@@ -623,7 +623,9 @@ handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
 
 handle_cast({'sync_with_agent', A}, #state{account_id=AccountId}=State) ->
     case acdc_agent_util:most_recent_status(AccountId, A) of
-        {'ok', <<"logged_out">>} -> gen_listener:cast(self(), {'agent_unavailable', A, 0});
+        {'ok', Status} ->
+            not acdc_agent_util:status_should_auto_start(Status)
+                andalso gen_listener:cast(self(), {'agent_unavailable', A, 0});
         _ -> 'ok'
     end,
     {'noreply', State};
@@ -952,11 +954,11 @@ publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason) ->
 start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
     acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId),
     AgentId = kz_doc:id(AgentJObj),
-    case acdc_agent_util:most_recent_status(AccountId, AgentId) of
-        {'ok', <<"logout">>} -> 'ok';
-        {'ok', <<"logged_out">>} -> 'ok';
-        {'ok', _Status} ->
-            lager:debug("maybe starting agent ~s(~s) for queue ~s", [AgentId, _Status, QueueId]),
+    {'ok', Status} = acdc_agent_util:most_recent_status(AccountId, AgentId),
+    case acdc_agent_util:status_should_auto_start(Status) of
+        'false' -> 'ok';
+        'true' ->
+            lager:debug("maybe starting agent ~s(~s) for queue ~s", [AgentId, Status, QueueId]),
 
             case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
                 'undefined' -> acdc_agents_sup:new(AgentJObj);
