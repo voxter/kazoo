@@ -2355,6 +2355,11 @@
                     "description": "Minimum number of digits that must match the regex to collected DTMF",
                     "type": "integer"
                 },
+                "permit_custom_callflow": {
+                    "default": false,
+                    "description": "Permit a custom callflow to be accepted instead of restricting to no_match only when looking up callflows",
+                    "type": "boolean"
+                },
                 "skip_module": {
                     "description": "When set to true this callflow action is skipped, advancing to the wildcard branch (if any)",
                     "type": "boolean"
@@ -10419,7 +10424,7 @@
                     ],
                     "type": "string"
                 },
-                "Items": {
+                "Invoice": {
                     "type": "string"
                 },
                 "Vendor-ID": {
@@ -10430,7 +10435,7 @@
                 "Account-ID",
                 "Bookkeeper-ID",
                 "Bookkeeper-Type",
-                "Items",
+                "Invoice",
                 "Vendor-ID"
             ],
             "type": "object"
@@ -27341,30 +27346,10 @@
                         },
                         "street_post_dir": {
                             "description": "Street Post-Direction",
-                            "enum": [
-                                "E",
-                                "N",
-                                "NE",
-                                "NW",
-                                "S",
-                                "SE",
-                                "SW",
-                                "W"
-                            ],
                             "type": "string"
                         },
                         "street_pre_dir": {
                             "description": "Street Pre-Direction",
-                            "enum": [
-                                "E",
-                                "N",
-                                "NE",
-                                "NW",
-                                "S",
-                                "SE",
-                                "SW",
-                                "W"
-                            ],
                             "type": "string"
                         },
                         "street_type": {
@@ -29107,9 +29092,20 @@
                     "type": "string"
                 },
                 "prorate": {
-                    "default": false,
                     "description": "Should this item be prorated",
-                    "type": "boolean"
+                    "properties": {
+                        "additions": {
+                            "default": true,
+                            "description": "Should this item be prorated during additions",
+                            "type": "boolean"
+                        },
+                        "removals": {
+                            "default": false,
+                            "description": "Should this item be prorated during removals",
+                            "type": "boolean"
+                        }
+                    },
+                    "type": "object"
                 },
                 "rate": {
                     "default": 0.0,
@@ -31742,6 +31738,21 @@
                     "description": "datamgr cache policy",
                     "type": "object"
                 },
+                "change_notice_exclude_types": {
+                    "default": [
+                        "cdr",
+                        "ledger",
+                        "audit_log",
+                        "login_attempt",
+                        "pivot_debug",
+                        "notify_smtp_log"
+                    ],
+                    "description": "datamgr change_notice_exclude_types",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
                 "default_archive_folder": {
                     "default": "/tmp",
                     "description": "datamgr default archive folder",
@@ -32467,6 +32478,17 @@
                         "type": "object"
                     },
                     "type": "array"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.epmd": {
+            "description": "Schema for epmd system_config",
+            "properties": {
+                "check_every_s": {
+                    "default": 60,
+                    "description": "epmd check_every_s",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -36066,6 +36088,32 @@
                     "default": false,
                     "description": "Controls whether we should send bill reminder for the accounts a few days before due date",
                     "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.tasks.fax_cleanup": {
+            "description": "Schema for tasks.fax_cleanup system_config",
+            "properties": {
+                "enabled": {
+                    "default": true,
+                    "description": "Enables the cluster to run the fax cleanup task",
+                    "type": "boolean"
+                },
+                "page_size": {
+                    "default": 32,
+                    "description": "The number of documents to process in one fetch operation",
+                    "type": "integer"
+                },
+                "per_page_pause_ms": {
+                    "default": 1000,
+                    "description": "How many milliseconds to pause between chunk fetches",
+                    "type": "integer"
+                },
+                "stale_after_s": {
+                    "default": 604800,
+                    "description": "The number of seconds old a document is before it is considered to be stale",
+                    "type": "integer"
                 }
             },
             "type": "object"
