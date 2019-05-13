@@ -38098,6 +38098,15 @@
             "required": true,
             "type": "string"
         },
+        "MODB_SUFFIX": {
+            "in": "path",
+            "maxLength": 6,
+            "minLength": 6,
+            "name": "MODB_SUFFIX",
+            "pattern": "^[0-9]{6}",
+            "required": true,
+            "type": "string"
+        },
         "MODULE": {
             "in": "path",
             "name": "MODULE",
@@ -38375,6 +38384,15 @@
             "maxLength": 32,
             "minLength": 32,
             "name": "WEBHOOK_ID",
+            "pattern": "^[0-9a-f]+$",
+            "required": true,
+            "type": "string"
+        },
+        "WEBHOOK_NAME": {
+            "in": "path",
+            "maxLength": 32,
+            "minLength": 32,
+            "name": "WEBHOOK_NAME",
             "pattern": "^[0-9a-f]+$",
             "required": true,
             "type": "string"
@@ -42173,6 +42191,26 @@
                     },
                     {
                         "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/ledgers/summary/{MODB_SUFFIX}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/MODB_SUFFIX"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
@@ -48084,6 +48122,26 @@
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/webhooks/samples/{WEBHOOK_NAME}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/WEBHOOK_NAME"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
