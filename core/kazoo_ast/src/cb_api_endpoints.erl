@@ -902,6 +902,7 @@ def_path_param(<<"{TEMPORAL_RULE_SET}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{USER_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{VM_BOX_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{WEBHOOK_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{WEBHOOK_NAME}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MIGRATION_ID}">>=P) -> generic_id_path_param(P);
 
 %% When param represents an MoDB id (i.e. 32+4+2 bytes of hexa & 1 dash):
@@ -939,6 +940,12 @@ def_path_param(<<"{ERROR_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{HANDLER_ID}">>=P) -> base_path_param(P);
 
 %% For all the edge cases out there:
+def_path_param(<<"{MODB_SUFFIX}">>=P) ->
+    [{<<"minLength">>, 6}
+    ,{<<"maxLength">>, 6}
+    ,{<<"pattern">>, <<"^[0-9]{6}">>}
+     | base_path_param(P)
+    ];
 def_path_param(<<"report-{REPORT_ID}">>) ->
     Prefix = <<"report-">>,
     PrefixSize = byte_size(Prefix),

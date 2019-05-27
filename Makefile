@@ -7,7 +7,7 @@ ERLANG_MK_COMMIT = d30dda39b08e6ed9e12b44533889eaf90aba86de
 
 BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
-CHANGED := $(shell git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- applications core scripts)
+CHANGED ?= $(shell git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- applications core scripts)
 CHANGED_SWAGGER := $(shell git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- applications/crossbar/priv/api/swagger.json)
 
 # You can override this when calling make, e.g. make JOBS=1
@@ -178,7 +178,7 @@ dialyze-core: dialyze-it
 dialyze:       TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin)
 dialyze: dialyze-it
 
-dialyze-changed: TO_DIALYZE = $(CHANGED)
+dialyze-changed: TO_DIALYZE = $(strip $(filter %.beam %.erl %/ebin,$(CHANGED)))
 dialyze-changed: dialyze-it-changed
 
 dialyze-hard: TO_DIALYZE = $(CHANGED)
@@ -191,11 +191,15 @@ dialyze-it-hard: $(PLT)
 	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --hard $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
 
 dialyze-it-changed: $(PLT)
-ifeq ($(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))),)
-	@echo "no erlang changes to dialyze"
-else
-	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --bulk $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))
-endif
+	@if [ -n "$(TO_DIALYZE)" ]; then \
+		echo "dialyzing changes against $(BASE_BRANCH) ..." ; \
+		echo; \
+		echo "$(TO_DIALYZE)" ;\
+		echo; \
+		ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --bulk $(TO_DIALYZE) && echo "dialyzer is happy!"; \
+	else \
+		echo "no erlang changes to dialyze"; \
+	fi
 
 xref: TO_XREF ?= $(shell find $(ROOT)/applications $(ROOT)/core $(ROOT)/deps -name ebin)
 xref:
@@ -245,6 +249,7 @@ app_applications:
 	ERL_LIBS=deps:core:applications $(ROOT)/scripts/apps_of_app.escript -a $(shell find applications -name *.app.src)
 
 code_checks:
+	@if [ -n "$(CHANGED)" ]; then $(ROOT)/scripts/code_checks.bash $(CHANGED) ; else echo "no code changes for code checking" ; fi
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/no_raw_json.escript
 	@$(ROOT)/scripts/check-spelling.bash
 	@$(ROOT)/scripts/kz_diaspora.bash
