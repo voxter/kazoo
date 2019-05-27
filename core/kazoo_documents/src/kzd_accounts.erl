@@ -63,7 +63,7 @@
         ,path_enabled/0
         ,is_expired/1
 
-        ,tree/1, tree/2, set_tree/2
+        ,tree/1, tree/2, set_tree/2, path_tree/0
         ,default_timezone/0
         ,notification_preference/1, set_notification_preference/2, path_notification_preference/0
         ,allow_number_additions/1, set_allow_number_additions/2, path_allow_number_additions/0
@@ -788,6 +788,10 @@ tree(JObj) ->
 tree(JObj, Default) ->
     kz_json:get_list_value([<<"pvt_tree">>], JObj, Default).
 
+-spec path_tree() -> kz_json:path().
+path_tree() ->
+    [<<"pvt_tree">>].
+
 -spec set_tree(doc(), kz_term:ne_binaries()) -> doc().
 set_tree(JObj, Tree) ->
     kz_json:set_value([<<"pvt_tree">>], Tree, JObj).
@@ -1213,14 +1217,12 @@ save_accounts_doc(AccountDoc) ->
             lager:info("failed to save account doc to accounts: ~p", [_R]),
             E;
         {'ok', AccountsDoc} ->
-            Update = [{kz_doc:path_revision(), kz_doc:revision(AccountsDoc)}
-                      | kz_json:to_proplist(AccountDoc)
-                     ],
-            UpdateOptions = [{'update', Update}
-                            ,{'ensure_saved', 'true'}
-                            ],
+            NewAccountDoc = kz_json:set_value(kz_doc:path_revision()
+                                             ,kz_doc:revision(AccountsDoc)
+                                             ,AccountDoc
+                                             ),
             handle_saved_accounts_doc(AccountDoc
-                                     ,kz_datamgr:update_doc(?KZ_ACCOUNTS_DB, kz_doc:id(AccountDoc), UpdateOptions)
+                                     ,kz_datamgr:save_doc(?KZ_ACCOUNTS_DB, NewAccountDoc)
                                      )
     end.
 
