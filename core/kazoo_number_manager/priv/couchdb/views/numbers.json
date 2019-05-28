@@ -12,6 +12,14 @@
         "assigned_to": {
             "map": "function(doc) { if (!doc.pvt_assigned_to) return; emit([doc.pvt_assigned_to, doc._id], null); }"
         },
+        "list_assigned_and_app": {
+            "map": [
+                "function(doc) {",
+                "  if (doc.pvt_type != 'number' || !doc.pvt_assigned_to || doc.pvt_deleted) return;",
+                "  emit([doc.pvt_assigned_to, doc.pvt_used_by], null);",
+                "}"
+            ]
+        },
         "listing_undefined_module": {
             "map": "function(doc) { if (doc.pvt_module_name != 'undefined' ) return; emit([doc._id], [doc.pvt_module_name]); }"
         },
