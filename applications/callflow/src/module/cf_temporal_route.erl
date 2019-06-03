@@ -230,10 +230,11 @@ occurrence_rate(#rule{cycle = <<"monthly">>
     (Stop - Start) * 12 / I0 * length(Days);
 occurrence_rate(#rule{cycle = <<"yearly">>
                      ,wdays=Weekdays
+                     ,days=Days
                      ,wtime_start=Start
                      ,wtime_stop=Stop
-                     }) when length(Weekdays) > 0 ->
-    (Stop - Start);
+                     }) when length(Weekdays) > 0, length(Days) =:= 0 ->
+    (Stop - Start) * length(Weekdays);
 occurrence_rate(#rule{cycle = <<"yearly">>
                      ,days=Days
                      ,wtime_start=Start
