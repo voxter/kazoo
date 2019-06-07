@@ -25760,9 +25760,9 @@
                     "type": "object"
                 },
                 "amount": {
-                    "description": "Ledger amount",
+                    "description": "Ledger amount, in currency amount",
                     "minimum": 1,
-                    "type": "integer"
+                    "type": "number"
                 },
                 "description": {
                     "description": "Useful description for ledger",
@@ -31284,7 +31284,8 @@
                 },
                 "maximum_range": {
                     "default": 2682000,
-                    "description": "crossbar.cdrs maximum range",
+                    "description": "maximum range (in seconds) prior to the current date allowed for CDR requests",
+                    "minimum": 1,
                     "type": "integer"
                 }
             },
@@ -34587,6 +34588,12 @@
                     "minimum": 1,
                     "type": "integer"
                 },
+                "time_between_db_ms": {
+                    "default": 50,
+                    "description": "number_manager time_between_db_ms",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "time_between_numbers_ms": {
                     "default": 1000,
                     "description": "time to pause in between the processing of numbers in milliseconds",
@@ -37046,7 +37053,7 @@
                     "description": "The email of the user",
                     "format": "email",
                     "maxLength": 254,
-                    "minLength": 1,
+                    "minLength": 3,
                     "type": "string"
                 },
                 "enabled": {
