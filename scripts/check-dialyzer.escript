@@ -45,9 +45,11 @@ handle(KazooPLT, Options, Args) ->
 
     Env = string:tokens(os:getenv("TO_DIALYZE", ""), " "),
 
+    Files = lists:usort(Env ++ Args),
+
     handle_paths(KazooPLT
                 ,Options
-                ,filter_for_erlang_files(lists:usort(Env ++ Args))
+                ,filter_for_erlang_files(Files)
                 ).
 
 handle_paths(_KazooPLT, _Options, []) ->
@@ -222,12 +224,14 @@ scan_and_print(PLT, Bs) ->
                filter(W)
            ]).
 
-filter({'warn_contract_supertype', _, _}) -> 'false';
+filter({'warn_contract_supertype',  _, _}) -> 'false';
 filter({'warn_undefined_callbacks', _, _}) -> 'false';
-filter({'warn_contract_types', _, {'overlapping_contract',_}}) -> 'false';
-filter({'warn_umatched_return', _, {'unmatched_return', ["'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
-filter({'warn_unmatched_return', _, {'unmatched_return', ["'false' | 'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
-filter({'warn_umatched_return', _, {'unmatched_return',["'ok' | {'error','invalid_db_name'}"]}}) -> 'false';
+filter({'warn_contract_types',      _, {'overlapping_contract',_}}) -> 'false';
+filter({'warn_umatched_return',     _, {'unmatched_return', ["'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
+filter({'warn_unmatched_return',    _, {'unmatched_return', ["'false' | 'ok' | {'error','lager_not_running' | {'sink_not_configured','lager_event'}}"]}}) -> 'false';
+filter({'warn_umatched_return',     _, {'unmatched_return',["'ok' | {'error','invalid_db_name'}"]}}) -> 'false';
+filter({'warn_return_no_exit',      _, {'no_return',['only_normal','kz_log_md_clear',0]}}) -> 'false';
+filter({'warn_failing_call',        _, {'call',['lager','md',"([])" | _]}}) -> 'false';
 filter(_W) -> 'true'.
 
 print(Beams, {Tag, {"src/" ++ _=File, Line}, _W}=Warning) ->

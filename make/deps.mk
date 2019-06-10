@@ -54,7 +54,7 @@ ifeq ($(USER),travis)
 endif
 
 dep_amqp_client = hex 3.7.8
-dep_apns = git https://github.com/inaka/apns4erl.git 2.2.1
+dep_apns = git https://github.com/2600hz/erlang-apns4erl.git aba1fa96a4abbbb2c1628ad5d604f482aad4d12f # latest commit SHA to 2600hz branch
 dep_certifi = hex 0.3.0
 dep_chatterbox = hex 0.7.0
 dep_cowboy = git https://github.com/ninenines/cowboy 2.2.0
@@ -73,7 +73,7 @@ dep_erlcloud = git https://github.com/erlcloud/erlcloud 3.2.4
 
 dep_erlazure = git https://github.com/lazedo/erlazure.git add-start-link
 
-dep_couchbeam = git https://github.com/2600hz/couchbeam 2600hz
+dep_couchbeam = git https://github.com/2600hz/erlang-couchbeam 28fce6c340de83f4792d45224c29ec729b8e264d # latest commit SHA to 2600hz branch
 ###dep_couchbeam = git https://github.com/benoitc/couchbeam 1.4.1
 ### waiting for pull requests
 ### https://github.com/benoitc/couchbeam/pull/158

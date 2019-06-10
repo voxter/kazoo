@@ -88,6 +88,9 @@ core/kazoo_proper/priv/mp3.mp3
 *.md.bak
 *.md.new
 
+# asdf-vm "local" versions handler
+.tool-versions
+
 cscope.files
 cscope.out
 tags
