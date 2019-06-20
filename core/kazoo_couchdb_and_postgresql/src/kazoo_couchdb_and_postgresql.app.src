@@ -1,0 +1,14 @@
+{application, kazoo_couchdb_and_postgresql,
+ [
+  {description, "CouchDB and PostgreSQL - Interface to allow operations to both Couch and Postgresql"}
+ ,{vsn, "4.0.0"}
+ ,{modules, []}
+ ,{registered, []}
+ ,{applications, [ kernel
+                 , stdlib
+                 , lager
+                 , kazoo_couch
+                 , kazoo_postgresql
+                 ]}
+ ,{mod, {kazoo_couchdb_and_postgresql_app, []}}
+ ]}.

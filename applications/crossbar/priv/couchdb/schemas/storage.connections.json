@@ -7,6 +7,12 @@
             "oneOf": [
                 {
                     "$ref": "storage.connection.couchdb"
+                },
+                {
+                    "$ref": "storage.connection.postgresql"
+                },
+                {
+                    "$ref": "storage.connection.couchdb_and_postgresql"
                 }
             ]
         },

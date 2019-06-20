@@ -24,6 +24,9 @@
                 "call_recording": {
                     "$ref": "storage.plan.database.document"
                 },
+                "cdr": {
+                    "$ref": "storage.plan.database.document"
+                },
                 "fax": {
                     "$ref": "storage.plan.database.document"
                 },

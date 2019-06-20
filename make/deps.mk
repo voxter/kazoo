@@ -8,6 +8,7 @@ DEPS = amqp_client \
 	ecsv \
 	eflame \
 	eiconv \
+	epgsql \
 	erlang_localtime \
 	erlazure \
 	erlcloud \
@@ -31,6 +32,7 @@ DEPS = amqp_client \
 	lager_syslog \
 	meck \
 	nklib \
+	pgapp \
 	plists \
 	poolboy \
 	proper \
@@ -60,12 +62,14 @@ dep_chatterbox = hex 0.7.0
 dep_cowboy = git https://github.com/ninenines/cowboy 2.2.0
 dep_detergent = git https://github.com/pap/detergent e86dfeded3e4f9f3f9278c6a1aea802079d38b54
 dep_eflame = git https://github.com/slfritchie/eflame 7b0bb1a7e8c8482a59421a3a50ae69d49af59d52
+dep_epgsql = git https://github.com/epgsql/epgsql.git 4.2.1
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
 dep_exml = git https://github.com/paulgray/exml 2.2.1
 dep_jiffy = git https://github.com/lazedo/jiffy utf8  ## utf8 decode
 dep_meck = git https://github.com/eproxus/meck
 dep_nklib = git https://github.com/voxter/nklib v0.4.1-parse-uri-quoted-contact-params
+dep_pgapp = git https://github.com/epgsql/pgapp.git
 dep_plists = hex 1.0.0
 dep_pqueue = hex 1.7.2
 

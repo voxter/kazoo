@@ -7,7 +7,7 @@
 
 -include("kz_data.hrl").
 
--type connection() :: server() | any().
+-type connection() :: couchbeam:server() | kz_postgresql:connection_pool() | any().
 -type option() :: {atom(), term()}.
 -type options() :: [option()].
 -type document() :: kz_json:object().

@@ -1,0 +1,16 @@
+{application, kazoo_postgresql,
+ [
+  {description, "PostgreSQL - Simplified interface to Postgresql DB"}
+ ,{vsn, "4.0.0"}
+ ,{modules, []}
+ ,{registered, []}
+ ,{applications, [ kernel
+                 , stdlib
+                 , crypto
+                 , public_key
+                 , lager
+                 , epgsql
+                 , pgapp
+                 ]}
+ ,{mod, {kazoo_postgresql_app, []}}
+ ]}.

@@ -187,6 +187,36 @@ Key | Description | Type | Default | Required | Support Level
 `settings.port` |   | `integer()` |   | `true` |  
 `settings` |   | `object()` |   | `true` |  
 
+### storage.connection.couchdb_and_postgresql
+
+schema for couchdb and postgresql connection entry
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`driver` |   | `string('kazoo_couchdb_and_postgresql')` |   | `true` |  
+`name` |   | `string()` |   | `false` |  
+`settings` |   | `object()` |   | `true` |  
+
+### storage.connection.postgresql
+
+schema for postgresql connection entry
+
+
+Key | Description | Type | Default | Required | Support Level
+--- | ----------- | ---- | ------- | -------- | -------------
+`driver` |   | `string('kazoo_postgresql')` |   | `true` |  
+`name` |   | `string()` |   | `false` |  
+`settings.connect_timeout` |   | `integer()` |   | `false` |  
+`settings.connection_pool_max_overflow` |   | `integer()` |   | `false` |  
+`settings.connection_pool_size` |   | `integer()` |   | `false` |  
+`settings.credentials.password` |   | `string()` |   | `true` |  
+`settings.credentials.username` |   | `string()` |   | `true` |  
+`settings.credentials` |   | `object()` |   | `false` |  
+`settings.ip` |   | `string()` |   | `true` |  
+`settings.port` |   | `integer()` |   | `true` |  
+`settings` |   | `object()` |   | `true` |  
+
 ### storage.connections
 
 Describes alternative connections to use (such as alternative CouchDB instances
@@ -194,7 +224,7 @@ Describes alternative connections to use (such as alternative CouchDB instances
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`^([a-z,0-9]){32}$` |   | [#/definitions/storage.connection.couchdb](#storageconnection.couchdb) |   | `false` |  
+`^([a-z,0-9]){32}$` |   | [#/definitions/storage.connection.couchdb](#storageconnection.couchdb) | [#/definitions/storage.connection.postgresql](#storageconnection.postgresql) | [#/definitions/storage.connection.couchdb_and_postgresql](#storageconnection.couchdb_and_postgresql) |   | `false` |  
 `local` |   | `object()` |   | `false` |  
 
 ### storage.plan
@@ -220,6 +250,7 @@ Key | Description | Type | Default | Required | Support Level
 `database.create_options` |   | `object()` |   | `false` |  
 `database` |   | `object()` |   | `false` |  
 `types.call_recording` | schema for document type storage plan | [#/definitions/storage.plan.database.document](#storageplan.database.document) |   | `false` |  
+`types.cdr` | schema for document type storage plan | [#/definitions/storage.plan.database.document](#storageplan.database.document) |   | `false` |  
 `types.fax` | schema for document type storage plan | [#/definitions/storage.plan.database.document](#storageplan.database.document) |   | `false` |  
 `types.mailbox_message` | schema for document type storage plan | [#/definitions/storage.plan.database.document](#storageplan.database.document) |   | `false` |  
 `types.media` | schema for document type storage plan | [#/definitions/storage.plan.database.document](#storageplan.database.document) |   | `false` |  
