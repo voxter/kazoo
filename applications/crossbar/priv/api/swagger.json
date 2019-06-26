@@ -5481,11 +5481,13 @@
                 },
                 "hotdesk": {
                     "description": "The hotdesk status of this device",
-                    "type": "object",
-                    "users": {
-                        "description": "The user(s) currently hotdesked into the device",
-                        "type": "object"
-                    }
+                    "properties": {
+                        "users": {
+                            "description": "The user(s) currently hotdesked into the device",
+                            "type": "object"
+                        }
+                    },
+                    "type": "object"
                 },
                 "language": {
                     "description": "The language for the device",
@@ -29265,6 +29267,56 @@
             ],
             "type": "object"
         },
+        "sso_provider": {
+            "description": "SSO Provider settings",
+            "properties": {
+                "friendly_name": {
+                    "description": "Friendly name for the provider",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name for the provider",
+                    "type": "string"
+                },
+                "params": {
+                    "description": "SSO Provider parameters",
+                    "properties": {
+                        "client_id": {
+                            "description": "Client ID provided by SSO provider",
+                            "type": "string"
+                        },
+                        "include_granted_scopes": {
+                            "description": "Whether to include the granted scopes",
+                            "type": "boolean"
+                        },
+                        "response_type": {
+                            "description": "Response type from SSO provider",
+                            "enum": [
+                                "code"
+                            ],
+                            "type": "string"
+                        },
+                        "scopes": {
+                            "description": "Scope(s) requested",
+                            "items": {
+                                "description": "Scope name",
+                                "type": "string"
+                            },
+                            "type": "array"
+                        }
+                    },
+                    "type": "object"
+                },
+                "url": {
+                    "description": "URL of the provider's auth endpoint",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "url"
+            ],
+            "type": "object"
+        },
         "storage": {
             "properties": {
                 "attachments": {
@@ -30878,6 +30930,16 @@
             },
             "type": "object"
         },
+        "system_config.cluster": {
+            "description": "Schema for cluster system_config",
+            "properties": {
+                "cluster_id": {
+                    "description": "provisioner cluster id",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "system_config.conferences": {
             "description": "Schema for conferences system_config",
             "properties": {
@@ -31726,10 +31788,6 @@
         "system_config.crossbar.phonebook": {
             "description": "Schema for crossbar.phonebook system_config",
             "properties": {
-                "cluster_id": {
-                    "description": "the kazoo cluster_id",
-                    "type": "string"
-                },
                 "enabled": {
                     "default": false,
                     "description": "phonebook integration enabled",
@@ -35223,10 +35281,6 @@
         "system_config.provisioner": {
             "description": "Schema for provisioner system_config",
             "properties": {
-                "cluster_id": {
-                    "description": "provisioner cluster id",
-                    "type": "string"
-                },
                 "combo_keys": {
                     "default": {
                         "cisco": {
@@ -35355,6 +35409,11 @@
                             "description": "PEM-encoded key and certificate",
                             "type": "string"
                         },
+                        "headers": {
+                            "default": {},
+                            "description": "pusher apple headers",
+                            "type": "object"
+                        },
                         "host": {
                             "default": "api.push.apple.com",
                             "description": "APNs server host",
@@ -35370,6 +35429,11 @@
                         "api_key": {
                             "description": "API Key for firebase",
                             "type": "string"
+                        },
+                        "headers": {
+                            "default": {},
+                            "description": "pusher firebase headers",
+                            "type": "object"
                         }
                     },
                     "type": "object"
@@ -35381,6 +35445,11 @@
                         "api_key": {
                             "description": "API Key for gcm",
                             "type": "string"
+                        },
+                        "headers": {
+                            "default": {},
+                            "description": "pusher google headers",
+                            "type": "object"
                         }
                     },
                     "type": "object"
@@ -36311,6 +36380,43 @@
             },
             "type": "object"
         },
+        "system_config.tasks.ledger_rollover": {
+            "description": "Schema for tasks.ledger_rollover system_config",
+            "properties": {
+                "refresh_in_parallel": {
+                    "default": 50,
+                    "description": "tasks ledger_rollover refresh_in_parallel",
+                    "type": "integer"
+                },
+                "refresh_view_enabled": {
+                    "default": false,
+                    "description": "tasks ledger_rollover refresh_view_enabled",
+                    "type": "boolean"
+                },
+                "rollover_in_parallel": {
+                    "default": 10,
+                    "description": "How many accounts to rollover per-pass (in parallel)",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.tasks.modb_creation": {
+            "description": "Schema for tasks.modb_creation system_config",
+            "properties": {
+                "create_in_parallel": {
+                    "default": 1,
+                    "description": "How many accounts to process per pass (in parallel).",
+                    "type": "integer"
+                },
+                "creation_day": {
+                    "default": 28,
+                    "description": "Which day of the month (of current month) to create next month's MODBs on",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "system_config.tasks.notify_resend": {
             "description": "Schema for tasks.notify_resend system_config",
             "properties": {
@@ -36385,6 +36491,17 @@
                     "default": "knm_local",
                     "description": "carrier module to use if none provided during numbers import",
                     "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.tasks.services_rollover": {
+            "description": "Schema for tasks.services_rollover system_config",
+            "properties": {
+                "rollover_in_parallel": {
+                    "default": 10,
+                    "description": "How many accounts to rollover services for per pass (in parallel)",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -37909,6 +38026,12 @@
                     },
                     "type": "object"
                 },
+                "sso_providers": {
+                    "items": {
+                        "$ref": "#/definitions/sso_provider"
+                    },
+                    "type": "array"
+                },
                 "twoway_trunks_price": {
                     "description": "The price to show for twoway trunks, this is currently only for display purposes",
                     "type": "string"
@@ -38426,6 +38549,12 @@
             "required": true,
             "type": "string"
         },
+        "SAMPLE_ID": {
+            "in": "path",
+            "name": "SAMPLE_ID",
+            "required": true,
+            "type": "string"
+        },
         "SCHEMA_NAME": {
             "in": "path",
             "name": "SCHEMA_NAME",
@@ -38577,15 +38706,6 @@
             "maxLength": 32,
             "minLength": 32,
             "name": "WEBHOOK_ID",
-            "pattern": "^[0-9a-f]+$",
-            "required": true,
-            "type": "string"
-        },
-        "WEBHOOK_NAME": {
-            "in": "path",
-            "maxLength": 32,
-            "minLength": 32,
-            "name": "WEBHOOK_NAME",
             "pattern": "^[0-9a-f]+$",
             "required": true,
             "type": "string"
@@ -48327,14 +48447,31 @@
                 }
             }
         },
-        "/accounts/{ACCOUNT_ID}/webhooks/samples/{WEBHOOK_NAME}": {
+        "/accounts/{ACCOUNT_ID}/webhooks/samples": {
             "get": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
-                        "$ref": "#/parameters/WEBHOOK_NAME"
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/webhooks/samples/{SAMPLE_ID}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/SAMPLE_ID"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"

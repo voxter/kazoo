@@ -866,6 +866,7 @@ modb_id_path_param(Param) ->
 def_path_param(<<"{ACCOUNT_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{ADDRESS_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{ALERT_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{APP}">>=P) -> base_path_param(P);
 def_path_param(<<"{APP_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{AUTH_TOKEN}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{BLACKLIST_ID}">>=P) -> generic_id_path_param(P);
@@ -888,6 +889,7 @@ def_path_param(<<"{LIST_ENTRY_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{LIST_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MEDIA_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MENU_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{MOBILE_DEVICE_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{NOTIFICATION_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{PORT_REQUEST_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{QUEUE_ID}">>=P) -> generic_id_path_param(P);
@@ -902,7 +904,6 @@ def_path_param(<<"{TEMPORAL_RULE_SET}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{USER_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{VM_BOX_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{WEBHOOK_ID}">>=P) -> generic_id_path_param(P);
-def_path_param(<<"{WEBHOOK_NAME}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MIGRATION_ID}">>=P) -> generic_id_path_param(P);
 
 %% When param represents an MoDB id (i.e. 32+4+2 bytes of hexa & 1 dash):
@@ -915,8 +916,10 @@ def_path_param(<<"{ATTACHMENT_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{ATTEMPT_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{CALL_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{COMMENT_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{ERROR_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{EXTENSION}">>=P) -> base_path_param(P);
 def_path_param(<<"{FAX_JOB_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{HANDLER_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{INTERACTION_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{JOB_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{LANGUAGE}">>=P) -> base_path_param(P);
@@ -924,6 +927,7 @@ def_path_param(<<"{LEDGER_ENTRY_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{PLAN_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{PROMPT_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{PROVIDER_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{SAMPLE_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{SELECTOR_NAME}">>=P) -> base_path_param(P);
 def_path_param(<<"{SMTP_LOG_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{SOCKET_ID}">>=P) -> base_path_param(P);
@@ -934,10 +938,6 @@ def_path_param(<<"{TRANSACTION_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{USERNAME}">>=P) -> base_path_param(P);
 def_path_param(<<"{VM_MSG_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{WHITELABEL_DOMAIN}">>=P) -> base_path_param(P);
-def_path_param(<<"{APP}">>=P) -> base_path_param(P);
-def_path_param(<<"{MOBILE_DEVICE_ID}">>=P) -> base_path_param(P);
-def_path_param(<<"{ERROR_ID}">>=P) -> base_path_param(P);
-def_path_param(<<"{HANDLER_ID}">>=P) -> base_path_param(P);
 
 %% For all the edge cases out there:
 def_path_param(<<"{MODB_SUFFIX}">>=P) ->
