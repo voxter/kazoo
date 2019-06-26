@@ -1491,7 +1491,8 @@ conf_details(ConfId) ->
         {'error', E} ->
             lager:debug("conf_details error ~p", [E]),
             'undefined';
-        {'ok', JObjs} -> merge_conference_resps(JObjs)
+        {Result, JObjs} when Result =:= 'ok'; Result =:= 'timeout' ->
+            merge_conference_resps(JObjs)
     end.
 
 merge_conference_resps(JObjs) ->
