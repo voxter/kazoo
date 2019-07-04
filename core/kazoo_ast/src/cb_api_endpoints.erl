@@ -897,6 +897,7 @@ def_path_param(<<"{RATE_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{RESOURCE_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{RESOURCE_TEMPLATE_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{SMS_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{SOLUTION_INSTANCE_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{STORAGE_PLAN_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{TEMPLATE_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{TEMPORAL_RULE_ID}">>=P) -> generic_id_path_param(P);
