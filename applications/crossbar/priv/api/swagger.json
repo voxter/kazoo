@@ -700,13 +700,7 @@
                     "type": "object"
                 },
                 "zones": {
-                    "description": "The zone(s) of an account",
-                    "properties": {
-                        "home": {
-                            "description": "Which zone is considered the account's home zone",
-                            "type": "string"
-                        }
-                    },
+                    "description": "A priority ordered mapping of zones for the account",
                     "type": "object"
                 }
             },
@@ -30936,6 +30930,11 @@
                 "cluster_id": {
                     "description": "provisioner cluster id",
                     "type": "string"
+                },
+                "zones": {
+                    "default": {},
+                    "description": "cluster zones",
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -31868,6 +31867,30 @@
                 "default_priv_level": {
                     "default": "admin",
                     "description": "crossbar.token_restrictions default priv level",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.crossbar.tray": {
+            "description": "Schema for crossbar.tray system_config",
+            "properties": {
+                "app_url": {
+                    "default": "https://app.tray.io",
+                    "description": "Tray.io app url",
+                    "type": "string"
+                },
+                "gql_endpoint": {
+                    "default": "https://tray.io/graphql",
+                    "description": "Tray.io GraphQL endpoint",
+                    "type": "string"
+                },
+                "master_token": {
+                    "description": "Tray.io master token",
+                    "type": "string"
+                },
+                "partner_name": {
+                    "description": "Tray.io partner name",
                     "type": "string"
                 }
             },
@@ -33468,6 +33491,17 @@
                 "use_bigcouch_direct": {
                     "default": true,
                     "description": "kazoo_couch use bigcouch direct",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.kazoo_directory": {
+            "description": "Schema for kazoo_directory system_config",
+            "properties": {
+                "restrict_to_known_types": {
+                    "default": false,
+                    "description": "kazoo_directory restrict_to_known_types",
                     "type": "boolean"
                 }
             },
@@ -36849,6 +36883,37 @@
             },
             "type": "object"
         },
+        "tray_create": {
+            "description": "Tray.io Solution Instance Creation",
+            "properties": {
+                "id": {
+                    "description": "Solution ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Solution Instance Name",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id",
+                "name"
+            ],
+            "type": "object"
+        },
+        "tray_toggle": {
+            "description": "Tray.io Solution Instance State Toggle",
+            "properties": {
+                "enabled": {
+                    "description": "Solution Instance State",
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "enabled"
+            ],
+            "type": "object"
+        },
         "trunkstore": {
             "description": "Trunkstore configuration document - this is old stuff; do not recommend building off this if possible",
             "properties": {
@@ -38586,6 +38651,15 @@
         "SOCKET_ID": {
             "in": "path",
             "name": "SOCKET_ID",
+            "required": true,
+            "type": "string"
+        },
+        "SOLUTION_INSTANCE_ID": {
+            "in": "path",
+            "maxLength": 32,
+            "minLength": 32,
+            "name": "SOLUTION_INSTANCE_ID",
+            "pattern": "^[0-9a-f]+$",
             "required": true,
             "type": "string"
         },
@@ -47734,6 +47808,94 @@
                     },
                     {
                         "$ref": "#/parameters/TRANSACTION_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/tray": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/tray/{SOLUTION_INSTANCE_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/SOLUTION_INSTANCE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/SOLUTION_INSTANCE_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
+            "patch": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/SOLUTION_INSTANCE_ID"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
