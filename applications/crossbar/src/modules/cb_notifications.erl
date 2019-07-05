@@ -841,7 +841,9 @@ migrate_template_to_account(Context, Id) ->
     lager:debug("saving template ~s from system config to account ~s", [Id, cb_context:account_id(Context)]),
 
     Template = cb_context:fetch(Context, 'db_doc'),
-    Updates = kz_notification:base_properties(kz_doc:public_fields(Template), Id),
+    Updates = [{kz_doc:path_account_db(), cb_context:account_db(Context)}
+               | kz_notification:base_properties(kz_doc:public_fields(Template), Id)
+              ],
 
     Context1 = crossbar_doc:update(Context, Id, Updates),
     case cb_context:resp_status(Context1) of
