@@ -290,6 +290,12 @@
             },
             "type": "object"
         },
+        "seat_type": {
+            "default": "essentials",
+            "description": "User's seat type",
+            "support_level": "supported",
+            "type": "string"
+        },
         "timezone": {
             "description": "User's timezone",
             "support_level": "supported",
@@ -329,7 +335,8 @@
     },
     "required": [
         "first_name",
-        "last_name"
+        "last_name",
+        "seat_type"
     ],
     "type": "object"
 }

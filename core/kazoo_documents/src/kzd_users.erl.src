@@ -56,6 +56,7 @@
 -export([ringtones/1, ringtones/2, set_ringtones/2]).
 -export([ringtones_external/1, ringtones_external/2, set_ringtones_external/2]).
 -export([ringtones_internal/1, ringtones_internal/2, set_ringtones_internal/2]).
+-export([seat_type/1, seat_type/2, set_seat_type/2]).
 -export([timezone/1, timezone/2, set_timezone/2]).
 -export([username/1, username/2, set_username/2]).
 -export([verified/1, verified/2, set_verified/2]).
@@ -675,6 +676,18 @@ ringtones_internal(Doc, Default) ->
 -spec set_ringtones_internal(doc(), binary()) -> doc().
 set_ringtones_internal(Doc, RingtonesInternal) ->
     kz_json:set_value([<<"ringtones">>, <<"internal">>], RingtonesInternal, Doc).
+
+-spec seat_type(doc()) -> binary().
+seat_type(Doc) ->
+    seat_type(Doc, <<"essentials">>).
+
+-spec seat_type(doc(), Default) -> binary() | Default.
+seat_type(Doc, Default) ->
+    kz_json:get_binary_value([<<"seat_type">>], Doc, Default).
+
+-spec set_seat_type(doc(), binary()) -> doc().
+set_seat_type(Doc, SeatType) ->
+    kz_json:set_value([<<"seat_type">>], SeatType, Doc).
 
 -spec timezone(doc()) -> kz_term:api_binary().
 timezone(Doc) ->

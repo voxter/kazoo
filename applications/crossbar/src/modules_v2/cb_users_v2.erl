@@ -35,10 +35,12 @@
 
 -define(CB_LIST, <<"users/crossbar_listing">>).
 -define(LIST_BY_HOTDESK_ID, <<"users/list_by_hotdesk_id">>).
+-define(LIST_BY_SEAT_TYPE, <<"users/list_by_seat_type">>).
 -define(LIST_BY_PRESENCE_ID, <<"devices/listing_by_presence_id">>).
 
 -define(VCARD, <<"vcard">>).
 -define(PHOTO, <<"photo">>).
+-define(BY_SEAT_TYPE, <<"list_by_seat_type">>).
 
 %%%=============================================================================
 %%% API
@@ -175,6 +177,8 @@ authorize_users(_Nouns, _Verb) -> 'false'.
 validate_resource(Context) -> Context.
 
 -spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
+validate_resource(Context, ?BY_SEAT_TYPE) ->
+    Context;
 validate_resource(Context, UserId) -> validate_user_id(UserId, Context).
 
 -spec validate_resource(cb_context:context(), path_token(), path_token()) -> cb_context:context().
@@ -221,6 +225,8 @@ validate(Context) ->
     validate_users(Context, cb_context:req_verb(Context)).
 
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
+validate(Context, ?BY_SEAT_TYPE) ->
+    load_user_count_by_seat_type(Context);
 validate(Context, UserId) ->
     validate_user(Context, UserId, cb_context:req_verb(Context)).
 
@@ -462,6 +468,12 @@ fix_envelope(Context) ->
 
 -spec load_user(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 load_user(UserId, Context) -> crossbar_doc:load(UserId, Context, ?TYPE_CHECK_OPTION(kzd_user:type())).
+
+
+-spec load_user_count_by_seat_type(cb_context:context()) -> cb_context:context().
+load_user_count_by_seat_type(Context) ->
+    ViewOptions = [{'group_level', 1}],
+    crossbar_doc:load_view(?LIST_BY_SEAT_TYPE, ViewOptions, Context).
 
 %%------------------------------------------------------------------------------
 %% @doc
