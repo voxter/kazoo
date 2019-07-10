@@ -15,12 +15,6 @@
 
 -define(SERVER, ?MODULE).
 
--define(DEFAULT_EXCHANGE, <<"sms">>).
--define(DEFAULT_EXCHANGE_TYPE, <<"topic">>).
--define(DEFAULT_EXCHANGE_OPTIONS, [{<<"passive">>, 'true'}] ).
--define(DEFAULT_EXCHANGE_OPTIONS_JOBJ, kz_json:from_list(?DEFAULT_EXCHANGE_OPTIONS) ).
-
--define(DEFAULT_BROKER, kz_amqp_connections:primary_broker()).
 -define(QUEUE_NAME, <<"smsc_inbound_queue_", (?DOODLE_INBOUND_EXCHANGE)/binary>>).
 
 -define(DOODLE_INBOUND_QUEUE, kapps_config:get_ne_binary(?CONFIG_CAT, <<"inbound_queue_name">>, ?QUEUE_NAME)).
@@ -93,10 +87,10 @@ default_connection() ->
 connections() ->
     case kapps_config:get_json(?CONFIG_CAT, <<"connections">>) of
         'undefined' -> [default_connection()];
-        JObj -> kz_json:foldl(fun connections_fold/3, [], JObj)
+        JObj -> [default_connection()] ++ kz_json:foldl(fun connections_fold/3, [], JObj)
     end.
 
--spec connections_fold(kz_json:path(), kz_json:json_term(), amqp_listener_connections()) ->
+-spec connections_fold(kz_json:key(), kz_json:object(), amqp_listener_connections()) ->
                               amqp_listener_connections().
 connections_fold(K, V, Acc) ->
     C = #amqp_listener_connection{name = K
