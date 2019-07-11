@@ -287,11 +287,7 @@ is_dirty2_test_() ->
     ,?_assertEqual([], kz_json:get_value(<<"pvt_features">>, OldJObj))
     ,?_assertEqual(undefined, kz_json:get_value(<<"pvt_features">>, JObj))
     ,?_assertEqual(undefined, kz_json:get_value(<<"pvt_features">>, NewJObj))
-    ,?_assertEqual(true
-                  ,kz_json:are_equal(kz_json:get_value(<<"pvt_features">>, OldJObj)
-                                    ,knm_phone_number:features(PN)
-                                    )
-                  )
+    ,?_assertEqual(kz_json:new(), knm_phone_number:features(PN))
 
     ,?_assertEqual(<<>>, kz_json:get_value(<<"used_by">>, OldJObj))
     ,?_assertEqual(undefined, kz_json:get_value(<<"pvt_used_by">>, JObj))
