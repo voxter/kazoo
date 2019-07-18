@@ -523,18 +523,16 @@ handle_cast({'start_workers'}, #state{account_id=AccountId
     case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded')
                                ,<<"queues/agents_listing">>
                                ,[{'key', QueueId}
-                                ,'include_docs'
+                                ,{'group', 'true'}
+                                ,{'group_level', 1}
                                 ])
     of
         {'ok', []} ->
             lager:debug("no agents yet, but create a worker anyway"),
             acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId);
-        {'ok', Agents} ->
-            _ = [start_agent_and_worker(WorkersSup, AccountId, QueueId
-                                       ,kz_json:get_value(<<"doc">>, A)
-                                       )
-                 || A <- Agents
-                ],
+        {'ok', [Result]} ->
+            QWC = kz_json:get_integer_value(<<"value">>, Result),
+            acdc_queue_workers_sup:new_workers(WorkersSup, AccountId, QueueId, QWC),
             'ok';
         {'error', _E} ->
             lager:debug("failed to find agent count: ~p", [_E]),
@@ -955,22 +953,6 @@ publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason) ->
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     catch kapi_acdc_queue:publish_member_call_failure(Q, Prop).
-
--spec start_agent_and_worker(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
-start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
-    acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId),
-    AgentId = kz_doc:id(AgentJObj),
-    {'ok', Status} = acdc_agent_util:most_recent_status(AccountId, AgentId),
-    case acdc_agent_util:status_should_auto_start(Status) of
-        'false' -> 'ok';
-        'true' ->
-            lager:debug("maybe starting agent ~s(~s) for queue ~s", [AgentId, Status, QueueId]),
-
-            case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
-                'undefined' -> acdc_agents_sup:new(AgentJObj);
-                P when is_pid(P) -> 'ok'
-            end
-    end.
 
 %% Really sophisticated selection algorithm
 -spec pick_winner_(kz_json:objects(), queue_strategy(), kz_term:api_binary()) ->
@@ -1401,7 +1383,9 @@ create_strategy_state(Strategy, AcctDb, QueueId) ->
 create_strategy_state('rr', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('rr', SS#strategy_state{agents=pqueue4:new()}, AcctDb, QueueId);
 create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) ->
-    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>, [{'key', QueueId}]) of
+    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>
+                               ,[{'key', QueueId}, {'reduce', 'false'}])
+    of
         {'ok', []} -> lager:debug("no agents around"), SS;
         {'ok', JObjs} ->
             AgentMap = lists:map(fun(JObj) ->
@@ -1427,7 +1411,9 @@ create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) 
 create_strategy_state('mi', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('mi', SS#strategy_state{agents=[]}, AcctDb, QueueId);
 create_strategy_state('mi', #strategy_state{agents=AgentL}=SS, AcctDb, QueueId) ->
-    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>, [{key, QueueId}]) of
+    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>
+                               ,[{'key', QueueId}, {'reduce', 'false'}])
+    of
         {'ok', []} -> lager:debug("no agents around"), SS;
         {'ok', JObjs} ->
             AgentL1 = lists:foldl(fun(JObj, Acc) ->
@@ -1455,7 +1441,9 @@ create_strategy_state('sbrr', #strategy_state{agents='undefined'}=SS, AcctDb, Qu
                          },
     create_strategy_state('sbrr', SS#strategy_state{agents=SBRRStrategyState}, AcctDb, QueueId);
 create_strategy_state('sbrr', SS, AcctDb, QueueId) ->
-    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>, [{'key', QueueId}]) of
+    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>
+                               ,[{'key', QueueId}, {'reduce', 'false'}])
+    of
         {'ok', []} -> lager:debug("no agents around"), SS;
         {'ok', JObjs} -> lists:foldl(fun update_sbrrss_with_agent/2, SS, JObjs);
         {'error', _E} -> lager:debug("error creating strategy mi: ~p", [_E]), SS

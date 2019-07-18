@@ -777,7 +777,8 @@ waiting_call_stat(CallId, [JObj|JObjs]) ->
 
 agent_statuses(QueueId, AccountId, Number, AgentStats) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, Results} = kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
+    {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>
+                                            ,[{'key', QueueId}, {'reduce', 'false'}]),
     lists:foldl(fun(Result, Acc) ->
                         AgentId = kz_json:get_value(<<"id">>, Result),
                         case agent_status(AgentId, AccountId, Number, AgentStats) of
