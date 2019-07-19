@@ -32,10 +32,7 @@
         "locale": {
             "description": "The local that should be used for i18n",
             "enum": [
-                "de",
-                "en-nz",
-                "en",
-                "mi"
+                "en"
             ],
             "type": "string"
         }
