@@ -509,7 +509,15 @@ load_user(UserId, Context) -> crossbar_doc:load(UserId, Context, ?TYPE_CHECK_OPT
 %%------------------------------------------------------------------------------
 -spec validate_request(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_request(UserId, Context) ->
-    prepare_username(UserId, Context).
+    Routines = [fun prepare_username/2
+               ,fun hero_util:check_hero_apps/2
+               ],
+    lists:foldl(fun(F, C) ->
+                        F(UserId, C)
+                end
+               ,Context
+               ,Routines
+               ).
 
 -spec validate_patch(kz_term:api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(UserId, Context) ->

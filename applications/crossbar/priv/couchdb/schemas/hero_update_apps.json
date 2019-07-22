@@ -1,0 +1,46 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "hero_update_apps",
+    "description": "Update Hero Apps",
+    "properties": {
+        "apps": {
+            "description": "Hero Apps",
+            "items": {
+                "oneOf": [
+                    {
+                        "properties": {
+                            "available": {
+                                "description": "Determines if the app is available to be enabled by users",
+                                "type": "boolean"
+                            },
+                            "description": {
+                                "description": "Description of the app",
+                                "type": "string"
+                            },
+                            "id": {
+                                "description": "ID of the app",
+                                "type": "string"
+                            },
+                            "label": {
+                                "description": "Display name of the app",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "available",
+                            "description",
+                            "id",
+                            "label"
+                        ],
+                        "type": "object"
+                    }
+                ]
+            },
+            "type": "array"
+        }
+    },
+    "required": [
+        "apps"
+    ],
+    "type": "object"
+}

@@ -64,3 +64,62 @@ curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/hero
 ```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/hero/apps
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/hero/apps
+```
+
+```json
+{
+    "data": [
+        {
+            "available": false,
+            "description": "User Chat",
+            "id": "chat",
+            "label": "Chat"
+        }
+    ],
+    "request_id": "{REQUEST_ID}",
+    "status": "success",
+    "auth_token": "{AUTH_TOKEN}"
+}
+```
+
+## Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/hero/apps
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data": [{
+        "available": true,
+        "description": "User Chat",
+        "id": "chat",
+        "label": "Chat"
+    }]}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/hero/apps
+```
+
+```json
+{
+    "data": [
+        {
+            "available": true,
+            "description": "User Chat",
+            "id": "chat",
+            "label": "Chat"
+        }
+    ],
+    "request_id": "{REQUEST_ID}",
+    "status": "success",
+    "auth_token": "{AUTH_TOKEN}"
+}
+```
+

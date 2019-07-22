@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.hero",
+    "description": "Schema for hero system_config",
+    "properties": {
+        "apps": {
+            "default": [],
+            "description": "hero apps",
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

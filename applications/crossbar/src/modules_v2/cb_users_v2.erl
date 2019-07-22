@@ -487,6 +487,7 @@ validate_request(UserId, Context) ->
                ,fun check_hotdesk_id/2
                 %% this check must have the current doc
                ,fun maybe_rehash_creds/2
+               ,fun hero_util:check_hero_apps/2
                ],
     lists:foldl(fun(F, C) ->
                         F(UserId, C)

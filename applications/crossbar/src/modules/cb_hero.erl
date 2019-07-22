@@ -9,10 +9,14 @@
 -include("crossbar.hrl").
 
 -export([init/0
-        ,allowed_methods/0
-        ,resource_exists/0
-        ,validate/1
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,post/2
         ]).
+
+-define(APPS, <<"apps">>).
+-define(MOD_CONFIG_CAT, <<"hero">>).
 
 %%%=============================================================================
 %%% API
@@ -26,7 +30,8 @@
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.hero">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.hero">>, ?MODULE, 'resource_exists'),
-    _ = crossbar_bindings:bind(<<"*.validate.hero">>, ?MODULE, 'validate').
+    _ = crossbar_bindings:bind(<<"*.validate.hero">>, ?MODULE, 'validate'),
+    _ = crossbar_bindings:bind(<<"*.execute.post.hero">>, ?MODULE, 'post').
 
 %%------------------------------------------------------------------------------
 %% @doc Given the path tokens related to this module, what HTTP methods are
@@ -37,12 +42,19 @@ init() ->
 allowed_methods() ->
     [?HTTP_POST].
 
+-spec allowed_methods(path_token()) -> http_methods().
+allowed_methods(?APPS) ->
+    [?HTTP_GET, ?HTTP_POST].
+
 %%------------------------------------------------------------------------------
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 resource_exists() -> 'true'.
+
+-spec resource_exists(path_token()) -> 'true'.
+resource_exists(?APPS) -> 'true'.
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -55,6 +67,29 @@ validate(Context) ->
         {'ok', JObj} ->
             crossbar_util:response(JObj, Context)
     end.
+
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
+validate(Context, ?APPS) ->
+    validate_apps(Context, cb_context:req_verb(Context)).
+
+-spec validate_apps(cb_context:context(), http_method()) -> cb_context:context().
+validate_apps(Context, ?HTTP_GET) ->
+    Apps = hero_util:get_apps(Context),
+    crossbar_util:response(Apps, Context);
+validate_apps(Context, ?HTTP_POST) ->
+    cb_context:validate_request_data(<<"hero_update_apps">>, Context).
+
+-spec post(cb_context:context(), path_token()) -> cb_context:context().
+post(Context, ?APPS) ->
+    Apps = cb_context:req_value(Context, ?APPS),
+    update_apps(Context, Apps).
+
+-spec update_apps(cb_context:context(), kz_json:api_json_term()) -> cb_context:context().
+update_apps(Context, Apps) ->
+    AccountId = cb_context:account_id(Context),
+    Doc = kapps_account_config:set(AccountId, ?MOD_CONFIG_CAT, ?APPS, Apps),
+    UpdatedApps = kz_json:get_value(?APPS, Doc),
+    crossbar_util:response(UpdatedApps, Context).
 
 load_views(Context, Views) ->
     load_views(Context, kz_json:new(), Views).

@@ -6605,6 +6605,50 @@
             },
             "type": "object"
         },
+        "hero_update_apps": {
+            "description": "Update Hero Apps",
+            "properties": {
+                "apps": {
+                    "description": "Hero Apps",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "properties": {
+                                    "available": {
+                                        "description": "Determines if the app is available to be enabled by users",
+                                        "type": "boolean"
+                                    },
+                                    "description": {
+                                        "description": "Description of the app",
+                                        "type": "string"
+                                    },
+                                    "id": {
+                                        "description": "ID of the app",
+                                        "type": "string"
+                                    },
+                                    "label": {
+                                        "description": "Display name of the app",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "available",
+                                    "description",
+                                    "id",
+                                    "label"
+                                ],
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "apps"
+            ],
+            "type": "object"
+        },
         "ip": {
             "description": "IP address assigned to the cluster",
             "properties": {
@@ -33080,6 +33124,17 @@
             },
             "type": "object"
         },
+        "system_config.hero": {
+            "description": "Schema for hero system_config",
+            "properties": {
+                "apps": {
+                    "default": [],
+                    "description": "hero apps",
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "system_config.hotornot": {
             "description": "Schema for hotornot system_config",
             "properties": {
@@ -42253,6 +42308,38 @@
             }
         },
         "/accounts/{ACCOUNT_ID}/hero": {
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/hero/apps": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            },
             "post": {
                 "parameters": [
                     {
