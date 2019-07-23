@@ -264,7 +264,7 @@ where_clause_to_iolist(ColumnName, [{Operator, [Operand|Operands]}|Stack], Acc) 
 %%------------------------------------------------------------------------------
 %% @doc Convert the value of a where clause to a binary string by doing the following.
 %% Convert integers to binary and do not surround in quotes
-%% Add single quotes if the value is a binary string and not a PG value/parameter placeholder (eg $1)
+%% Add single quotes if the value is a binary string and not a PG value/column/parameter placeholder (eg $1 or tablename.column)
 %% Convert kz_postgresql_query record to a binary and sorund in brackets
 %% @end
 %%------------------------------------------------------------------------------
@@ -272,7 +272,7 @@ where_clause_to_iolist(ColumnName, [{Operator, [Operand|Operands]}|Stack], Acc) 
 where_value_to_iolist(Int) when is_integer(Int) ->
     [kz_term:to_binary(Int)];
 where_value_to_iolist(Bin) when is_binary(Bin) ->
-    case binary:match(Bin, <<"\$">>) of
+    case binary:match(Bin, [<<"\$">>, <<".">>, <<"\"">>]) of
         'nomatch' -> [<<"'">>, Bin, <<"'">>];
         _Match -> [Bin]
     end.
@@ -283,7 +283,8 @@ where_value_to_iolist(Bin) when is_binary(Bin) ->
 %%------------------------------------------------------------------------------
 -spec do_simple_query(kz_postgresql:connection_pool(), kz_postgresql:query()) -> epgsql:reply().
 do_simple_query(ConnPool, Query) ->
-    lager:debug("executing postgresql (ConnPool: ~p) simple query: ~p ", [ConnPool, Query]),
+    %% TODO Consider removing debug line in future for performance
+    lager:debug("executing postgresql (ConnPool: ~p) simple query: ~p ", [ConnPool, iolist_to_binary(Query)]),
     pgapp:squery(ConnPool, Query).
 
 %%------------------------------------------------------------------------------
@@ -292,7 +293,8 @@ do_simple_query(ConnPool, Query) ->
 %%------------------------------------------------------------------------------
 -spec do_extended_query(kz_postgresql:connection_pool(), kz_postgresql:query(), kz_term:ne_binaries()) -> epgsql:reply().
 do_extended_query(ConnPool, Query, QueryValues) ->
-    lager:debug("executing postgresql (ConnPool: ~p) extended query: ~p with values ~p", [ConnPool, Query, QueryValues]),
+    %% TODO Consider removing debug line in future for performance
+    lager:debug("executing postgresql (ConnPool: ~p) extended query: ~p with values ~p", [ConnPool, iolist_to_binary(Query), QueryValues]),
     pgapp:equery(ConnPool, Query, QueryValues).
 
 %%------------------------------------------------------------------------------

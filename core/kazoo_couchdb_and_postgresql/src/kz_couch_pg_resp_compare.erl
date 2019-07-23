@@ -67,7 +67,7 @@ compare_docs([], []) ->
     lager:debug("couch and pg doc response are the same (Both returned 0 docs)"),
     'true';
 compare_docs(CouchDoc, PGDoc) when not is_list(CouchDoc), not is_list(PGDoc) ->
-    compare_docs_are_equal(CouchDoc, PGDoc);
+    compare_doc(CouchDoc, PGDoc);
 compare_docs(CouchDocs, PGDoc) when is_list(CouchDocs), not is_list(PGDoc) ->
     lager:error("couch and pg response differ, Couch returned a list (length: ~p), PG returned a single doc", [length(CouchDocs)]),
     'false';
@@ -90,11 +90,25 @@ compare_docs(CouchDocs, PGDocs) when is_list(CouchDocs), is_list(PGDocs) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Compare 2 kz_json objects
+%% First verify the doc ids are equal, then check the rest of the attributes
+%% @end
+%%------------------------------------------------------------------------------
+-spec compare_doc(kz_json:object(), kz_json:object()) -> boolean().
+compare_doc(CouchDoc, PGDoc) ->
+    lager:debug("comparing couch and pg doc....."),
+    case kz_doc:id(CouchDoc) == kz_doc:id(PGDoc) of
+        'true' -> compare_docs_are_equal(CouchDoc, PGDoc);
+        'false' ->
+            lager:error("doc ids are not the same, Couch doc id: ~p, PG doc id: ~p", [kz_doc:id(CouchDoc), kz_doc:id(PGDoc)]),
+            'false'
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Compare 2 kz_json objects
 %% @end
 %%------------------------------------------------------------------------------
 -spec compare_docs_are_equal(kz_json:object(), kz_json:object()) -> boolean().
 compare_docs_are_equal(CouchDoc, PGDoc) ->
-    lager:debug("comparing couch and pg doc....."),
     CouchDocClean = clean_doc(CouchDoc),
     PGDocClean = clean_doc(PGDoc),
     case kz_json:are_equal(CouchDocClean, PGDocClean) of
@@ -109,12 +123,21 @@ compare_docs_are_equal(CouchDoc, PGDoc) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Remove all rev's from doc
+%% Remove rev at root level and inside doc or value if present
 %% @end
 %%------------------------------------------------------------------------------
 -spec clean_doc(kz_json:object()) -> kz_json:object().
 clean_doc(Doc) ->
     DocFiltered = kz_json:filter(fun filter_doc/1, Doc),
-    kz_json:delete_key([<<"doc">>, <<"_rev">>], DocFiltered).
+    DocFiltered1 = clean_doc(DocFiltered, <<"doc">>),
+    clean_doc(DocFiltered1, <<"value">>).
+
+-spec clean_doc(kz_json:object(), kz_json:path()) -> kz_json:object().
+clean_doc(Doc, Path) ->
+    case kz_json:is_defined(Path, Doc) of
+        'false' -> Doc;
+        'true' -> kz_json:filter(fun filter_doc/1, Doc, Path)
+    end.
 
 -spec filter_doc({kz_type:ne_binary(),kz_type:ne_binary()}) -> boolean().
 filter_doc({<<"rev">>, _}) -> 'false';

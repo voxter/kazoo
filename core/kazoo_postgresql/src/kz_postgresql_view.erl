@@ -140,12 +140,13 @@ do_all_doc_query(ConnPool, DbName, PgTablesAndDocIds, ViewOptions) ->
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), boolean(), kz_data:options()) ->
                               {'ok', kz_json:objects()} | epgsql:error_reply().
 do_all_doc_query(_ConnPool, _DbName, [], ViewOptions, JObjs) ->
-    lager:debug("sorting combined all_doc view results"),
     SortFun = case kz_postgresql_options:get_order(ViewOptions) of
                   'ascending' ->
-                      fun(A, B) -> kz_doc:id(A) < kz_doc:id(B) end;
+                      lager:debug("sorting combined all_doc view results to ascending order"),
+                      fun(A, B) -> kz_doc:id(A) > kz_doc:id(B) end;
                   'descending' ->
-                      fun(A, B) -> kz_doc:id(A) > kz_doc:id(B) end
+                      lager:debug("sorting combined all_doc view results to descending order"),
+                      fun(A, B) -> kz_doc:id(A) < kz_doc:id(B) end
               end,
     {'ok', kz_json:sort(SortFun, JObjs)};
 
@@ -187,7 +188,7 @@ generate_all_docs_table_query(DbName, TableName, []) ->
                                                           ,#kz_postgresql_query{'select' = [<<"MAX(_rev)">>]
                                                                                ,'from' = [<<"\"",TableName/binary,"\" as table_alias">>]
                                                                                ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                                                                    ,<<"table_alias._id">>
+                                                                                                    ,<<"\"table_alias\"._id">>
                                                                                                     ]}
                                                                                }
                                                           ]}
@@ -214,7 +215,7 @@ generate_all_docs_table_query(DbName, TableName, DocIds) ->
                                                           ,#kz_postgresql_query{'select' = [<<"MAX(_rev)">>]
                                                                                ,'from' = [<<"\"",TableName/binary,"\" as table_alias">>]
                                                                                ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                                                                    ,<<"table_alias._id">>
+                                                                                                    ,<<"\"table_alias\"._id">>
                                                                                                     ]}
                                                                                }
                                                           ]}
