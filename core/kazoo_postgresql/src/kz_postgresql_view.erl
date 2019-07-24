@@ -140,15 +140,23 @@ do_all_doc_query(ConnPool, DbName, PgTablesAndDocIds, ViewOptions) ->
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), boolean(), kz_data:options()) ->
                               {'ok', kz_json:objects()} | epgsql:error_reply().
 do_all_doc_query(_ConnPool, _DbName, [], ViewOptions, JObjs) ->
-    SortFun = case kz_postgresql_options:get_order(ViewOptions) of
-                  'ascending' ->
-                      lager:debug("sorting combined all_doc view results to ascending order"),
-                      fun(A, B) -> kz_doc:id(A) > kz_doc:id(B) end;
-                  'descending' ->
-                      lager:debug("sorting combined all_doc view results to descending order"),
-                      fun(A, B) -> kz_doc:id(A) < kz_doc:id(B) end
-              end,
-    {'ok', kz_json:sort(SortFun, JObjs)};
+    case kz_postgresql_options:get_order(ViewOptions, 'undefined') of
+        'ascending' ->
+            lager:debug("sorting combined all_doc view results to ascending order"),
+            {'ok', kz_json:sort(fun(A, B) -> kz_doc:id(A) > kz_doc:id(B) end, JObjs)};
+        'descending' ->
+            lager:debug("sorting combined all_doc view results to descending order"),
+            {'ok', kz_json:sort(fun(A, B) -> kz_doc:id(A) < kz_doc:id(B) end, JObjs)};
+        'undefined' ->
+            lager:debug("no sort order defined, sorting keys as defined by keys in view options"),
+            IndexedKeyMap = maps:from_list(lists:foldl(fun(Key, KeyAcc) -> [{Key, length(KeyAcc)} | KeyAcc] end
+                                                      ,[]
+                                                      ,kz_postgresql_options:get_keys(ViewOptions))),
+            SortFun = fun(A, B) ->
+                              maps:find(kz_doc:id(A), IndexedKeyMap) < maps:find(kz_doc:id(B), IndexedKeyMap)
+                      end,
+            {'ok', kz_json:sort(SortFun, JObjs)}
+    end;
 
 do_all_doc_query(ConnPool, DbName, [{TableName, DocIds} | OtherTables], ViewOptions, JObjs) ->
     Query = generate_all_docs_table_query(DbName, TableName, DocIds),
