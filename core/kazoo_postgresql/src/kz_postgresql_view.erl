@@ -151,7 +151,7 @@ do_all_doc_query(_ConnPool, _DbName, [], ViewOptions, JObjs) ->
             lager:debug("no sort order defined, sorting keys as defined by keys in view options"),
             IndexedKeyMap = lists:foldl(fun(Key, Acc) -> Acc#{Key => maps:size(Acc)} end
                                        ,#{}
-                                       ,kz_postgresql_options:get_keys(ViewOptions))),
+                                       ,kz_postgresql_options:get_keys(ViewOptions)),
             SortFun = fun(A, B) ->
                               maps:find(kz_doc:id(A), IndexedKeyMap) < maps:find(kz_doc:id(B), IndexedKeyMap)
                       end,
