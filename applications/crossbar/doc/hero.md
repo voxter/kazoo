@@ -98,12 +98,12 @@ curl -v -X GET \
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": [{
+    -d '{"data": {"apps": [{
         "available": true,
         "description": "User Chat",
         "id": "chat",
         "label": "Chat"
-    }]}' \
+    }]}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/hero/apps
 ```
 
