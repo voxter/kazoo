@@ -100,7 +100,7 @@ echo "--- Check for unstaged files"
 ${PWD}/scripts/check-unstaged.bash
 
 echo "--- Make release"
-KAZOO_CONFIG=${PWD}/rel/ci.config.ini REL="kazoo_apps" ACT="console" NODE_NAME_TYPE="-sname" make release
+KAZOO_CONFIG=${PWD}/rel/ci.buildkite.ini REL="kazoo_apps" ACT="console" NODE_NAME_TYPE="-sname" make release
 
 cp ${PWD}/rel/ci.relx.config $ARTIFACTS_PATH/
 find ${PWD}/_rel/kazoo/releases -name kazoo.rel -exec cp {} $ARTIFACTS_PATH/ \;
