@@ -27,6 +27,8 @@ RUN yum install -y \
         wget \
         zip \
         zlib-devel \
+    # make docs
+        mkdocs \
     # Node
     && rpm -ivh https://kojipkgs.fedoraproject.org//packages/http-parser/2.7.1/3.el7/x86_64/http-parser-2.7.1-3.el7.x86_64.rpm \
     && yum install -y \
@@ -37,6 +39,7 @@ RUN yum install -y \
         emacs \
         python \
         python-pip \
+        PyYAML \
     # kazoo_convert Tests
         ghostscript \
         ImageMagick \

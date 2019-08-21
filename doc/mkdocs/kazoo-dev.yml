@@ -90,6 +90,8 @@ pages:
         - 'Agents': 'applications/callflow/doc/acdc_agent.md'
         - 'Queue Login': 'applications/callflow/doc/acdc_queue.md'
         - 'Member Entry': 'applications/callflow/doc/acdc_member.md'
+        - 'Average Wait Time': 'applications/callflow/doc/acdc_wait_time.md'
+        - 'Required Skills': 'applications/callflow/doc/acdc_required_skills.md'
     - 'Play Media': 'applications/callflow/doc/play.md'
     - 'Menu (IVR)': 'applications/callflow/doc/menu.md'
     - 'Custom Webhook': 'applications/callflow/doc/webhook.md'
@@ -141,10 +143,14 @@ pages:
     - 'applications/konami/doc/hold.md'
     - 'applications/konami/doc/move.md'
     - 'applications/konami/doc/resume.md'
+  - 'Mate':
+    - 'applications/mate/doc/README.md'
   - 'Media Manager':
     - 'applications/media_mgr/doc/README.md'
   - 'Milliwatt':
     - 'applications/milliwatt/doc/README.md'
+  - 'Navi':
+    - 'applications/navi/doc/README.md'
   - 'Notify':
     - 'applications/notify/doc/README.md'
   - 'Omnipresences':

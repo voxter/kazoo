@@ -1,6 +1,6 @@
 docs_dir: 'docs'
 theme: 'mkdocs'
-theme_dir: 'voxter_theme'
+theme_dir: 'theme'
 site_dir: 'site'
 extra_css: []
 site_name: 'Voxter API Documentation'
@@ -62,6 +62,7 @@ pages:
     - 'applications/crossbar/doc/comments.md'
     - 'applications/crossbar/doc/freeswitch.md'
     - 'applications/crossbar/doc/lists.md'
+    - 'applications/crossbar/doc/thumbnail.md'
   - 'PBX Features':
     - 'applications/crossbar/doc/blacklists.md'
     - 'applications/crossbar/doc/callflows.md'
@@ -78,6 +79,7 @@ pages:
     - 'applications/crossbar/doc/menus.md'
     - 'applications/crossbar/doc/metaflows.md'
     - 'applications/crossbar/doc/phone_numbers.md'
+    - 'applications/crossbar/doc/push_notification_subscriptions.md'
     - 'applications/crossbar/doc/recordings.md'
     - 'applications/crossbar/doc/sms.md'
     - 'applications/crossbar/doc/temporal_rules.md'
@@ -141,6 +143,8 @@ pages:
         - 'applications/pivot/doc/kazoo/recording.md'
         - 'applications/pivot/doc/kazoo/say.md'
         - 'applications/pivot/doc/twiml/README.md'
+    - 'Tray.io':
+      - 'applications/crossbar/doc/tray.md'
     - 'Known_Issues':
       - 'applications/pivot/doc/issues.md'
   - 'Callflows':
@@ -211,6 +215,8 @@ pages:
       - 'Agents': 'applications/callflow/doc/acdc_agent.md'
       - 'Queue Login': 'applications/callflow/doc/acdc_queue.md'
       - 'Member Entry': 'applications/callflow/doc/acdc_member.md'
+      - 'Average Wait Time': 'applications/callflow/doc/acdc_wait_time.md'
+      - 'Required Skills': 'applications/callflow/doc/acdc_required_skills.md'
     - 'Play Media': 'applications/callflow/doc/play.md'
     - 'Menu (IVR)': 'applications/callflow/doc/menu.md'
     - 'Custom Webhook': 'applications/callflow/doc/webhook.md'

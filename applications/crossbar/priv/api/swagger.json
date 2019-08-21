@@ -3396,7 +3396,7 @@
                 },
                 "extra_metadata": {
                     "default": [],
-                    "description": "",
+                    "description": "Additional custom metadata to include in the recording metadata",
                     "type": "array"
                 },
                 "format": {

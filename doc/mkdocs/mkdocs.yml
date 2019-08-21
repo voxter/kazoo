@@ -50,8 +50,13 @@ pages:
     - 'applications/crossbar/doc/media.md'
   - 'Misc':
     - 'applications/crossbar/doc/comments.md'
+    - 'applications/crossbar/doc/hero.md'
+    - 'applications/crossbar/doc/hero_preferences.md'
     - 'applications/crossbar/doc/freeswitch.md'
+    - 'applications/crossbar/doc/kudos.md'
     - 'applications/crossbar/doc/lists.md'
+    - 'applications/crossbar/doc/mattermost.md'
+    - 'applications/crossbar/doc/thumbnail.md'
   - 'PBX Features':
     - 'applications/crossbar/doc/blacklists.md'
     - 'applications/crossbar/doc/callflows.md'
@@ -68,6 +73,7 @@ pages:
     - 'applications/crossbar/doc/menus.md'
     - 'applications/crossbar/doc/metaflows.md'
     - 'applications/crossbar/doc/phone_numbers.md'
+    - 'applications/crossbar/doc/push_notification_subscriptions.md'
     - 'applications/crossbar/doc/quickcall.md'
     - 'applications/crossbar/doc/recordings.md'
     - 'applications/crossbar/doc/sms.md'
@@ -136,6 +142,8 @@ pages:
     - 'Presentations':
       - 'doc/kazoocon/pivot2014.md'
       - 'doc/kazoocon/pivot2016.md'
+    - 'Tray.io':
+      - 'applications/crossbar/doc/tray.md'
     - 'Known_Issues':
       - 'applications/pivot/doc/issues.md'
   - 'Websockets':
@@ -252,6 +260,7 @@ pages:
         - 'Queue Login': 'applications/callflow/doc/acdc_queue.md'
         - 'Member Entry': 'applications/callflow/doc/acdc_member.md'
         - 'Average Wait Time': 'applications/callflow/doc/acdc_wait_time.md'
+        - 'Required Skills': 'applications/callflow/doc/acdc_required_skills.md'
     - 'Menu (IVR)': 'applications/callflow/doc/menu.md'
     - 'Custom Webhook': 'applications/callflow/doc/webhook.md'
     - 'Channel Move': 'applications/callflow/doc/move.md'
@@ -317,10 +326,14 @@ pages:
       - 'applications/konami/doc/sound_touch.md'
       - 'applications/konami/doc/transfer.md'
       - 'applications/konami/doc/tts.md'
+  - 'Mate':
+    - 'applications/mate/doc/README.md'
   - 'Media Manager':
     - 'applications/media_mgr/doc/README.md'
   - 'Milliwatt':
     - 'applications/milliwatt/doc/README.md'
+  - 'Navi':
+    - 'applications/navi/doc/README.md'
   - 'Notify':
     - 'applications/notify/doc/README.md'
   - 'Omnipresences':
