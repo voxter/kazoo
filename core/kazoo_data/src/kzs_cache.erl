@@ -324,6 +324,8 @@ flush_cache_doc(#db{name=Name}, Doc, Options) ->
     flush_cache_doc(kz_term:to_binary(Name), Doc, Options);
 flush_cache_doc(DbName, DocId, _Options) when is_binary(DocId) ->
     kz_cache:erase_local(?CACHE_NAME, ?CACHE_KEY(DbName, DocId));
+flush_cache_doc(DbName, 'undefined', _) ->
+    lager:debug("not flushing doc in ~s with undefined id", [DbName]);
 flush_cache_doc(DbName, Doc, Options) ->
     flush_cache_doc(DbName, kz_doc:id(Doc), Options).
 
