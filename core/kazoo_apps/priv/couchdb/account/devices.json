@@ -26,7 +26,8 @@
                 "    'device_type': doc.device_type || 'sip_device',",
                 "    'mobile': doc.mobile,",
                 "    'call_recording': doc.call_recording,",
-                "    'contact_list': doc.contact_list",
+                "    'contact_list': doc.contact_list,",
+                "    'flags': doc.flags || []",
                 "  });",
                 "}"
             ]

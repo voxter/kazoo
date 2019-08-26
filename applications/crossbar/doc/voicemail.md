@@ -23,6 +23,8 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `check_if_owner` | Determines if when the user calls their own voicemail they should be prompted to sign in | `boolean()` | `true` | `false` | `supported`
 `delete_after_notify` | Move the voicemail to delete folder after the notification has been sent | `boolean()` | `false` | `false` | `supported`
+`flags.[]` |   | `string()` |   | `false` | `supported`
+`flags` | Flags set by external applications | `array(string())` |   | `false` | `supported`
 `hunt` | Determines if the callers can dial internal extensions directly instead of leaving a message | `boolean()` | `true` | `false` |  
 `hunt_allow` | A regular expression that an extension the caller dialed must match to be allowed to continue | `string(1..256)` |   | `false` |  
 `hunt_deny` | A regular expression that if matched does not allow the caller to dial directly | `string(1..256)` |   | `false` |  
@@ -39,7 +41,7 @@ Key | Description | Type | Default | Required | Support Level
 `notify_email_addresses` | List of email addresses to send notifications to (in addition to owner's email, if any) | `array(string())` | `[]` | `false` | `supported`
 `oldest_message_first` | Play older voicemail messages before new ones | `boolean()` | `false` | `false` | `supported`
 `owner_id` | The ID of the user object that 'owns' the voicemail box | `string(32)` |   | `false` | `supported`
-`pin` | The pin number for the voicemail box | `string(4..15)` |   | `false` | `supported`
+`pin` | The pin number for the voicemail box | `string(4..6)` |   | `false` | `supported`
 `require_pin` | Determines if a pin is required to check the voicemail from the users devices | `boolean()` | `false` | `false` | `supported`
 `save_after_notify` | Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify) | `boolean()` | `false` | `false` | `supported`
 `skip_envelope` | Determines if the envelope should be skipped | `boolean()` | `false` | `false` | `beta`

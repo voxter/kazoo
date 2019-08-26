@@ -19,6 +19,7 @@
 -export([do_not_disturb/1, do_not_disturb/2, set_do_not_disturb/2]).
 -export([do_not_disturb_enabled/1, do_not_disturb_enabled/2, set_do_not_disturb_enabled/2]).
 -export([enabled/1, enabled/2, set_enabled/2]).
+-export([flags/1, flags/2, set_flags/2]).
 -export([formatters/1, formatters/2, set_formatters/2]).
 -export([language/1, language/2, set_language/2]).
 -export([metaflows/1, metaflows/2, set_metaflows/2]).
@@ -274,6 +275,18 @@ enabled(Doc, Default) ->
 -spec set_enabled(doc(), boolean()) -> doc().
 set_enabled(Doc, Enabled) ->
     kz_json:set_value([<<"enabled">>], Enabled, Doc).
+
+-spec flags(doc()) -> kz_term:api_ne_binaries().
+flags(Doc) ->
+    flags(Doc, 'undefined').
+
+-spec flags(doc(), Default) -> kz_term:ne_binaries() | Default.
+flags(Doc, Default) ->
+    kz_json:get_list_value([<<"flags">>], Doc, Default).
+
+-spec set_flags(doc(), kz_term:ne_binaries()) -> doc().
+set_flags(Doc, Flags) ->
+    kz_json:set_value([<<"flags">>], Flags, Doc).
 
 -spec formatters(doc()) -> kz_term:api_object().
 formatters(Doc) ->
@@ -731,8 +744,8 @@ fetch(AccountId, 'accounts') ->
                             {'ok', doc()} |
                             kz_datamgr:data_error().
 open_cache_doc(Db, AccountId) ->
-    Options = [{'cache_failures','false'}
-              ,{'deleted','true'}
+    Options = [{'cache_failures', 'false'}
+              ,{'deleted', 'true'}
               ],
     kz_datamgr:open_cache_doc(Db, AccountId, Options).
 
@@ -1237,8 +1250,11 @@ save_accounts_doc(AccountDoc) ->
 -spec handle_saved_accounts_doc(doc(), kz_datamgr:data_error() | {'ok', doc()}) ->
                                        kz_datamgr:data_error() | {'ok', doc()}.
 handle_saved_accounts_doc(AccountDoc, {'ok', _}) ->
+    lager:debug("saved account ~s(~s)", [kz_doc:id(AccountDoc), kz_doc:revision(AccountDoc)]),
     {'ok', AccountDoc};
-handle_saved_accounts_doc(_, Error) -> Error.
+handle_saved_accounts_doc(_AccountDoc, Error) ->
+    lager:debug("failed to save 'accounts' doc ~s: ~p", [kz_doc:id(_AccountDoc), Error]),
+    Error.
 
 -spec update(kz_term:ne_binary(), kz_json:flat_proplist()) ->
                     {'ok', doc()} |
@@ -1253,8 +1269,10 @@ update(?NE_BINARY = Account, UpdateProps) ->
 
     case kz_datamgr:update_doc(AccountDb, AccountId, UpdateOptions) of
         {'error', _}=E -> E;
-        {'ok', _} ->
-            kz_datamgr:update_doc(?KZ_ACCOUNTS_DB, AccountId, UpdateOptions)
+        {'ok', AccountDoc} ->
+            handle_saved_accounts_doc(AccountDoc
+                                     ,kz_datamgr:update_doc(?KZ_ACCOUNTS_DB, AccountId, UpdateOptions)
+                                     )
     end.
 
 %% @equiv is_in_account_hierarchy(CheckFor, InAccount, false)
