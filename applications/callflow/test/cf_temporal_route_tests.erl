@@ -23,8 +23,10 @@
                       ,<<"saturday">>
                       ,<<"sunday">>
                       ]).
--define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">>
-                ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">>
+-define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">> % 1
+                ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">> % 2
+                ,<<"6e2768e22a4e557a232f7de1bb30163c">> % 3 WEEKLY_RULE
+                ,<<"c11bb205c5841afda95cdecd3a848dec">> % 4 YEARLY_RULE
                 ]).
 -define(ROUTE_NO(No), lists:nth(No, ?ROUTES)).
 -define(TIMEZONE, <<"America/Los_Angeles">>).
@@ -46,6 +48,35 @@
 -define(OCT, 10).
 -define(NOV, 11).
 -define(DEC, 12).
+
+-define(WEEKLY_RULE, #rule{id=?ROUTE_NO(3)
+                          ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
+                          ,enabled='true'
+                          ,cycle= <<"weekly">>
+                          ,name= <<"Weekly Rule">>
+                          ,ordinal= <<"every">>
+                          ,wdays=[<<"monday">>, <<"tuesday">>, <<"wensday">>, <<"thursday">>, <<"friday">>]
+                          ,interval=1
+                          ,wtime_start=?ELEVEN_AM_START
+                          ,wtime_stop=?FIVE_PM_STOP
+                          }).
+
+-define(YEARLY_RULE, #rule{id=?ROUTE_NO(4)
+                          ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
+                          ,cycle= <<"yearly">>
+                          ,name= <<"Yearly Rule">>
+                          ,interval=1
+                          ,wtime_start=?NINE_AM_START
+                          ,wtime_stop=?FIVE_PM_STOP
+                          ,ordinal= <<"every">>
+                          ,month=?MAY
+                          ,days=[6]
+                          }).
+
+-define(TEMPORAL, #temporal{
+                     local_sec=63629753600
+                    ,local_date={2016, 5, 6}
+                    }).
 
 -ifdef(PROPER).
 proper_test_() ->
@@ -122,6 +153,11 @@ get_temporal_rules() ->
           ,wtime_start=?NINE_AM_START
           ,wtime_stop=?FIVE_PM_STOP
           }
+    ].
+
+update_candidates_test_ () ->
+    [
+     ?_assertEqual(?ROUTE_NO(4), cf_temporal_route:update_candidates(?TEMPORAL, [?WEEKLY_RULE, ?YEARLY_RULE], kapps_call:new(), []))
     ].
 
 daily_recurrence_test_() ->

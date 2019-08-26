@@ -31,6 +31,7 @@
         ,sort_by_occurrence_rate/1
         ,next_rule_date/2
         ,sort_wdays/1
+        ,update_candidates/4
         ]).
 -endif.
 
@@ -131,13 +132,16 @@ remove_unforced_rules(Rules) ->
                                'default' | binary().
 update_candidates(T, Rules, Call, []) ->
     replace_candidates(T, Rules, Call, []);
-update_candidates(#temporal{local_date={Y, M, D}}=T
+update_candidates(T
                  ,[#rule{name=Name}=Rule|Rules]
                  ,Call
                  ,[Candidate|_]=Candidates) ->
-    PrevDay = kz_date:normalize({Y, M, D - 1}),
-    CandidateDay = next_rule_date(Candidate, PrevDay),
-    case next_rule_date(Rule, PrevDay) of
+    CandidateSearchDate = find_rule_search_date(T, Candidate),
+    RuleSearchDate = find_rule_search_date(T, Rule),
+
+    CandidateDay = next_rule_date(Candidate, CandidateSearchDate),
+
+    case next_rule_date(Rule, RuleSearchDate) of
         CandidateDay ->
             lager:info("including rule ~s in candidates", [Name]),
             replace_candidates(T, [Rule|Rules], Call, Candidates);
@@ -148,11 +152,8 @@ update_candidates(#temporal{local_date={Y, M, D}}=T
 
 -spec replace_candidates(temporal(), rules(), kapps_call:call(), rules()) ->
                                 'default' | binary().
-replace_candidates(#temporal{local_sec=LSec
-                            ,local_date={Y, M, D}
-                            }=T
-                  ,[#rule{cycle=Cycle
-                         ,id=Id
+replace_candidates(#temporal{local_sec=LSec}=T
+                  ,[#rule{id=Id
                          ,name=Name
                          ,wtime_start=TStart
                          ,wtime_stop=TStop
@@ -164,14 +165,7 @@ replace_candidates(#temporal{local_sec=LSec
                   ) ->
     lager:info("processing temporal rule ~s (~s)", [Id, Name]),
 
-    %% Weekly logic becomes convoluted when prev date is passed for SearchDate.
-    %% This creates lots of edge cases so pass today in weekly only.
-    SearchDate = case Cycle of
-                     <<"weekly">> ->
-                         {Y, M, D};
-                     _ ->
-                         kz_date:normalize({Y, M, D - 1})
-                 end,
+    SearchDate = find_rule_search_date(T, Rule),
     BaseDate = kz_date:normalize(
                  next_rule_date(Rule, SearchDate)
                 ),
@@ -188,6 +182,19 @@ replace_candidates(#temporal{local_sec=LSec
             lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
             process_rules(T, Rules, Call, [Rule|Candidates])
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Normalizing finding the search date for a rule.
+%% Weekly logic becomes convoluted when prev date is passed for SearchDate.
+%% This creates lots of edge cases so pass today in weekly only.
+%% @end
+%%------------------------------------------------------------------------------
+-spec find_rule_search_date(temporal(), rule()) -> binary().
+find_rule_search_date(#temporal{local_date={Y, M, D}}
+                     ,#rule{cycle= <<"weekly">>}
+                     ) -> {Y, M, D};
+find_rule_search_date(#temporal{local_date={Y, M, D}}, _) -> kz_date:normalize({Y, M, D - 1}).
+
 
 %%------------------------------------------------------------------------------
 %% @doc Number of seconds per year that a rule is applicable
