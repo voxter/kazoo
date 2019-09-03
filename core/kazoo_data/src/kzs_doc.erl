@@ -58,6 +58,9 @@ save_doc(#{server := {App, Conn}}, DbName, Doc, Options) ->
             kzs_publish:maybe_publish_doc(DbName, PublishDoc, JObj),
             update_cache(DbName, kz_doc:id(JObj), JObj, kz_doc:is_deleted(JObj)),
             Ok;
+        {'error', 'conflict'}=Error ->
+            kzs_cache:flush_cache_doc(DbName, kz_doc:id(PreparedDoc)),
+            Error;
         Else -> Else
     catch
         Ex:Er ->

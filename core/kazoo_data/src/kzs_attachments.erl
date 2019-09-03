@@ -188,6 +188,7 @@ handle_put_attachment(#{server := {App, Conn}}=Map, _Att, DbName, DocId, AName, 
     case App:put_attachment(Conn, DbName, DocId, AName, Contents, Options) of
         {'ok', _}=Result ->
             publish_doc(Map, DbName, DocId),
+            kzs_cache:flush_cache_doc(DbName, DocId),
             Result;
         Result -> Result
     end.
@@ -209,6 +210,7 @@ delete_attachment(#{server := {App, Conn}}=Map, DbName, DocId, AName, Options) -
     case App:delete_attachment(Conn, DbName, DocId, AName, Options) of
         {'ok', _}=Result ->
             publish_doc(Map, DbName, DocId),
+            kzs_cache:flush_cache_doc(DbName, DocId),
             Result;
         Result -> Result
     end.

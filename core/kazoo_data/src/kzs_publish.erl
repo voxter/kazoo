@@ -47,8 +47,7 @@ maybe_publish_doc(Db, Doc, JObj) ->
         andalso should_publish_db_changes(Db)
         andalso should_publish_doc(Doc)
         andalso kz_util:spawn(fun publish_doc/3, [Db, Doc, JObj]),
-    lager:debug("maybe publishing db/doc change: ~p", [_PidOrNot]),
-    kzs_cache:flush_cache_doc(Db, Doc).
+    lager:debug("maybe publishing db/doc change: ~p", [_PidOrNot]).
 -endif.
 
 -spec publish_db(kz_term:ne_binary(), kapi_conf:action()) -> boolean().

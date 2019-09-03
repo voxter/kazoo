@@ -94,6 +94,8 @@ fetch_doc(DbName, DocId, Options, CacheStrategy) ->
 
 -spec maybe_cache(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), data_error() | {'ok', kz_json:object()}, cache_strategy()) ->
                          'ok'.
+maybe_cache(DbName, DocId, _Options, {'error', 'conflict'}, _CacheStrategy) ->
+    flush_cache_doc(DbName, DocId);
 maybe_cache(DbName, DocId, Options, {'error', _}=E, CacheStrategy) ->
     maybe_cache_failure(DbName, DocId, Options, E, CacheStrategy);
 maybe_cache(DbName, DocId, _, {'ok', JObj}, CacheStrategy) ->
@@ -324,8 +326,6 @@ flush_cache_doc(#db{name=Name}, Doc, Options) ->
     flush_cache_doc(kz_term:to_binary(Name), Doc, Options);
 flush_cache_doc(DbName, DocId, _Options) when is_binary(DocId) ->
     kz_cache:erase_local(?CACHE_NAME, ?CACHE_KEY(DbName, DocId));
-flush_cache_doc(DbName, 'undefined', _) ->
-    lager:debug("not flushing doc in ~s with undefined id", [DbName]);
 flush_cache_doc(DbName, Doc, Options) ->
     flush_cache_doc(DbName, kz_doc:id(Doc), Options).
 
