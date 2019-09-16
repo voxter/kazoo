@@ -13897,6 +13897,9 @@
                 "Custom-Channel-Vars": {
                     "type": "object"
                 },
+                "Disposition": {
+                    "type": "string"
+                },
                 "Error-Message": {
                     "type": "string"
                 },
@@ -13910,6 +13913,12 @@
                     "enum": [
                         "dialplan"
                     ],
+                    "type": "string"
+                },
+                "Hangup-Cause": {
+                    "type": "string"
+                },
+                "Hangup-Code": {
                     "type": "string"
                 },
                 "Request": {
