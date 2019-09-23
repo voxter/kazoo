@@ -7,9 +7,7 @@
 -module(kz_postgresql_util).
 -include("kz_postgresql.hrl").
 
--export([format_error/1
-        ,server_info/1
-        ,ensure_deleted_is_set/2
+-export([server_info/1
         ,decode_query_value/2
         ,encode_query_value/2
         ,simulate_couch_doc_revision/1, simulate_couch_doc_revision/2
@@ -17,14 +15,6 @@
         ,couch_rev_to_postgresql_rev/1
         ,depluralize_table_name/1
         ]).
-
-%%------------------------------------------------------------------------------
-%% @doc Convert postgresql error response
-%% @end
-%%------------------------------------------------------------------------------
--spec format_error({'error', any()}) -> {'error', any()}.
-format_error(Error) ->
-    Error.
 
 %%------------------------------------------------------------------------------
 %% @doc Query the PostgreSQL server for version info
@@ -48,16 +38,6 @@ server_info(ConnPool) ->
 -spec hex_to_binary(list()) -> kz_term:ne_binary().
 hex_to_binary(HexList) ->
     list_to_binary([io_lib:format("~2.16.0B",[X]) || <<X:8>> <= HexList]).
-
-%%------------------------------------------------------------------------------
-%% @doc For JObj or JObjs, ensure the _deleted key is set to value
-%% @end
-%%------------------------------------------------------------------------------
--spec ensure_deleted_is_set(kz_json:object() | kz_json:objects(), boolean()) -> kz_json:object() | kz_json:objects().
-ensure_deleted_is_set(JObjs, Value) when is_list(JObjs)  ->
-    [ensure_deleted_is_set(JObj, Value) || JObj <- JObjs];
-ensure_deleted_is_set(JObj, Value) ->
-    kz_doc:set_deleted(JObj, Value).
 
 %%------------------------------------------------------------------------------
 %% @doc Decode postgresql query values to the type defined
@@ -107,7 +87,7 @@ encode_query_value(Unknown, Value) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc For a JObj or list of JObjs, build the doc revision to simulate a couchDB doc revision
+%% @doc For a JObj/Doc or list of JObjs/Docs, build the doc revision to simulate a couchDB doc revision
 %% If the rev is not defined then just return the JObject
 %% @end
 %%------------------------------------------------------------------------------

@@ -12,7 +12,6 @@
         ,save_docs/3, save_docs/4
         ,del_doc/3, del_doc/4
         ,del_docs/3, del_docs/4
-        ,doc_exists/2
         ]).
 
 %%------------------------------------------------------------------------------
@@ -23,8 +22,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec lookup_doc_rev(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary() | kz_data:document()) ->
-                            {'ok', kz_term:ne_binary()} |
-                            epgsql:error_reply().
+                            {'ok', kz_term:ne_binary()} | kz_data:data_error().
 lookup_doc_rev(ConnPool, DbName, DocOrId) ->
     %% Get the relevant postgresql Table name
     lager:debug("looking up doc rev for doc ~p", [DocOrId]),
@@ -37,33 +35,28 @@ lookup_doc_rev(ConnPool, DbName, DocOrId) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc Lookup  couch like doc revision by postgresql table name and doc id
-%% Postgresql query SELECT max(_rev) from doc by TableName and ID
-%% Get the highest revision number for a given doc id.
-%% This will return a rev number even if the doc _deleted = true
+%% @doc Lookup couch like doc revision by postgresql table name and doc id
 %% @end
 %%------------------------------------------------------------------------------
 -spec lookup_doc_rev_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_term:ne_binary()) ->
-                                             {'ok', kz_term:ne_binary()} |
-                                             epgsql:error_reply().
+                                             {'ok', kz_term:ne_binary()} | kz_data:data_error().
 lookup_doc_rev_by_pg_table_name(ConnPool, TableName, DocId) ->
     lager:debug("looking up doc revision for DocId ~p in pg table ~p", [DocId, TableName]),
     Query = #kz_postgresql_query{'select' = [<<"\"",TableName/binary,"\"._id">>
-                                            ,<<"MAX(\"",TableName/binary,"\"._rev) AS _rev">>
+                                            ,<<" \"",TableName/binary,"\"._rev">>
                                             ]
                                 ,'from' = [<<"\"",TableName/binary,"\"">>]
                                 ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
                                                      ,<<"$1">>
                                                      ]
                                            }
-                                ,'group_by' = [<<"\"",TableName/binary,"\"._id">>]
                                 ,'parameters' = [DocId]
                                 },
     Response = kz_postgresql_query:execute_query(ConnPool, Query),
     case kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, Response) of
         {'ok', []} -> {'error', 'not_found'};
         {'ok', JObj} -> {'ok', kz_doc:revision(JObj)};
-        {'error', _}=E -> E
+        {'error', _} = Error -> {'error', kz_postgresql_response:format_error(Error)}
     end.
 
 %%------------------------------------------------------------------------------
@@ -71,287 +64,249 @@ lookup_doc_rev_by_pg_table_name(ConnPool, TableName, DocId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec open_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                      {'ok', kz_json:object()} |
-                      epgsql:error_reply().
+                      {'ok', kz_json:object()} | kz_data:data_error().
 open_doc(ConnPool, DbName, DocId) ->
     open_doc(ConnPool, DbName, DocId, []).
 
 -spec open_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) ->
-                      {'ok', kz_json:object()} |
-                      epgsql:error_reply().
+                      {'ok', kz_json:object()} | kz_data:data_error().
 open_doc(ConnPool, DbName, DocId, Options) ->
     %% Get the relevant postgresql Table name
     case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName, DocId) of
         {'ok', [{TableName, [DocId]}]} ->
-            open_doc_by_pg_table_name(ConnPool, TableName, DocId, Options);
+            open_doc_by_pg_table_name(ConnPool, TableName, DbName, DocId, Options);
         {'error', Cause} = Error ->
             lager:error("failed to lookup the postgresql table name for DbName: ~p, DocId: ~p, Cause: ~p", [DbName, DocId, Cause]),
-            Error
+            {'error', kz_postgresql_response:format_error(Error)}
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Open postgresql row and return json doc when privided with a postgres table name and Doc id
 %% @end
 %%------------------------------------------------------------------------------
--spec open_doc_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_term:ne_binary(), kz_data:options()) ->
-                                       {'ok', kz_json:object()} | epgsql:error_reply().
-open_doc_by_pg_table_name(ConnPool, TableName, DocId, Options) ->
-    Query = #kz_postgresql_query{'select' = [<<"DISTINCT ON (\"",TableName/binary,"\"._id) *">>]
+-spec open_doc_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_term:ne_binary()
+                               ,kz_term:ne_binary(), kz_data:options()) ->
+                                       {'ok', kz_json:object()} | kz_data:data_error().
+open_doc_by_pg_table_name(ConnPool, TableName, DbName, DocId, Options) ->
+    Query = #kz_postgresql_query{'select' = [<<"*">>]
                                 ,'from' = [<<"\"",TableName/binary,"\"">>]
                                 ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",TableName/binary,"\"._id">>
                                                                   ,<<"$1">>
                                                                   ]}
-                                                       ,{<<"=">>, [<<"\"",TableName/binary,"\"._deleted">>
-                                                                  ,<<"false">>
+                                                       ,{<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
+                                                                  ,<<"$2">>
                                                                   ]}
-                                                       ,{<<"=">>, [<<"\"",TableName/binary,"\"._rev">>
-                                                                  ,#kz_postgresql_query{'select' = [<<"MAX(\"",TableName/binary,"\"._rev)">>]
-                                                                                       ,'from' = [<<"\"",TableName/binary,"\"">>]
-                                                                                       ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                                                                            ,<<"$1">>
-                                                                                                            ]}
-                                                                                       }
-                                                                  ]}
-                                                       ]
-                                           }
-                                ,'order_by' = [{<<"\"",TableName/binary,"\"._id">>, <<"DESC">>}
-                                              ,{<<"\"",TableName/binary,"\"._rev">>, <<"DESC">>}
-                                              ]
-                                ,'parameters' = [DocId]
+                                                       ]}
+                                ,'parameters' = [DocId, DbName]
                                 },
     Response = kz_postgresql_query:execute_query(ConnPool, Query, Options),
     kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, Response).
 
 %%------------------------------------------------------------------------------
 %% @doc Save a JSON doc to postgresql table
-%% For doc revision reasons, we house to always INSERT to the Table and
-%% increment the revision number.
-%% For save we ensure the _deleted field of the JObj is set to false
 %% @end
 %%------------------------------------------------------------------------------
 -spec save_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document()) ->
-                      {'ok', kz_json:object()} | epgsql:error_reply().
+                      {'ok', kz_json:object()} | kz_data:data_error().
 save_doc(ConnPool, DbName, Doc) ->
     save_doc(ConnPool, DbName, Doc, []).
 
 -spec save_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
-                      {'ok', kz_json:object()} | epgsql:error_reply().
+                      {'ok', kz_json:object()} | kz_data:data_error().
 save_doc(ConnPool, DbName, Doc, Options) ->
     lager:debug("saving doc ~p (DbName: ~p)", [kz_doc:id(Doc), DbName]),
-    do_save_doc(ConnPool, DbName, Doc, Options, <<"INSERT">>, 'true').
+    {PGResp, TableName} = do_save_doc(ConnPool, DbName, Doc, Options),
+    kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, PGResp).
 
--spec do_save_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options(), kz_term:ne_binary(), boolean()) ->
-                         {'ok', kz_json:object()} | epgsql:error_reply().
-do_save_doc(ConnPool, DbName, Doc, Options, QueryType, DoWithTransactions) ->
-    UpdatedDoc = kz_postgresql_util:ensure_deleted_is_set(Doc, 'false'),
-    case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName, UpdatedDoc) of
+-spec do_save_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
+                         {epgsql:reply(), kz_postgresql:table_name()}.
+do_save_doc(ConnPool, DbName, Doc, Options) ->
+    DocWithDbName = kz_doc:set_account_db(Doc, DbName),
+    case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName, DocWithDbName) of
         {'error', Cause} = Error ->
-            lager:error("failed to find postgresql table for doc, DbName: ~p, Doc: ~p, Cause: ~p", [DbName, UpdatedDoc, Cause]),
-            Error;
+            lager:error("failed to find postgresql table for doc, Doc: ~p, Cause: ~p", [DocWithDbName, Cause]),
+            {Error, 'undefined'};
         {'ok', [{TableName, _}]} ->
-            Response = insert_doc_to_db_by_pg_table_name(ConnPool, DbName, TableName, UpdatedDoc, Options, QueryType, DoWithTransactions),
-            kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, Response)
+            {insert_or_update_doc_by_pg_table_name(ConnPool, TableName, DocWithDbName, Options), TableName}
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Save multiple JSON docs to postgresql table
+%% Expected bulk response:
+%% {ok,[{[{ok,true}
+%%       ,{id,abcdefgh...}
+%%       ,{rev,1-12879c2017cb8f00a16a865dc6f92fe1}]}
+%%     ,{[{id,xyx...}
+%%       ,{error,conflict}
+%%       ,{reason,Document update conflict.}]}]}
 %% @end
 %%------------------------------------------------------------------------------
 -spec save_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents()) ->
-                       {'ok', kz_json:objects()} | epgsql:error_reply().
+                       {'ok', kz_json:objects()} | kz_data:data_error().
 save_docs(ConnPool, DbName, Docs) ->
     save_docs(ConnPool, DbName, Docs, []).
 
-%%------------------------------------------------------------------------------
-%% @doc Save multiple JSON docs to postgresql table
-%% @end
-%%------------------------------------------------------------------------------
 -spec save_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options()) ->
-                       {'ok', kz_json:objects()} | epgsql:error_reply().
+                       {'ok', kz_json:objects()} | kz_data:data_error().
 save_docs(ConnPool, DbName, Docs, Options) ->
-    lager:debug("saving multiple docs (DbName: ~p)", [DbName]),
-    %% Do all insert querys as a pg transaction
-    TransactionFun = fun() ->
-                             save_docs_fold(ConnPool, DbName, Docs, Options, [])
-                     end,
-    case kz_postgresql_query:execute_query_with_transaction(ConnPool, TransactionFun) of
-        {'error', Cause} = Error ->
-            lager:error("failed to save multiple docs to postgresql db, Cause: ~p", [Cause]),
-            Error;
-        {'ok', DocsResp} ->
-            lager:debug("saved multiple docs successfully to postgresql db"),
-            {'ok', DocsResp}
-    end.
+    lager:debug("saving multiple docs (one by one) (DbName: ~p)", [DbName]),
+    save_docs_fold(ConnPool, DbName, Docs, Options, []).
 
-%%------------------------------------------------------------------------------
-%% @doc Save each doc in a list of docs, if there is a error then throw a erlang error.
-%% This function is designed to be run as a postgresql transaction
-%% @end
-%%------------------------------------------------------------------------------
 -spec save_docs_fold(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options(), kz_json:objects()) ->
                             {'ok', kz_json:objects()}.
 save_docs_fold(_ConnPool, _DbName, [], _Options, DocAcc) ->
-    {'ok', lists:reverse(DocAcc)};
+    {'ok', DocAcc};
 save_docs_fold(ConnPool, DbName, [Doc | Docs], Options, DocAcc) ->
-    case do_save_doc(ConnPool, DbName, Doc, Options, <<"INSERT-BULK">>, 'false') of
-        {'error', Cause} ->
-            erlang:error(Cause);
-        {'ok', DocResp} ->
-            save_docs_fold(ConnPool, DbName, Docs, Options, [DocResp | DocAcc])
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc For a given doc id and / or table name, check if the doc exisis and is not set to deleted
-%% @end
-%%------------------------------------------------------------------------------
--spec doc_exists(kz_postgresql:connection_pool(), {kz_term:ne_binary(), kz_postgresql:table_name()} | kz_term:ne_binary()) -> boolean().
-doc_exists(ConnPool, {DocId, TableName}) ->
-    case open_doc_by_pg_table_name(ConnPool, TableName, DocId, []) of
-        {'error', 'not_found'} -> 'false';
-        {'ok', _Doc} -> 'true';
-        {'error', _}=Error ->
-            lager:error("failed to check if doc (~p) in PG table ~p exists Error: ~p", [DocId, TableName, Error]),
-            'false'
-    end;
-doc_exists(ConnPool, DocId) ->
-    case open_doc(ConnPool, DocId, []) of
-        {'error', 'not_found'} -> 'false';
-        {'ok', _Doc} -> 'true';
-        {'error', _}=Error ->
-            lager:error("failed to check if doc (~p) exists Error: ~p", [DocId, Error]),
-            'false'
-    end.
+    {PgResp, _TableName} = do_save_doc(ConnPool, DbName, Doc, Options),
+    DocResp = kz_postgresql_response:parse_response_to_bulk_response_doc(kz_doc:id(Doc), PgResp),
+    save_docs_fold(ConnPool, DbName, Docs, Options, [DocResp | DocAcc]).
 
 %%------------------------------------------------------------------------------
 %% @doc Delete JSON Doc from the PostgreSQL table
-%% For doc revision reasons, we choose to always INSERT to the Table and
-%% increment the revision number.
-%% For delete we ensure the _deleted field of the JObj is set to true
 %% @end
 %%------------------------------------------------------------------------------
 -spec del_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document()) ->
-                     {'ok', kz_json:object()} | epgsql:error_reply().
+                     {'ok', kz_json:object()} | kz_data:data_error().
 del_doc(ConnPool, DbName, Doc) ->
     del_doc(ConnPool, DbName, Doc, []).
 
 -spec del_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
-                     {'ok', kz_json:object()} | epgsql:error_reply().
+                     {'ok', kz_json:object()} | kz_data:data_error().
 del_doc(ConnPool, DbName, Doc, Options) ->
     lager:debug("deleting doc ~p (DbName: ~p)", [kz_doc:id(Doc), DbName]),
-    do_del_doc(ConnPool, DbName, Doc, Options, <<"INSERT">>, 'true').
+    {PgResp, TableName} = do_del_doc(ConnPool, DbName, Doc, Options),
+    kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, PgResp).
 
--spec do_del_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options(), kz_tern:ne_binay(), boolean()) ->
-                        {'ok', kz_json:object()} | epgsql:error_reply().
-do_del_doc(ConnPool, DbName, Doc, Options, QueryType, DoWithTransactions) ->
-    %% We have the overhaed of checking if the doc exists before deleting it
-    case open_doc(ConnPool, DbName, kz_doc:id(Doc), Options) of
-        {'error', _}=Error ->
-            lager:error("failed to delete doc, Doc not found in DB"),
-            Error;
-        {'ok', OpenedDoc} ->
-            {'ok', [{TableName, _}]} = kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName, OpenedDoc),
-            UpdatedDoc = kz_postgresql_util:ensure_deleted_is_set(Doc, 'true'),
-            Response = insert_doc_to_db_by_pg_table_name(ConnPool, DbName, TableName, UpdatedDoc, Options, QueryType, DoWithTransactions),
-            kz_postgresql_response:parse_response_to_doc(ConnPool, TableName, Response)
+-spec do_del_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
+                        {epgsql:reply(), kz_postgresql:table_name()}.
+do_del_doc(ConnPool, DbName,  Doc, Options) ->
+    DocWithDbName = kz_doc:set_account_db(Doc, DbName),
+    case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName, DocWithDbName) of
+        {'error', Cause} = Error ->
+            lager:error("failed to find postgresql table for doc, DbName: ~p, Doc: ~p, Cause: ~p", [DbName, DocWithDbName, Cause]),
+            {Error, 'undefined'};
+        {'ok', [{TableName, _}]} ->
+            {delete_doc_by_pg_table_name(ConnPool, TableName, DocWithDbName, Options), TableName}
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Delete multiple JSON docs in the postgresql table
-%% Note, this will insert a row with _deleted = true, No row will be deleted
-%% Expected response {'ok', JObjs}
+%% Expected bulk response:
+%% {ok,[{[{ok,true}
+%%       ,{id,abcdefgh...}
+%%       ,{rev,1-12879c2017cb8f00a16a865dc6f92fe1}]}
+%%     ,{[{id,xyx...}
+%%       ,{error,conflict}
+%%       ,{reason,Document update conflict.}]}]}
 %% @end
 %%------------------------------------------------------------------------------
 -spec del_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents()) ->
-                      {'ok', kz_json:objects()} |
-                      epgsql:error_reply().
-del_docs(ConnPool, TableName, Docs) ->
-    del_doc(ConnPool, TableName, Docs, []).
+                      {'ok', kz_json:objects()}.
+del_docs(ConnPool, DbName, Docs) ->
+    del_docs(ConnPool, DbName, Docs, []).
 
 -spec del_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options()) ->
-                      {'ok', kz_json:objects()} |
-                      epgsql:error_reply().
+                      {'ok', kz_json:objects()}.
 del_docs(ConnPool, DbName, Docs, Options) ->
-    lager:debug("deleting multiple docs (DbName: ~p)", [DbName]),
-    %% Do all querys as a pg transaction
-    TransactionFun = fun() ->
-                             del_docs_fold(ConnPool, DbName, Docs, Options, [])
-                     end,
-    case kz_postgresql_query:execute_query_with_transaction(ConnPool, TransactionFun) of
-        {'error', Reason} = Error ->
-            lager:error("failed to delete multiple docs in the postgresql db, Reason: ~p", [Reason]),
-            Error;
-        {'ok', _DeletedDocs} = OkResp -> OkResp
-    end.
+    lager:debug("deleting multiple docs (one by one) (DbName: ~p)", [DbName]),
+    del_docs_fold(ConnPool, DbName, Docs, Options, []).
 
-%%------------------------------------------------------------------------------
-%% @doc Delete each doc in a list of docs
-%% This function is designed to be run as a postgresql transaction
-%% @end
-%%------------------------------------------------------------------------------
--spec del_docs_fold(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options(), kz_json:objects())->
+-spec del_docs_fold(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options(), kz_json:objects()) ->
                            {'ok', kz_json:objects()}.
 del_docs_fold(_ConnPool, _DbName, [], _Options, DocAcc) ->
-    {'ok', lists:reverse(DocAcc)};
+    {'ok', DocAcc};
 del_docs_fold(ConnPool, DbName, [Doc | Docs], Options, DocAcc) ->
-    case do_del_doc(ConnPool, DbName, Doc, Options, <<"INSERT-BULK">>, 'false') of
-        {'error', _Cause} = Error ->
-            erlang:error(Error);
-        {'ok', DocResp} ->
-            del_docs_fold(ConnPool, DbName, Docs, Options, [DocResp | DocAcc])
-    end.
+    {PgResp, _TableName} = do_del_doc(ConnPool, DbName, Doc, Options),
+    DocResp = kz_postgresql_response:parse_response_to_bulk_response_doc(kz_doc:id(Doc), PgResp),
+    del_docs_fold(ConnPool, DbName, Docs, Options, [DocResp | DocAcc]).
 
 %%------------------------------------------------------------------------------
-%% @doc Insert a JSON doc to postgresql table with a postgresql TableName and Doc
-%% For doc revision reasons, we chouse to always INSERT to the Table and
-%% increment the revision number.
-%% For save we ensure the _deleted field of the JObj is set to false
-%% For delete we ensure the _deleted field of the JObj is set to true
-%% DoWithTransactions should be set to true unless you are wrapping this function in a transaction
+%% @doc INSERT or UPDATE Query
+%% For a given PG table name and doc, either INSERT or UPDATE the row in the PG DB
+%% If the doc exists in the lookup table then UPDATE else INSERT
 %% @end
 %%------------------------------------------------------------------------------
--spec insert_doc_to_db_by_pg_table_name(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_postgresql:table_name()
-                                       ,kz_data:document(), kz_data:options(), kz_term:ne_binary(), boolean()) ->
-                                               epgsql:reply().
-insert_doc_to_db_by_pg_table_name(ConnPool, DbName, TableName, Doc, Options, QueryType, DoWithTransactions) ->
-    lager:debug("inserting doc ~p into pg table: ~p", [kz_doc:id(Doc), TableName]),
-    %% Set / Update the doc revision
-    case get_next_postgresql_doc_revision(ConnPool, DbName, Doc) of
-        {'error', Cause} = Error ->
-            lager:error("failed to calcualte the doc revision, Cause: ~p", [Cause]),
-            Error;
-        {'ok', Rev} ->
-            insert_doc_to_db_by_pg_table_name(ConnPool, DbName, TableName, Doc, Options, QueryType, DoWithTransactions, Rev)
+-spec insert_or_update_doc_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_data:document(), kz_data:options()) ->
+                                                   epgsql:reply().
+insert_or_update_doc_by_pg_table_name(ConnPool, TableName, Doc, Options) ->
+    case doc_exists(ConnPool, Doc) of
+        'false' ->
+            lager:debug("doc ~p dose not exists in pg, selecting INSERT query", [kz_doc:id(Doc)]),
+            do_insert_or_update_doc_by_pg_table_name(ConnPool, <<"INSERT">>, TableName, Doc, Options);
+        'true' ->
+            lager:debug("doc ~p exists in pg, selecting UPDATE query", [kz_doc:id(Doc)]),
+            do_insert_or_update_doc_by_pg_table_name(ConnPool, <<"UPDATE">>, TableName, Doc, Options);
+        {'error', _} = E -> E
     end.
 
--spec insert_doc_to_db_by_pg_table_name(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_postgresql:table_name()
-                                       ,kz_data:document(), kz_data:options(), kz_term:ne_binary(), boolean(), integer()) ->
-                                               epgsql:reply().
-insert_doc_to_db_by_pg_table_name(ConnPool, DbName, TableName, Doc, Options, QueryType, DoWithTransactions, 1) ->
+-spec do_insert_or_update_doc_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:query_operator(), kz_postgresql:table_name()
+                                              ,kz_data:document(), kz_data:options()) ->
+                                                      epgsql:reply().
+do_insert_or_update_doc_by_pg_table_name(ConnPool, QueryType, TableName, Doc, Options) ->
     {Query, ColumnAndTypeList} = kz_postgresql_query:generate_query(ConnPool, TableName, QueryType),
-    DocWithRev = kz_doc:set_revision(Doc, 1),
-    QueryWithParametersDoc = Query#kz_postgresql_query{'parameters' = doc_to_query_parameters(DocWithRev
-                                                                                             ,TableName
-                                                                                             ,ColumnAndTypeList)},
-    case DoWithTransactions of
-        'false' ->
-            %% Run the 2 queries separately
-            insert_entry_into_lookup_table(ConnPool, DbName, TableName, kz_doc:id(Doc)),
-            kz_postgresql_query:execute_query(ConnPool, QueryWithParametersDoc, Options);
-        'true' ->
-            %% Exec both querys in a transaction
-            TransactionFun = fun() ->
-                                     insert_entry_into_lookup_table(ConnPool, DbName, TableName, kz_doc:id(Doc)),
-                                     kz_postgresql_query:execute_query(ConnPool, QueryWithParametersDoc, Options)
-                             end,
-            kz_postgresql_query:execute_query_with_transaction(ConnPool, TransactionFun)
-    end;
-insert_doc_to_db_by_pg_table_name(ConnPool, _DbName, TableName, Doc, Options, QueryType, _DoWithTransactions, Rev) ->
-    {Query, ColumnAndTypeList} = kz_postgresql_query:generate_query(ConnPool, TableName, QueryType),
-    DocWithRev = kz_doc:set_revision(Doc, Rev),
-    QueryWithParametersDoc = Query#kz_postgresql_query{'parameters' = doc_to_query_parameters(DocWithRev
+    QueryWithParametersDoc = Query#kz_postgresql_query{'parameters' = doc_to_query_parameters(Doc
                                                                                              ,TableName
                                                                                              ,ColumnAndTypeList)},
     kz_postgresql_query:execute_query(ConnPool, QueryWithParametersDoc, Options).
+
+%%------------------------------------------------------------------------------
+%% @doc DELETE PG QUERY
+%% DELETE a JSON doc from a postgresql table
+%% @end
+%%------------------------------------------------------------------------------
+-spec delete_doc_by_pg_table_name(kz_postgresql:connection_pool(), kz_postgresql:table_name() ,kz_data:document(), kz_data:options()) ->
+                                         epgsql:reply().
+delete_doc_by_pg_table_name(ConnPool, TableName, Doc, Options) ->
+    lager:debug("delete doc ~p from pg table: ~p", [kz_doc:id(Doc), TableName]),
+    Query = #kz_postgresql_query{'delete_from' = <<"\"",TableName/binary,"\"">>
+                                ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",TableName/binary,"\"._id">>
+                                                                  ,<<"$1">>
+                                                                  ]
+                                                        }
+                                                       ,{<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
+                                                                  ,<<"$2">>
+                                                                  ]
+                                                        }]
+                                           }
+                                ,'returning' = [<<"*">>]
+                                ,'parameters' = [kz_doc:id(Doc), kz_doc:account_db(Doc)]
+                                },
+    case kz_postgresql_query:execute_query(ConnPool, Query, Options) of
+        {'error', _} = Error -> Error;
+        OkResp -> OkResp
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc For a given couch like db name and doc id
+%% Return true if the doc exists in the lookup table, else false
+%% NOTE This dose not check the contents of the archived table
+%% @end
+%%------------------------------------------------------------------------------
+-spec doc_exists(kz_postgresql:connection_pool(), kz_doc:object()) -> boolean() | epgsql:error_reply().
+doc_exists(ConnPool, Doc) ->
+    Query = #kz_postgresql_query{'select' = [<<"1">>]
+                                ,'from' = [<<"\"lookup\"">>]
+                                ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"lookup\".doc_id">>
+                                                                  ,<<"$1">>
+                                                                  ]}
+                                                       ,{<<"=">>, [<<"\"lookup\".db_name">>
+                                                                  ,<<"$2">>
+                                                                  ]}
+                                                       ]
+                                           }
+                                ,'parameters' = [kz_doc:id(Doc)
+                                                ,kz_doc:account_db(Doc)
+                                                ]
+                                },
+    case kz_postgresql_query:execute_query(ConnPool, Query) of
+        {'ok', _, []} -> 'false';
+        {'ok', _, [_]} -> 'true';
+        {'error', _} = Error ->
+            lager:error("postgresql error when verifing if doc (ID: ~p, DbName: ~p) exists in lookup table, Error: ~p", [kz_doc:id(Doc)
+                                                                                                                        ,kz_doc:account_db(Doc)
+                                                                                                                        ,Error]),
+            Error
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate an order defined list of parameters from a kz_data doc
@@ -391,55 +346,3 @@ doc_to_query_parameters(Doc, TableName, [{ColName, ColType}|Columns], Acc) ->
             Doc1 = kz_json:delete_key(KeyPath, Doc),
             doc_to_query_parameters(Doc1, TableName, Columns, Acc1)
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc For every doc there must be a reference to what table it can be found in.
-%% This record is kept in the table PG_LOOKUP_TABLE_NAME
-%% Kazoo referenced docs by DbName (couch like) and doc id, so the lookup table cantains the
-%% couch like DbName and Doc id and the coresponding postgresql table to find the doc by id.
-%% @end
-%%------------------------------------------------------------------------------
--spec insert_entry_into_lookup_table(kz_postgresql:connection_pool(), kz_term:ne_binary()
-                                    ,kz_postgresql:table_name(), kz_term:ne_binary()) ->
-                                            epgsql:reply().
-insert_entry_into_lookup_table(ConnPool, CouchDbName, PgTableName, DocId) ->
-    lager:debug("inserting entery into pg lookup table, DbName: ~p, PgTableName: ~p, DocId: ~p", [CouchDbName
-                                                                                                 ,PgTableName
-                                                                                                 ,DocId]),
-    Query = #kz_postgresql_query{'insert_into' = {<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>, [<<"doc_id">>
-                                                                                              ,<<"db_name">>
-                                                                                              ,<<"table_name">>]}
-                                ,'values' = [[<<"$1">>, <<"$2">>, <<"$3">>]]
-                                ,'parameters' = [DocId, CouchDbName, PgTableName]
-                                },
-    kz_postgresql_query:execute_query(ConnPool, Query).
-
-%%------------------------------------------------------------------------------
-%% @doc For a Doc, first check if the current rev is set on itself, If not then
-%% look up the doc in PG DB by ID. Then increment the rev by 1
-%% Note, this returns the revision as an int for postgresql and not the full couch like revision
-%% @end
-%%------------------------------------------------------------------------------
--spec get_next_postgresql_doc_revision(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document()) ->
-                                              {'ok', integer()} | epgsql:error_reply().
-get_next_postgresql_doc_revision(ConnPool, DbName, Doc) ->
-    lager:debug("calculating doc revision for doc id: ~p, DbName: ~p", [kz_doc:id(Doc), DbName]),
-    CurrentRev = case kz_doc:revision(Doc) of
-                     'undefined' -> lookup_doc_rev(ConnPool, DbName, Doc);
-                     Rev -> {'ok', Rev}
-                 end,
-    increment_rev(CurrentRev).
-
-%%------------------------------------------------------------------------------
-%% @doc Increment a Couch like revision or PG revision by 1
-%% Return PG like integer revision
-%% @end
-%%------------------------------------------------------------------------------
--spec increment_rev({'ok', kz_term:ne_binary()} | {'ok', integer()} | epgsql:error_reply()) ->
-                           {'ok', integer()} | epgsql:error_reply().
-increment_rev({'error', 'not_found'}) -> {'ok', 1};
-increment_rev({'error', _}=Error) -> Error;
-increment_rev({'ok', Rev}) when is_integer(Rev) -> {'ok', Rev+1};
-increment_rev({'ok', Rev}) ->
-    RevInt = kz_postgresql_util:couch_rev_to_postgresql_rev(Rev),
-    {'ok', binary_to_integer(RevInt)+1}.
