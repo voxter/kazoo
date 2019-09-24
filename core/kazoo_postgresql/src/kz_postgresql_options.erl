@@ -115,7 +115,8 @@ add_options_to_query(ConnPool, Query, [{'skip', Skip} | OtherOptions]) ->
 
 %% ascending kz_data:option()
 %% View query only
-%% Add ORDER BY _view_key_0, _view_key_N ASC
+%% Add ORDER BY _view_key_0 ASC, _view_key_N ASC
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 add_options_to_query(ConnPool
                     ,#kz_postgresql_query{'order_by'=OrderByList, 'from'=[View|[]]}=Query
                     ,['ascending' | OtherOptions]) ->
@@ -130,7 +131,8 @@ add_options_to_query(ConnPool
 
 %% descending kz_data:option()
 %% View query only
-%% Add ORDER BY _view_key_0, _view_key_N DESC
+%% Add ORDER BY _view_key_0 DESC, _view_key_N DESC
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 add_options_to_query(ConnPool
                     ,#kz_postgresql_query{'order_by'=OrderByList, 'from'=[View|[]]}=Query
                     ,['descending' | OtherOptions]) ->
@@ -246,15 +248,18 @@ add_options_to_query(ConnPool, Query, [UnknownOption | OtherOptions]) ->
 %%------------------------------------------------------------------------------
 %% @doc For a given PG View, generate a list of tuples where each tuple contains
 %% the view key N and and the operator defined
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 %% NOTE, This will only work on PG views
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_order_by_list(kz_postgresql:connection_pool(), kz_postgresql:view_name(), kz_term:ne_binary()) ->
+-spec generate_order_by_list(kz_postgresql:connection_pool(), kz_postgresql:view_name(), kz_postgresql:sort_operator()) ->
                                 list(kz_postgresql:order_by()).
 generate_order_by_list(ConnPool, View, Operator) ->
     ViewStripped = binary:replace(View, <<"\"">>, <<"">>, ['global']),
     Columns = kz_postgresql_schema:get_schema(ConnPool, ViewStripped),
-    lists:foldr(fun({<<"_view_key_",_>> = Key, _}, OrderByAcc) -> [{Key, Operator} | OrderByAcc];
+    lists:foldr(fun({<<"_view_key_",_>> = Key, <<"character varying">>}, OrderByAcc) -> [{Key, <<"COLLATE \"C\" ",Operator/binary>>} | OrderByAcc];
+                   ({<<"_view_key_",_>> = Key, <<"varchar">>}, OrderByAcc) -> [{Key, <<"COLLATE \"C\" ",Operator/binary>>} | OrderByAcc];
+                   ({<<"_view_key_",_>> = Key, _Type}, OrderByAcc) -> [{Key, Operator} | OrderByAcc];
                    (_, OrderByAcc) -> OrderByAcc
                 end
                ,[]
