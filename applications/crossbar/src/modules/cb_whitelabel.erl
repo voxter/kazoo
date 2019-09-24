@@ -27,6 +27,8 @@
 -define(ICON_REQ, <<"icon">>).
 -define(DOMAINS_REQ, <<"domains">>).
 -define(WELCOME_REQ, <<"welcome">>).
+-define(HERO_LOGO_REQ, <<"hero_logo">>).
+-define(DOC_ID, <<"whitelabel">>).
 
 -define(WHITELABEL_MIME_TYPES, ?IMAGE_CONTENT_TYPES ++ ?BASE64_CONTENT_TYPES).
 
@@ -81,6 +83,8 @@ allowed_methods() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?LOGO_REQ) ->
     [?HTTP_GET, ?HTTP_POST];
+allowed_methods(?HERO_LOGO_REQ) ->
+    [?HTTP_GET, ?HTTP_POST];
 allowed_methods(?ICON_REQ) ->
     [?HTTP_GET, ?HTTP_POST];
 allowed_methods(?WELCOME_REQ) ->
@@ -109,6 +113,7 @@ resource_exists() -> 'true'.
 
 -spec resource_exists(path_token()) -> 'true'.
 resource_exists(?LOGO_REQ) -> 'true';
+resource_exists(?HERO_LOGO_REQ) -> 'true';
 resource_exists(?ICON_REQ) -> 'true';
 resource_exists(?WELCOME_REQ) -> 'true';
 resource_exists(?DOMAINS_REQ) -> 'true';
@@ -116,6 +121,7 @@ resource_exists(_) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?LOGO_REQ) -> 'true';
+resource_exists(_, ?HERO_LOGO_REQ) -> 'true';
 resource_exists(_, ?WELCOME_REQ) -> 'true';
 resource_exists(_, ?ICON_REQ) -> 'true'.
 
@@ -138,6 +144,8 @@ authorize(_Context, [{<<"whitelabel">>, [_]}], ?HTTP_GET) ->
     'true';
 authorize(_Context, [{<<"whitelabel">>, [_ | [?LOGO_REQ]]}], ?HTTP_GET) ->
     'true';
+authorize(_Context, [{<<"whitelabel">>, [_ | [?HERO_LOGO_REQ]]}], ?HTTP_GET) ->
+    'true';
 authorize(_Context, [{<<"whitelabel">>, [_ | [?ICON_REQ]]}], ?HTTP_GET) ->
     'true';
 authorize(_Context, [{<<"whitelabel">>, [_ | [?WELCOME_REQ]]}], ?HTTP_GET) ->
@@ -157,6 +165,8 @@ authenticate(Context) ->
 authenticate([{<<"whitelabel">>, [_]}], ?HTTP_GET) ->
     'true';
 authenticate([{<<"whitelabel">>, [_ | [?LOGO_REQ]]}], ?HTTP_GET) ->
+    'true';
+authenticate([{<<"whitelabel">>, [_ | [?HERO_LOGO_REQ]]}], ?HTTP_GET) ->
     'true';
 authenticate([{<<"whitelabel">>, [_ | [?ICON_REQ]]}], ?HTTP_GET) ->
     'true';
@@ -183,6 +193,8 @@ content_types_provided(Context, AttachType) ->
                                                     cb_context:context().
 content_types_provided_for_attachments(Context, ?LOGO_REQ, ?HTTP_GET) ->
     content_types_provided_for_attachments(Context, ?LOGO_REQ);
+content_types_provided_for_attachments(Context, ?HERO_LOGO_REQ, ?HTTP_GET) ->
+    content_types_provided_for_attachments(Context, ?HERO_LOGO_REQ);
 content_types_provided_for_attachments(Context, ?ICON_REQ, ?HTTP_GET) ->
     content_types_provided_for_attachments(Context, ?ICON_REQ);
 content_types_provided_for_attachments(Context, ?WELCOME_REQ, ?HTTP_GET) ->
@@ -208,6 +220,8 @@ content_types_provided(Context, Domain, AttachType) ->
                                                            cb_context:context().
 content_types_provided_for_domain_attachments(Context, Domain, ?LOGO_REQ, ?HTTP_GET) ->
     content_types_provided_for_domain_attachments(Context, Domain, ?LOGO_REQ);
+content_types_provided_for_domain_attachments(Context, Domain, ?HERO_LOGO_REQ, ?HTTP_GET) ->
+    content_types_provided_for_domain_attachments(Context, Domain, ?HERO_LOGO_REQ);
 content_types_provided_for_domain_attachments(Context, Domain, ?ICON_REQ, ?HTTP_GET) ->
     content_types_provided_for_domain_attachments(Context, Domain, ?ICON_REQ);
 content_types_provided_for_domain_attachments(Context, Domain, ?WELCOME_REQ, ?HTTP_GET) ->
@@ -236,6 +250,9 @@ content_types_accepted(Context, AttachType) ->
 -spec content_types_accepted(cb_context:context(), path_token(), http_method()) ->
                                     cb_context:context().
 content_types_accepted(Context, ?LOGO_REQ, ?HTTP_POST) ->
+    CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
+    cb_context:set_content_types_accepted(Context, CTA);
+content_types_accepted(Context, ?HERO_LOGO_REQ, ?HTTP_POST) ->
     CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted(Context, ?ICON_REQ, ?HTTP_POST) ->
@@ -272,6 +289,8 @@ validate_whitelabel(Context, ?HTTP_DELETE) ->
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, ?LOGO_REQ) ->
     validate_attachment(Context, ?LOGO_REQ, cb_context:req_verb(Context));
+validate(Context, ?HERO_LOGO_REQ) ->
+    validate_attachment(Context, ?HERO_LOGO_REQ, cb_context:req_verb(Context));
 validate(Context, ?ICON_REQ) ->
     validate_attachment(Context, ?ICON_REQ, cb_context:req_verb(Context));
 validate(Context, ?WELCOME_REQ) ->
@@ -281,10 +300,74 @@ validate(Context, ?DOMAINS_REQ) ->
 validate(Context, Domain) ->
     validate_domain(Context, Domain, cb_context:req_verb(Context)).
 
+-spec build_convert_dimensions(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
+build_convert_dimensions('undefined', 'undefined') -> 'undefined';
+build_convert_dimensions('undefined', Height) -> "x" ++ binary_to_list(Height);
+build_convert_dimensions(Width, 'undefined') -> binary_to_list(Width) ++ "x";
+build_convert_dimensions(Width, Height) -> binary_to_list(Width) ++ "x" ++ binary_to_list(Height).
+
+%%------------------------------------------------------------------------------
+%% @doc Convert stored hero logo to given dimensions w/in the query_string
+%% If there is an error with the given dimensions the original image
+%% will be returned
+%%
+%% @end
+%%------------------------------------------------------------------------------
+-spec convert_hero_logo(cb_context:context(), kz_term:ne_binary(), kz_json:object()) -> cb_context:context().
+convert_hero_logo(Context, AttachmentId, JObj) ->
+    Dimensions = build_convert_dimensions(
+                   kz_json:get_value(<<"width">>, cb_context:query_string(Context)),
+                   kz_json:get_value(<<"height">>, cb_context:query_string(Context))
+                  ),
+    case Dimensions of
+        'undefined' -> update_response_with_attachment(Context, AttachmentId, JObj);
+        _ ->
+            Options = ?TYPE_CHECK_OPTION(kzd_whitelabel:type()),
+
+            case kz_datamgr:fetch_attachment(cb_context:account_db(Context), ?DOC_ID, AttachmentId, Options) of
+                {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, ?DOC_ID, Context);
+                {'ok', AttachBin} ->
+                    Context1 = crossbar_doc:load(?DOC_ID, Context, Options),
+                    'success' = cb_context:resp_status(Context1),
+                    manipulate_hero_logo(Context1, AttachmentId, Dimensions, AttachBin, JObj)
+            end
+    end.
+
+-spec manipulate_hero_logo(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), iodata(), kz_json:object()) -> cb_context:context().
+manipulate_hero_logo(Context, AttachmentId, Dimensions, AttachBin, JObj) ->
+    OgTempFile = "/tmp/pre_" ++ binary_to_list(AttachmentId),
+    ToTempFile = "/tmp/post_" ++ binary_to_list(AttachmentId),
+
+    kz_util:write_file(OgTempFile, AttachBin),
+
+    Args = [{<<"FROM">>, OgTempFile}
+           ,{<<"TO">>, ToTempFile}
+           ,{<<"DIMENSIONS">>, Dimensions}],
+
+    Command = "convert $FROM -resize $DIMENSIONS $TO",
+
+    case kz_os:cmd(Command, Args, []) of
+        {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, ?DOC_ID, Context);
+        {'ok', _Result} ->
+            {'ok', ImageData} = file:read_file(ToTempFile),
+
+            LoadedContext = cb_context:setters(Context
+                                              ,[{fun cb_context:set_resp_data/2, ImageData}
+                                               ,{fun cb_context:set_resp_etag/2, crossbar_doc:rev_to_etag(cb_context:doc(Context))}
+                                               ]),
+
+            update_response_with_headers(LoadedContext, AttachmentId, JObj)
+    end.
+
 -spec validate_attachment(cb_context:context(), path_token(), http_method()) ->
                                  cb_context:context().
 validate_attachment(Context, ?LOGO_REQ, ?HTTP_GET) ->
     load_whitelabel_binary(Context, ?LOGO_REQ);
+validate_attachment(Context, ?HERO_LOGO_REQ, ?HTTP_GET) ->
+    case whitelabel_binary_meta(Context, ?HERO_LOGO_REQ) of
+        'undefined' -> crossbar_util:response_bad_identifier(?HERO_LOGO_REQ, Context);
+        {AttachmentId, JObj} -> convert_hero_logo(Context, AttachmentId, JObj)
+    end;
 validate_attachment(Context, ?ICON_REQ, ?HTTP_GET) ->
     load_whitelabel_binary(Context, ?ICON_REQ);
 validate_attachment(Context, ?WELCOME_REQ, ?HTTP_GET) ->
@@ -295,6 +378,12 @@ validate_attachment(Context, AttachType, ?HTTP_POST) ->
 -spec validate_attachment_post(cb_context:context(), path_token(), any()) ->
                                       cb_context:context().
 validate_attachment_post(Context, ?LOGO_REQ, []) ->
+    cb_context:add_validation_error(<<"file">>
+                                   ,<<"required">>
+                                   ,kz_json:from_list([{<<"message">>, <<"Please provide an image file">>}])
+                                   ,Context
+                                   );
+validate_attachment_post(Context, ?HERO_LOGO_REQ, []) ->
     cb_context:add_validation_error(<<"file">>
                                    ,<<"required">>
                                    ,kz_json:from_list([{<<"message">>, <<"Please provide an image file">>}])
@@ -314,11 +403,19 @@ validate_attachment_post(Context, ?WELCOME_REQ, []) ->
                                    );
 validate_attachment_post(Context, ?LOGO_REQ, [{_Filename, FileJObj}]) ->
     validate_upload(Context, FileJObj);
+validate_attachment_post(Context, ?HERO_LOGO_REQ, [{_Filename, FileJObj}]) ->
+    validate_upload(Context, FileJObj);
 validate_attachment_post(Context, ?ICON_REQ, [{_Filename, FileJObj}]) ->
     validate_upload(Context, FileJObj);
 validate_attachment_post(Context, ?WELCOME_REQ, [{_Filename, FileJObj}]) ->
     validate_upload(Context, FileJObj);
 validate_attachment_post(Context, ?LOGO_REQ, _Files) ->
+    cb_context:add_validation_error(<<"file">>
+                                   ,<<"maxItems">>
+                                   ,kz_json:from_list([{<<"message">>, <<"Please provide a single image file">>}])
+                                   ,Context
+                                   );
+validate_attachment_post(Context, ?HERO_LOGO_REQ, _Files) ->
     cb_context:add_validation_error(<<"file">>
                                    ,<<"maxItems">>
                                    ,kz_json:from_list([{<<"message">>, <<"Please provide a single image file">>}])
@@ -571,6 +668,8 @@ post(Context) ->
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, ?LOGO_REQ) ->
     update_whitelabel_binary(?LOGO_REQ, ?WHITELABEL_ID, Context);
+post(Context, ?HERO_LOGO_REQ) ->
+    update_whitelabel_binary(?HERO_LOGO_REQ, ?WHITELABEL_ID, Context);
 post(Context, ?ICON_REQ) ->
     update_whitelabel_binary(?ICON_REQ, ?WHITELABEL_ID, Context);
 post(Context, ?WELCOME_REQ) ->
@@ -707,7 +806,11 @@ filter_attachment_type([AttachmentId|AttachmentIds], AttachType) ->
                                              cb_context:context().
 update_response_with_attachment(Context, AttachmentId, JObj) ->
     LoadedContext = crossbar_doc:load_attachment(cb_context:doc(Context), AttachmentId, ?TYPE_CHECK_OPTION(kzd_whitelabel:type()), Context),
-    WithHeaders = cb_context:add_resp_headers(LoadedContext
+    update_response_with_headers(LoadedContext, AttachmentId, JObj).
+
+-spec update_response_with_headers(cb_context:context(), kz_term:ne_binary(), kz_json:object()) -> cb_context:context().
+update_response_with_headers(Context, AttachmentId, JObj) ->
+    WithHeaders = cb_context:add_resp_headers(Context
                                              ,#{<<"content-disposition">> => <<"attachment; filename=", AttachmentId/binary>>
                                                ,<<"content-type">> => kz_json:get_value([AttachmentId, <<"content_type">>], JObj)
                                                }
