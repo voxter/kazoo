@@ -145,6 +145,46 @@ curl -v -X POST \
 
 ## Fetch
 
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+```
+
+## Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+```
+
+## Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+```
+
+## Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+```
+
+## Fetch
+
 > GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
 
 ```shell

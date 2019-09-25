@@ -5,7 +5,8 @@
 %%%-----------------------------------------------------------------------------
 -module(kz_convert).
 
--export([fax/3, fax/4
+-export([fax/3, fax/4,
+         resize_image/3
         ]).
 
 -include_lib("kazoo_convert/include/kz_convert.hrl").
@@ -54,3 +55,20 @@ fax(FromFormat, ToFormat, Content, Options) ->
 -spec convert_to_module(kz_term:ne_binary()) -> atom().
 convert_to_module(Conversion) ->
     kz_term:to_atom(<<"kz_", Conversion/binary>>, 'true').
+
+-spec resize_image(iodata(), kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
+resize_image(ImageData, FileName, Dimensions) ->
+    OgTempFile = "/tmp/pre_" ++ FileName,
+    ToTempFile = "/tmp/post_" ++ FileName,
+
+    kz_util:write_file(OgTempFile, ImageData),
+
+    Args = [{<<"FROM">>, OgTempFile}
+           ,{<<"TO">>, ToTempFile}
+           ,{<<"DIMENSIONS">>, Dimensions}],
+
+    Command = "convert $FROM -resize $DIMENSIONS $TO",
+    case kz_os:cmd(Command, Args, []) of
+        {'ok', _Result} -> file:read_file(ToTempFile);
+        {'error', _, Reason} ->  {'error', Reason}
+    end.

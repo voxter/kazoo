@@ -296,3 +296,103 @@ If you receive a 400 when POSTing with a response like:
 ```
 
 You will need to run `sup kapps_maintenance refresh system_schemas` to ensure the `domains` schema is available.
+
+
+## Fetch the hero logo
+
+To fetch the Desktop Client logo, if no parameters are given the original logo will be returned.
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
+```
+
+If you wish to define the size of the returned Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048
+
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo?width=600&height=650
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo?width=600&height=650
+```
+
+## Change the hero logo
+
+> POST /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
+```
+
+## Fetch the hero icon
+
+To fetch the Desktop Client icon, if no parameters are given the original icon will be returned.
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+```
+
+If you wish to define the size of the returned Desktop Client icon, the parameters `height` and `width` are accepted with maximum values of 2048
+
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon?width=600&height=650
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon?width=600&height=650
+```
+
+## Change the hero icon
+
+> POST /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
+```
+
+## Fetch the hero logo used in the application
+
+To fetch the logo used inside of the Desktop Client, if no parameters are given the original logo will be returned.
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+```
+
+If you wish to define the size of the returned internal Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048
+
+
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo?width=600&height=650
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo?width=600&height=650
+```
+
+## Change the hero logo used in the application
+
+> POST /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
+```
