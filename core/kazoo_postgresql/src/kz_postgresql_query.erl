@@ -118,7 +118,7 @@ maybe_add_update(Query, #kz_postgresql_query{'update' = TableName}) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Add SET part to PG query binary string if its present in the query record
-%% set list will be  list of tuples where each tupple is {ColumnName, Value}
+%% set list will be  list of tuples where each tuple is {ColumnName, Value}
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_add_set(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
@@ -255,7 +255,7 @@ generate_values_iolist(ValueLists) ->
     lists:join(<<", ">>, Values).
 
 %%------------------------------------------------------------------------------
-%% @doc Generate the SET string from the list of tupples (ColumnName, Value}
+%% @doc Generate the SET string from the list of tuples (ColumnName, Value}
 %% eg [{ColumnA, ValueA}, {ColumnB, ValueB}] would result in ColumnA = ValueA, ColumnB = ValueB
 %% @end
 %%------------------------------------------------------------------------------

@@ -231,7 +231,7 @@ del_docs_fold(ConnPool, DbName, [Doc | Docs], Options, DocAcc) ->
 insert_or_update_doc_by_pg_table_name(ConnPool, TableName, Doc, Options) ->
     case doc_exists(ConnPool, Doc) of
         'false' ->
-            lager:debug("doc ~p dose not exists in pg, selecting INSERT query", [kz_doc:id(Doc)]),
+            lager:debug("doc ~p does not exists in pg, selecting INSERT query", [kz_doc:id(Doc)]),
             do_insert_or_update_doc_by_pg_table_name(ConnPool, <<"INSERT">>, TableName, Doc, Options);
         'true' ->
             lager:debug("doc ~p exists in pg, selecting UPDATE query", [kz_doc:id(Doc)]),
@@ -279,7 +279,7 @@ delete_doc_by_pg_table_name(ConnPool, TableName, Doc, Options) ->
 %%------------------------------------------------------------------------------
 %% @doc For a given couch like db name and doc id
 %% Return true if the doc exists in the lookup table, else false
-%% NOTE This dose not check the contents of the archived table
+%% NOTE This does not check the contents of the archived table
 %% @end
 %%------------------------------------------------------------------------------
 -spec doc_exists(kz_postgresql:connection_pool(), kz_doc:object()) -> boolean() | epgsql:error_reply().
