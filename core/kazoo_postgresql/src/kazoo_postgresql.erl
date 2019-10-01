@@ -58,7 +58,7 @@
 -include("kz_postgresql.hrl").
 
 %% _ConnPool operations
--spec new_connection(map()) -> {'ok', kz_postgresql:connection_pool()} | {'error', term()}.
+-spec new_connection(map()) -> {'ok', kz_postgresql:connection_pool()} | kz_data:data_error().
 new_connection(ConnPoolSettingsMap) ->
     kz_postgresql_connection:new_connection(ConnPoolSettingsMap).
 
@@ -82,13 +82,10 @@ db_url(_ConnPool, _DbName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     'undefined'.
 
--spec server_info(kz_postgresql:connection_pool()) -> any().
-server_info(_ConnPool) ->
-    %% ConnPool health check
-    %% Conection status is handled by driver so just return ok to disable kz_dataconnection
-    %% from setting up a new connection if the old one fails
-    %% kz_postgresql_util:server_info(ConnPool),
-    {'ok', kz_json:new()}.
+-spec server_info(kz_postgresql:connection_pool()) -> {'ok', kz_postgresql:connection_pool()} | kz_data:data_error().
+server_info(ConnPool) ->
+    kz_postgresql_util:server_info(ConnPool).
+
 
 %% DB operations
 -spec db_create(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:options()) -> boolean().

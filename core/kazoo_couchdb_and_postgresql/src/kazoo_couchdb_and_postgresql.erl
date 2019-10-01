@@ -73,11 +73,11 @@ new_connection(#{'settings' := #{'couchdb' := CouchDBMap
             Error;
         {{'error', CouchError} = Error, _} ->
             %% TODO Taredown PG connection
-            lager:error("couch failed to connect, Couch Error: ~p", CouchError),
+            lager:error("couch failed to connect, Couch Error: ~p", [CouchError]),
             Error;
         {_, {'error', PGError} = Error} ->
             %% TODO Taredown Couch connection
-            lager:error("postgresql failed to connect, PostgreSQL Error: ~p", PGError),
+            lager:error("postgresql failed to connect, PostgreSQL Error: ~p", [PGError]),
             Error
     end.
 

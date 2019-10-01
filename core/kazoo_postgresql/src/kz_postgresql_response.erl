@@ -19,6 +19,7 @@
 %%------------------------------------------------------------------------------
 -spec format_error(epgsql:error_reply()) -> kz_data:data_errors().
 format_error({'error', {'error', 'error', _, 'unique_violation', _, _}}) -> 'conflict';
+format_error({'error', 'disconnected'}) -> 'resource_not_available';
 format_error({'error', Error}) -> Error.
 
 %%------------------------------------------------------------------------------

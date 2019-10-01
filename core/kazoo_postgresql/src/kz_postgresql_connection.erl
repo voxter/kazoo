@@ -55,7 +55,7 @@ connection_parse(_, _V, Conn) ->
 %% @doc Connect to the postgresql DB
 %% @end
 %%------------------------------------------------------------------------------
--spec connect(postgresql_connection()) -> {'ok', kz_postgresql:connection_pool()} | {'error', term()}.
+-spec connect(postgresql_connection()) -> {'ok', kz_postgresql:connection_pool()} | kz_data:data_error().
 connect(#kz_postgresql_connection{id=Id
                                  ,host=Host
                                  ,port=Port
@@ -70,21 +70,23 @@ connect(#kz_postgresql_connection{id=Id
     ConnPoolName = binary_to_atom(<<"postgresql_", IdBinary/binary, "_pool">>, 'latin1'),
     lager:debug("attempting new postgresql connection to host ~p:~p, Connection pool name: ~p", [Host, Port, ConnPoolName]),
     application:ensure_all_started(pgapp),
-    ConnResp = pgapp:connect(ConnPoolName,[{'size', ConnPoolSize}
-                                          ,{'max_overflow', ConnPoolMaxOverflow}
-                                          ,{'host', Host}
-                                          ,{'port', Port}
-                                          ,{'database', Database}
-                                          ,{'username', User}
-                                          ,{'password', Pass}
-                                          ,{'timeout', Timeout}
-                                          ]),
-    check_response(ConnResp, ConnPoolName).
-
--spec check_response(tuple(), kz_postgresql:connection_pool()) -> {'ok', kz_postgresql:connection_pool()} | {'error', term()}.
-check_response({'error', Cause}=Error, ConnPool) ->
-    lager:error("postgresql failed to connect to ~p, connection error: ~p", [ConnPool, Cause]),
-    Error;
-check_response({'ok', _}, ConnPool) ->
-    lager:debug("postgresql connection successful, connection pool: ~p", [ConnPool]),
-    {'ok', ConnPool}.
+    {'ok', _Pid} = pgapp:connect(ConnPoolName,[{'size', ConnPoolSize}
+                                              ,{'max_overflow', ConnPoolMaxOverflow}
+                                              ,{'host', Host}
+                                              ,{'port', Port}
+                                              ,{'database', Database}
+                                              ,{'username', User}
+                                              ,{'password', Pass}
+                                              ,{'timeout', Timeout}
+                                              ]),
+    %% Verify the connection pool is connected to the PG DB
+    case kazoo_postgresql:server_info(ConnPoolName) of
+        {'ok', _} ->
+            lager:debug("postgresql connection successful, connection pool: ~p", [ConnPoolName]),
+            {'ok', ConnPoolName};
+        {'error', _} = Error ->
+            lager:error("postgresql failed to connect to ~p, connection error: ~p", [ConnPoolName, Error]),
+            %% Kill the child PG connection pool as its not connected successfuly.
+            supervisor:terminate_child('pgapp_sup', ConnPoolName),
+            Error
+    end.

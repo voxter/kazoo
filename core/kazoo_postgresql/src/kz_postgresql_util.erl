@@ -20,15 +20,14 @@
 %% @doc Query the PostgreSQL server for version info
 %% @end
 %%------------------------------------------------------------------------------
--spec server_info(kz_postgresql:connection_pool()) -> {'ok', any()} | {'error', any()}.
+-spec server_info(kz_postgresql:connection_pool()) -> {'ok', list()} | kz_data:data_error().
 server_info(ConnPool) ->
-    lager:debug("getting postgresql server info"),
     Query = #kz_postgresql_query{'select' = [<<"version()">>]},
     case kz_postgresql_query:execute_query(ConnPool, Query) of
         {'ok', _, Info} -> {'ok', Info};
         Error ->
             lager:error("postgresql query (~p) failed, Error: ~p", [Query, Error]),
-            {'error', [Error]}
+            {'error', kz_postgresql_response:format_error(Error)}
     end.
 
 %%------------------------------------------------------------------------------
