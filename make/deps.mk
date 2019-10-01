@@ -66,6 +66,7 @@ dep_epgsql = git https://github.com/epgsql/epgsql.git 4.2.1
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
 dep_exml = git https://github.com/paulgray/exml 2.2.1
+dep_gen_smtp = hex 0.15.0
 dep_jiffy = git https://github.com/lazedo/jiffy utf8  ## utf8 decode
 dep_meck = git https://github.com/eproxus/meck
 dep_nklib = git https://github.com/voxter/nklib v0.4.1-parse-uri-quoted-contact-params
