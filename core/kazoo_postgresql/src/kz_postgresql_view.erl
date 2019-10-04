@@ -32,7 +32,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_results(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) ->
-                         {'ok', kz_json:objects()} | epgsql:error_reply().
+                         {'ok', kz_json:objects()} | kz_data:data_error().
 get_results(ConnPool, DbName, DesignDoc, ViewOptions) ->
     lager:debug("get_results called with args, DbName: ~p, DesignDoc: ~p, ViewOptions: ~p", [DbName, DesignDoc, ViewOptions]),
     do_view_query(ConnPool, DbName, DesignDoc, ViewOptions).
@@ -47,7 +47,7 @@ get_results(ConnPool, DbName, DesignDoc, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec do_view_query(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:ddoc(), kz_data:options()) ->
-                           {'ok', kz_json:objects()} | epgsql:error_reply().
+                           {'ok', kz_json:objects()} | kz_data:data_error().
 do_view_query(ConnPool, DbName, DesignDoc, ViewOptions) when is_binary(DesignDoc) ->
     [DesignName, ViewName|_] = binary:split(DesignDoc, <<"/">>, ['global']),
     do_view_query(ConnPool, DbName, {DesignName, ViewName}, ViewOptions);
@@ -80,8 +80,7 @@ do_view_query(ConnPool, DbName,{DesignName, ViewName}, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec all_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:options()) ->
-                      {'ok', kz_json:objects()} |
-                      epgsql:error_reply().
+                      {'ok', kz_json:objects()} | kz_data:data_error().
 all_docs(ConnPool, DbName, ViewOptions) ->
     lager:debug("loading all_docs view for DbName: ~p with ViewOptions: ~p (ConnPool: ~p)", [DbName, ViewOptions, ConnPool]),
     %% Extract keys from the options if defined so we can work out what PG tables to query
@@ -107,8 +106,7 @@ all_docs(ConnPool, DbName, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_postgresql_table_names(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binaries(), kz_data:options()) ->
-                                        {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} |
-                                        epgsql:error_reply().
+                                        {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
 get_postgresql_table_names(ConnPool, DbName, DocIds, ViewOptions) ->
     lager:debug("calculating tables that contain rows for DbName ~p", [DbName]),
     case kz_postgresql_options:get_doc_type(ViewOptions) of
@@ -132,13 +130,13 @@ get_postgresql_table_names(ConnPool, DbName, DocIds, ViewOptions) ->
 %%------------------------------------------------------------------------------
 -spec do_all_doc_query(kz_postgresql:connection_pool(), kz_term:ne_binary()
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), kz_data:options()) ->
-                              {'ok', kz_json:objects()} | epgsql:error_reply().
+                              {'ok', kz_json:objects()} |  kz_data:data_error().
 do_all_doc_query(ConnPool, DbName, PgTablesAndDocIds, ViewOptions) ->
     do_all_doc_query(ConnPool, DbName, PgTablesAndDocIds, ViewOptions, []).
 
 -spec do_all_doc_query(kz_postgresql:connection_pool(), kz_term:ne_binary()
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), boolean(), kz_data:options()) ->
-                              {'ok', kz_json:objects()} | epgsql:error_reply().
+                              {'ok', kz_json:objects()} | kz_data:data_error().
 do_all_doc_query(_ConnPool, _DbName, [], ViewOptions, JObjs) ->
     case kz_postgresql_options:get_order(ViewOptions, 'undefined') of
         'ascending' ->
@@ -179,28 +177,16 @@ do_all_doc_query(ConnPool, DbName, [{TableName, DocIds} | OtherTables], ViewOpti
 %% @end
 %%------------------------------------------------------------------------------
 -spec generate_all_docs_table_query(kz_term:ne_binary(), kz_postgresql:table_name(), kz_term:ne_binaries()) ->
-                                           kz_postgresql:postgresql_query().
+                                           kz_postgresql:query_record().
 generate_all_docs_table_query(DbName, TableName, []) ->
     #kz_postgresql_query{'select' = [<<"\"",TableName/binary,"\"._id AS _view_id">>
                                     ,<<"\"",TableName/binary,"\"._id  AS _view_key_0">>
                                     ,<<"\"",TableName/binary,"\"._rev AS _view_value_rev">>
                                     ]
                         ,'from' = [<<"\"",TableName/binary,"\"">>]
-                        ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
-                                                          ,<<"$1">>
-                                                          ]}
-                                               ,{<<"=">>, [<<"\"",TableName/binary,"\"._deleted">>
-                                                          ,<<"false">>
-                                                          ]}
-                                               ,{<<"=">>, [<<"\"",TableName/binary,"\"._rev">>
-                                                          ,#kz_postgresql_query{'select' = [<<"MAX(_rev)">>]
-                                                                               ,'from' = [<<"\"",TableName/binary,"\" as table_alias">>]
-                                                                               ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                                                                    ,<<"\"table_alias\"._id">>
-                                                                                                    ]}
-                                                                               }
-                                                          ]}
-                                               ]
+                        ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
+                                             ,<<"$1">>
+                                             ]
                                    }
                         ,'parameters' = [DbName]
                         };
@@ -215,17 +201,6 @@ generate_all_docs_table_query(DbName, TableName, DocIds) ->
                                                           ]}
                                                ,{<<"=">>, [<<"\"",TableName/binary,"\"._id">>
                                                           ,<<"ANY($2)">>
-                                                          ]}
-                                               ,{<<"=">>, [<<"\"",TableName/binary,"\"._deleted">>
-                                                          ,<<"false">>
-                                                          ]}
-                                               ,{<<"=">>, [<<"\"",TableName/binary,"\"._rev">>
-                                                          ,#kz_postgresql_query{'select' = [<<"MAX(_rev)">>]
-                                                                               ,'from' = [<<"\"",TableName/binary,"\" as table_alias">>]
-                                                                               ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                                                                    ,<<"\"table_alias\"._id">>
-                                                                                                    ]}
-                                                                               }
                                                           ]}
                                                ]
                                    }

@@ -26,13 +26,15 @@
 -define(DEFAULT_CONN_POOL_SIZE, 10).
 -define(DEFAULT_CONN_POOL_MAX_OVERFLOW, 3).
 
--type query() :: iolist().                                                                          %% Converted iolist of postgresql_query()
+-type query() :: iolist().                                                                  %% Converted iolist of kz_postgresql:query_record()
 -type connection_pool() :: atom().
--type table_schema() :: list({kz_term:ne_binary(), kz_term:ne_binary()}).                           %% List of {ColumnName, ColumnType}
+-type table_schema() :: list({kz_term:ne_binary(), kz_term:ne_binary()}).                   %% List of {ColumnName, ColumnType}
 -type table_name() :: kz_term:ne_binary().
--type view_name() :: kz_term:ne_binary().                                                           %% DesignName~ViewName
--type where_clause() :: {kz_term:ne_binary(), list(where_clause() | kz_term:ne_binary())}.          %% AST
--type order_by() :: {kz_term:ne_binary(), kz_term:ne_binary()}.                                     %% {ColumnName, ASC | DESC}
+-type view_name() :: kz_term:ne_binary().                                                   %% DesignName~ViewName
+-type where_clause() :: {kz_term:ne_binary(), list(where_clause() | kz_term:ne_binary())}.  %% AST
+-type sort_operator() :: kz_term:ne_binary().                                               %% <<"ASC">> | <<"DESC">> | <<"COLLATE \"C\" ASC">> | <<"COLLATE \"C\" DESC">>
+-type order_by() :: {kz_term:ne_binary(), sort_operator()}.                                 %% {ColumnName, sort_operator()}
+-type query_operator() :: kz_term:ne_binary().                                              %% <<"INSERT">> | <<"UPDATE">> | <<"DELETE">>
 
 -record(kz_postgresql_connection, {id = kz_time:current_tstamp() :: kz_time:gregorian_seconds()
                                   ,host = ?DEFAULT_HOST :: string()
@@ -49,8 +51,11 @@
 
 -record(kz_postgresql_query, {'select' = [] :: kz_type:ne_binaries()                                %% SELECT part of PG query
                              ,'from' = [] :: [table_name() | view_name()]                           %% FROM part of SELECT PG query
-                             ,'insert_into' = [] :: {kz_type:ne_binary(), kz_type:ne_binaries()}    %% INSERT INTO part of PG query
+                             ,'insert_into' = {} :: {kz_type:ne_binary(), kz_type:ne_binaries()}    %% INSERT INTO part of PG query
                              ,'values' = [] :: list(kz_type:ne_binaries())                          %% VALUES part of INSERT INTO PG query
+                             ,'update' = 'undefined' :: kz_postgresql:table_name()                  %% UPDATE part of PG query
+                             ,'set' = [] :: [{kz_type:ne_binary(), kz_type:ne_binary()}]            %% SET part of PG query [{ColumnName, Value}]
+                             ,'delete_from' = 'undefined' :: kz_postgresql:table_name()             %% DELETE FROM part of PG query
                              ,'where' = {} :: where_clause()                                        %% WHERE part of PG query (AST format)
                              ,'group_by' = [] :: kz_type:ne_binaries()                              %% GROUP BY part of SELECT PG query
                              ,'order_by' = [] :: list(order_by())                                   %% ORDER BY part of SELECT PG query
@@ -60,5 +65,5 @@
                              ,'inner_join' = {'undefined', []} :: tuple()                           %% INNER JOIN ON part of PG query
                              ,'parameters' = [] :: kz_type:ne_binaries()                            %% List of Parameters to fill $1..$n
                              }).
--type postgresql_query() :: #kz_postgresql_query{}.
+-type query_record() :: #kz_postgresql_query{}.
 -endif.

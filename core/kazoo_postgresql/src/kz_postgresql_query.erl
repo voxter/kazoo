@@ -13,10 +13,13 @@
         ]).
 
 -define(COMMON_BUILD_QUERY_ROUTINES, [fun maybe_add_insert_into/2
+                                     ,fun maybe_add_values/2
                                      ,fun maybe_add_select/2
+                                     ,fun maybe_add_update/2
+                                     ,fun maybe_add_set/2
+                                     ,fun maybe_add_delete_from/2
                                      ,fun maybe_add_from/2
                                      ,fun maybe_add_inner_join/2
-                                     ,fun maybe_add_values/2
                                      ,fun maybe_add_where/2
                                      ,fun maybe_add_group_by/2
                                      ,fun maybe_add_order_by/2
@@ -29,11 +32,11 @@
 %% @doc Run postgresql query with or without kz_data options
 %% @end
 %%------------------------------------------------------------------------------
--spec execute_query(kz_postgresql:connection_pool(), kz_postgresql:postgresql_query()) -> epgsql:reply().
+-spec execute_query(kz_postgresql:connection_pool(), kz_postgresql:query_record()) -> epgsql:reply().
 execute_query(ConnPool, QueryRecord) ->
     execute_query(ConnPool, QueryRecord, []).
 
--spec execute_query(kz_postgresql:connection_pool(), kz_postgresql:postgresql_query(), kz_data:options()) -> epgsql:reply().
+-spec execute_query(kz_postgresql:connection_pool(), kz_postgresql:query_record(), kz_data:options()) -> epgsql:reply().
 execute_query(ConnPool, QueryRecord, Options) ->
     QueryRecordWithOpt = kz_postgresql_options:add_options_to_query(ConnPool, QueryRecord, Options),
     QueryIolist = build_query_iolist(QueryRecordWithOpt),
@@ -48,7 +51,7 @@ execute_query(ConnPool, QueryRecord, Options) ->
 %% @doc Return the list of query parameters from a query record
 %% @end
 %%------------------------------------------------------------------------------
--spec get_query_parameters(kz_postgresql:postgresql_query()) -> kz_term:ne_binaries().
+-spec get_query_parameters(kz_postgresql:query_record()) -> kz_term:ne_binaries().
 get_query_parameters(#kz_postgresql_query{'parameters'=Parameters}) ->
     Parameters.
 
@@ -56,7 +59,7 @@ get_query_parameters(#kz_postgresql_query{'parameters'=Parameters}) ->
 %% @doc Build iolist query from postgresql_query record
 %% @end
 %%------------------------------------------------------------------------------
--spec build_query_iolist(kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec build_query_iolist(kz_postgresql:query_record()) -> kz_postgresql:query().
 build_query_iolist(QueryRecord) ->
     Routines = ?COMMON_BUILD_QUERY_ROUTINES ++ [fun add_end_of_query/2],
     build_query_iolist(QueryRecord, Routines).
@@ -65,7 +68,7 @@ build_query_iolist(QueryRecord) ->
 %% @doc Build iolist subquery from postgresql_query record
 %% @end
 %%------------------------------------------------------------------------------
--spec build_sub_query_iolist(kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec build_sub_query_iolist(kz_postgresql:query_record()) -> kz_postgresql:query().
 build_sub_query_iolist(QueryRecord) ->
     build_query_iolist(QueryRecord, ?COMMON_BUILD_QUERY_ROUTINES).
 
@@ -74,7 +77,7 @@ build_sub_query_iolist(QueryRecord) ->
 %% functions to build the binary string
 %% @end
 %%------------------------------------------------------------------------------
--spec build_query_iolist(kz_postgresql:postgresql_query(), list()) -> kz_postgresql:query().
+-spec build_query_iolist(kz_postgresql:query_record(), list()) -> kz_postgresql:query().
 build_query_iolist(QueryRecord, Routines) ->
     lists:foldl(fun(Fun, QueryBinary) -> Fun(QueryBinary, QueryRecord) end
                ,<<"">>
@@ -85,18 +88,18 @@ build_query_iolist(QueryRecord, Routines) ->
 %% @doc Add INSERT_INTO part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_insert_into(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
-maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = []}) ->
+-spec maybe_add_insert_into(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
+maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = {}}) ->
     Query;
 maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = {TableName, ColumnsList}}) ->
     ColumnsIolist = lists:join(<<", ">>, ColumnsList),
-    [Query, <<"INSERT INTO ",TableName/binary,"(">> ,ColumnsIolist, <<")">>].
+    [Query, <<"INSERT INTO ">>, TableName, <<"(">> ,ColumnsIolist, <<")">>].
 
 %%------------------------------------------------------------------------------
 %% @doc Add VALUES part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_values(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_values(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_values(Query, #kz_postgresql_query{'values' = []}) ->
     Query;
 maybe_add_values(Query, #kz_postgresql_query{'values' = ValuesList}) ->
@@ -104,10 +107,32 @@ maybe_add_values(Query, #kz_postgresql_query{'values' = ValuesList}) ->
     [Query, <<" VALUES ">>, ValuesIolist].
 
 %%------------------------------------------------------------------------------
+%% @doc Add UPDATE part to PG query binary string if its present in the query record
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_add_update(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
+maybe_add_update(Query, #kz_postgresql_query{'update' = 'undefined'}) ->
+    Query;
+maybe_add_update(Query, #kz_postgresql_query{'update' = TableName}) ->
+    [Query, <<"UPDATE ">>, TableName].
+
+%%------------------------------------------------------------------------------
+%% @doc Add SET part to PG query binary string if its present in the query record
+%% set list will be  list of tuples where each tuple is {ColumnName, Value}
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_add_set(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
+maybe_add_set(Query, #kz_postgresql_query{'set' = []}) ->
+    Query;
+maybe_add_set(Query, #kz_postgresql_query{'set' = ColumnAndValuesList}) ->
+    SetIolist = generate_set_iolist(ColumnAndValuesList),
+    [Query, <<" SET ">>, SetIolist].
+
+%%------------------------------------------------------------------------------
 %% @doc Add SELECT part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_select(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_select(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_select(Query, #kz_postgresql_query{'select' = []}) ->
     Query;
 maybe_add_select(Query, #kz_postgresql_query{'select' = SelectList}) ->
@@ -118,7 +143,7 @@ maybe_add_select(Query, #kz_postgresql_query{'select' = SelectList}) ->
 %% @doc Add FROM part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_from(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_from(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_from(Query, #kz_postgresql_query{'from' = []}) ->
     Query;
 maybe_add_from(Query, #kz_postgresql_query{'from' = FromList}) ->
@@ -126,10 +151,20 @@ maybe_add_from(Query, #kz_postgresql_query{'from' = FromList}) ->
     [Query, <<" FROM ">>, FromIolist].
 
 %%------------------------------------------------------------------------------
+%% @doc Add DELETE part to PG query binary string if its present in the query record
+%% @end
+%%------------------------------------------------------------------------------
+-spec maybe_add_delete_from(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
+maybe_add_delete_from(Query, #kz_postgresql_query{'delete_from' = 'undefined'}) ->
+    Query;
+maybe_add_delete_from(Query, #kz_postgresql_query{'delete_from' = DeleteTableName}) ->
+    [Query, <<"DELETE FROM  ">>, DeleteTableName].
+
+%%------------------------------------------------------------------------------
 %% @doc Add WHERE part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_where(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_where(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_where(Query, #kz_postgresql_query{'where' = {}}) ->
     Query;
 maybe_add_where(Query, #kz_postgresql_query{'where' = WhereClause}) ->
@@ -140,7 +175,7 @@ maybe_add_where(Query, #kz_postgresql_query{'where' = WhereClause}) ->
 %% @doc Add INNER JOIN part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_inner_join(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_inner_join(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = {'undefined', []}}) ->
     Query;
 maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = {TableName, JoinList}}) ->
@@ -151,7 +186,7 @@ maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = {TableName, Join
 %% @doc Add ORDER BY part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_order_by(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_order_by(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_order_by(Query, #kz_postgresql_query{'order_by' = []}) ->
     Query;
 maybe_add_order_by(Query, #kz_postgresql_query{'order_by' = OrderByList}) ->
@@ -163,7 +198,7 @@ maybe_add_order_by(Query, #kz_postgresql_query{'order_by' = OrderByList}) ->
 %% @doc Add GROUP BY part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_group_by(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_group_by(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_group_by(Query, #kz_postgresql_query{'group_by' = []}) ->
     Query;
 maybe_add_group_by(Query, #kz_postgresql_query{'group_by' = GroupByList}) ->
@@ -174,7 +209,7 @@ maybe_add_group_by(Query, #kz_postgresql_query{'group_by' = GroupByList}) ->
 %% @doc Add LIMIT part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_limit(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_limit(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_limit(Query, #kz_postgresql_query{'limit' = 'undefined'}) ->
     Query;
 maybe_add_limit(Query, #kz_postgresql_query{'limit' = Limit}) ->
@@ -184,7 +219,7 @@ maybe_add_limit(Query, #kz_postgresql_query{'limit' = Limit}) ->
 %% @doc Add OFFSET part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_offset(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_offset(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_offset(Query, #kz_postgresql_query{'offset' = 'undefined'}) ->
     Query;
 maybe_add_offset(Query, #kz_postgresql_query{'offset' = Offset}) ->
@@ -194,7 +229,7 @@ maybe_add_offset(Query, #kz_postgresql_query{'offset' = Offset}) ->
 %% @doc Add RETURNING part to PG query binary string if its present in the query record
 %% @end
 %%------------------------------------------------------------------------------
--spec maybe_add_returning(kz_postgresql:query(), kz_postgresql:postgresql_query()) -> kz_postgresql:query().
+-spec maybe_add_returning(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
 maybe_add_returning(Query, #kz_postgresql_query{'returning' = []}) ->
     Query;
 maybe_add_returning(Query, #kz_postgresql_query{'returning' = ReturningList}) ->
@@ -204,7 +239,7 @@ maybe_add_returning(Query, #kz_postgresql_query{'returning' = ReturningList}) ->
 %% @doc Add ';' part to PG query
 %% @end
 %%------------------------------------------------------------------------------
--spec add_end_of_query(kz_term:ne_binary(), kz_postgresql:postgresql_query()) -> kz_term:ne_binary().
+-spec add_end_of_query(kz_term:ne_binary(), kz_postgresql:query_record()) -> kz_term:ne_binary().
 add_end_of_query(Query, _QueryRecord) ->
     [Query, <<";">>].
 
@@ -218,6 +253,17 @@ generate_values_iolist(ValueLists) ->
     Values = lists:map(fun(ValueList) -> [<<"(">>, lists:join(<<", ">>, ValueList), <<")">>] end
                       ,ValueLists),
     lists:join(<<", ">>, Values).
+
+%%------------------------------------------------------------------------------
+%% @doc Generate the SET string from the list of tuples (ColumnName, Value}
+%% eg [{ColumnA, ValueA}, {ColumnB, ValueB}] would result in ColumnA = ValueA, ColumnB = ValueB
+%% @end
+%%------------------------------------------------------------------------------
+-spec generate_set_iolist(list(kz_term:ne_binaries())) -> iolist().
+generate_set_iolist(ColumnAndValuesList) ->
+    SetIoList = lists:map(fun({ColumnName, Value}) -> [ColumnName, <<"=">>, Value] end
+                         ,ColumnAndValuesList),
+    lists:join(<<", ">>, SetIoList).
 
 %%------------------------------------------------------------------------------
 %% @doc Generate a where clause iolist from a kz_postgresql:where_clause()
@@ -318,8 +364,8 @@ execute_query_with_transaction(ConnPool, EpgsqlFunctions) ->
 %% query and its column list
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_term:ne_binary()) ->
-                            {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}.
+-spec generate_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_postgresql:query_operator()) ->
+                            {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
 generate_query(ConnPool, TableName, Operation) ->
     lager:debug("generating / looking up cached query for table: ~p, operation: ~p", [TableName, Operation]),
     case fetch_cache_query(TableName, Operation) of
@@ -337,8 +383,8 @@ generate_query(ConnPool, TableName, Operation) ->
 %% @doc Cache a PG query and its column list by Table Name and Operation
 %% @end
 %%------------------------------------------------------------------------------
--spec cache_query(kz_postgresql:table_name(), kz_term:ne_binary(), {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}) ->
-                         {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}.
+-spec cache_query(kz_postgresql:table_name(), kz_term:ne_binary(), {kz_postgresql:query_record(), kz_postgresql:table_schema()}) ->
+                         {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
 cache_query(TableName, Operation, {Query, ColumnAndTypes}) ->
     lager:debug("caching '~p' query for table '~p'", [Operation, TableName]),
     CacheProps = [{'expires',?KAZOO_POSTGRESQL_CACHE_TIMEOUT}],
@@ -350,7 +396,7 @@ cache_query(TableName, Operation, {Query, ColumnAndTypes}) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec fetch_cache_query(kz_postgresql:table_name(), kz_term:ne_binary())->
-                               {'ok', {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}} | {'error', 'not_found'}.
+                               {'ok', {kz_postgresql:query_record(), kz_postgresql:table_schema()}} | {'error', 'not_found'}.
 fetch_cache_query(TableName, Operation) ->
     kz_cache:fetch_local(?KAZOO_POSTGRESQL_QUERIES_CACHE, {TableName, Operation}).
 
@@ -358,43 +404,46 @@ fetch_cache_query(TableName, Operation) ->
 %% @doc Build a sql query and column list for a given Table Name and Operation
 %% @end
 %%------------------------------------------------------------------------------
--spec build_postgresql_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), atom()) ->
-                                    {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}.
+-spec build_postgresql_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_postgresql:query_operator()) ->
+                                    {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
 build_postgresql_query(ConnPool, TableName, Operation) ->
     ColumnAndTypes = kz_postgresql_schema:get_schema(ConnPool, TableName),
-    ColumnAndTypesSorted = sort_columns(ColumnAndTypes),
+    ColumnAndTypesSorted = sort_and_drop_columns(ColumnAndTypes),
     generate_query_record(TableName, ColumnAndTypesSorted, Operation).
 
 %%------------------------------------------------------------------------------
-%% @doc Sort the list of columns so:
+%% @doc Sort and/or drop the list of columns so:
+%% Drop _rev column as this is handled by the db
 %% "other_json" is the last element in the list
 %% Any remaining json columns are at the end of the list but before "other_json"
 %% All other columns are at the start of the list
 %% @end
 %%------------------------------------------------------------------------------
--spec sort_columns(kz_postgresql:table_schema()) -> kz_postgresql:table_schema().
-sort_columns(Columns) ->
-    sort_columns(Columns, [], [], []).
+-spec sort_and_drop_columns(kz_postgresql:table_schema()) -> kz_postgresql:table_schema().
+sort_and_drop_columns(Columns) ->
+    sort_and_drop_columns(Columns, [], [], []).
 
--spec sort_columns(kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema()) ->
-                          kz_postgresql:table_schema().
-sort_columns([], OtherCols, JsonCols, LastCol) ->
+-spec sort_and_drop_columns(kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema()) ->
+                                   kz_postgresql:table_schema().
+sort_and_drop_columns([], OtherCols, JsonCols, LastCol) ->
     lists:reverse(OtherCols) ++ lists:reverse(JsonCols) ++ LastCol;
-sort_columns([{<<"other_json">>, _Type} = OtherJsonCol | Columns], OtherCols, JsonCols, _LastCol) ->
-    sort_columns(Columns, OtherCols, JsonCols, [OtherJsonCol]);
-sort_columns([{_ColName, <<"json">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
-sort_columns([{_ColName, <<"jsonb">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
-sort_columns([Column | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_columns(Columns, [Column | OtherCols], JsonCols, LastCol).
+sort_and_drop_columns([{<<"_rev">>, _Type} | Columns], OtherCols, JsonCols, LastCol) ->
+    sort_and_drop_columns(Columns, OtherCols, JsonCols, LastCol);
+sort_and_drop_columns([{<<"other_json">>, _Type} = OtherJsonCol | Columns], OtherCols, JsonCols, _LastCol) ->
+    sort_and_drop_columns(Columns, OtherCols, JsonCols, [OtherJsonCol]);
+sort_and_drop_columns([{_ColName, <<"json">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
+    sort_and_drop_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
+sort_and_drop_columns([{_ColName, <<"jsonb">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
+    sort_and_drop_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
+sort_and_drop_columns([Column | Columns], OtherCols, JsonCols, LastCol) ->
+    sort_and_drop_columns(Columns, [Column | OtherCols], JsonCols, LastCol).
 
 %%------------------------------------------------------------------------------
 %% @doc Generate a sql query record for a given postgreSQL operation
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_query_record(kz_postgresql:table_name(), kz_postgresql:table_schema(), kz_term:ne_binary()) ->
-                                   {kz_postgresql:postgresql_query(), kz_postgresql:table_schema()}.
+-spec generate_query_record(kz_postgresql:table_name(), kz_postgresql:table_schema(), kz_postgresql:query_operator()) ->
+                                   {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
 generate_query_record(TableName, ColumnAndTypes, <<"INSERT">>) ->
     {ValuesList, ColumnsList} = generate_query_values_and_column_lists(ColumnAndTypes),
     QueryRecord = #kz_postgresql_query{'insert_into' = {TableName, ColumnsList}
@@ -402,17 +451,25 @@ generate_query_record(TableName, ColumnAndTypes, <<"INSERT">>) ->
                                       ,'returning' = [<<"*">>]
                                       },
     {QueryRecord, ColumnAndTypes};
-generate_query_record(TableName, ColumnAndTypes, <<"INSERT-BULK">>) ->
+generate_query_record(TableName, ColumnAndTypes, <<"UPDATE">>) ->
     {ValuesList, ColumnsList} = generate_query_values_and_column_lists(ColumnAndTypes),
-    QueryRecord = #kz_postgresql_query{'insert_into' = {TableName, ColumnsList}
-                                      ,'values' = [ValuesList]
-                                      ,'returning' = [<<"'true' AS \"ok\"">>, <<"_id as \"id\"">>, <<"_rev AS \"rev\"">>]
+    SetValues = lists:zip(ColumnsList, ValuesList),
+    {<<"\"_id\"">>, IdPlaceholderValue} = lists:keyfind(<<"\"_id\"">>, 1, SetValues),
+    QueryRecord = #kz_postgresql_query{'update' = <<"\"",TableName/binary,"\"">>
+                                      ,'set' = SetValues
+                                      ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
+                                                           ,IdPlaceholderValue
+                                                           ]
+                                                 }
+                                      ,'returning' = [<<"*">>]
                                       },
     {QueryRecord, ColumnAndTypes}.
 
 %%------------------------------------------------------------------------------
 %% @doc Generate a list of value placeholders($1..$N) and list of columns to use
-%% as part of a PG extended query
+%% as part of a PG extended query.
+%% Return {List of column names, List of $1..$N placeholders} where both lists
+%% are the same length.
 %% @end
 %%------------------------------------------------------------------------------
 -spec generate_query_values_and_column_lists(kz_postgresql:table_schema()) -> {kz_term:ne_binaries(), kz_term:ne_binaries()}.

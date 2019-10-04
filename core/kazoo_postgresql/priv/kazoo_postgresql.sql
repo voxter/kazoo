@@ -8,26 +8,41 @@
 -- PG tables prerequisites
 ----------------------------------------------------------------------------------
 -- Table Names:
--- All PG table names and JSON doc type must be mapped in kz_postgresql_schema:get_pgsql_table_name/2
--- If there is no table name mapping, the PG table 'other' will be used
+--   All PG data table names and JSON doc type must be mapped in kz_postgresql_schema:get_pgsql_table_name/2
+--   If there is no table name mapping, the PG table 'other' will be used
+--   See table schema section for archive table naming convention
 --
 -- Column Names:
--- All column names matching a JSON doc key will be populated with the corresponding value
--- Custom column names can be defined and must be mapped in kz_postgresql_schema:get_key_path/2 to a JSON key
+--   All column names matching a JSON doc key will be populated with the corresponding value
+--   Custom column names can be defined and must be mapped in kz_postgresql_schema:get_key_path/2 to a JSON key
 --
 -- Table Schema:
--- All tables must contain a minimum defined set of columns and a PKEY as defined below
---  _id character varying(255) NOT NULL,
---  _rev integer NOT NULL,
---  _deleted boolean NOT NULL,
---  pvt_account_id character varying(255),
---  pvt_account_db character varying(255),
---  pvt_created bigint,
---  pvt_modified bigint,
---  pvt_node character varying(255),
---  pvt_type character varying(255),
---  other_json jsonb,
---  PRIMARY KEY(_id, _rev)
+--   For ever data table there must contain an corresponding archive table
+--   Archive table name must be defined to the corresponding data table name with trailing '_archive'
+--   EG. cdr data table must have an archive table named cdr_archive
+
+--   All data tables must contain a minimum defined set of columns and a PKEY as defined below:
+--    _id character varying(255) NOT NULL,
+--    _rev integer NOT NULL,
+--    pvt_account_db character varying(255) NOT NULL,
+--    pvt_account_db character varying(255),
+--    pvt_created bigint,
+--    pvt_modified bigint,
+--    pvt_node character varying(255),
+--    pvt_type character varying(255),
+--    other_json jsonb,
+--    PRIMARY KEY(_id, _rev)
+
+--   All archive tables must contain the same columns as the corresponding data table with the following leading columns in the order:
+--    _deleted boolean NOT NULL
+--    _changed_on TIMESTAMP(6) NOT NULL,
+--
+--   All data tables must have an associated table trigger as defined below:
+--    CREATE TRIGGER <<DATA-TABLE-NAME>>_changes_trigger
+--      BEFORE INSERT OR UPDATE OR DELETE
+--      ON <<DATA-TABLE-NAME>>
+--      FOR EACH ROW
+--      EXECUTE PROCEDURE data_table_changes();
 --
 --
 ----------------------------------------------------------------------------------
@@ -64,7 +79,7 @@ CREATE TABLE IF NOT EXISTS public.status_stat (
  "timestamp" bigint,
  status character varying(255),
  pvt_account_id character varying(255),
- pvt_account_db character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
  pvt_created bigint,
  pvt_modified bigint,
  pvt_node character varying(255),
@@ -74,6 +89,26 @@ CREATE TABLE IF NOT EXISTS public.status_stat (
 );
 ALTER TABLE public.status_stat OWNER TO kazoo;
 
+CREATE TABLE IF NOT EXISTS public.status_stat_archive (
+ _deleted boolean NOT NULL,
+ _changed_on TIMESTAMP(6) NOT NULL,
+ _id character varying(255) NOT NULL,
+ _rev integer NOT NULL,
+ _deleted boolean NOT NULL,
+ agent_id character varying(255),
+ "timestamp" bigint,
+ status character varying(255),
+ pvt_account_id character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
+ pvt_created bigint,
+ pvt_modified bigint,
+ pvt_node character varying(255),
+ pvt_type character varying(255),
+ other_json jsonb,
+ PRIMARY KEY(_id, _rev)
+);
+ALTER TABLE public.status_stat_archive OWNER TO kazoo;
+
 ----------------------------------------------------------------------------------
 -- Auth
 -- Table to store all Auth docs
@@ -81,7 +116,6 @@ ALTER TABLE public.status_stat OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.auth (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
- _deleted boolean NOT NULL,
  auth_type character varying(255),
  auth_module character varying(255),
  status character varying(255),
@@ -89,7 +123,7 @@ CREATE TABLE IF NOT EXISTS public.auth (
  client_ip character varying(255),
  timestamp bigint,
  pvt_account_id character varying(255),
- pvt_account_db character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
  pvt_created bigint,
  pvt_modified bigint,
  pvt_node character varying(255),
@@ -98,6 +132,27 @@ CREATE TABLE IF NOT EXISTS public.auth (
 );
 ALTER TABLE public.auth OWNER TO kazoo;
 
+CREATE TABLE IF NOT EXISTS public.auth_archive (
+ _deleted boolean NOT NULL,
+ _changed_on TIMESTAMP(6) NOT NULL,
+ _id character varying(255) NOT NULL,
+ _rev integer NOT NULL,
+ auth_type character varying(255),
+ auth_module character varying(255),
+ status character varying(255),
+ message character varying(255),
+ client_ip character varying(255),
+ timestamp bigint,
+ pvt_account_id character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
+ pvt_created bigint,
+ pvt_modified bigint,
+ pvt_node character varying(255),
+ other_json jsonb,
+ PRIMARY KEY(_id, _rev)
+);
+ALTER TABLE public.auth_archive OWNER TO kazoo;
+
 ----------------------------------------------------------------------------------
 -- call_stat
 -- Table is used to store all kazoo docs of type call_stat
@@ -105,7 +160,6 @@ ALTER TABLE public.auth OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.call_stat (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
- _deleted boolean NOT NULL,
  agent_id character varying(255),
  queue_id character varying(255),
  entered_timestamp bigint,
@@ -122,7 +176,7 @@ CREATE TABLE IF NOT EXISTS public.call_stat (
  wait_time bigint,
  talk_time bigint,
  pvt_account_id character varying(255),
- pvt_account_db character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
  pvt_created bigint,
  pvt_modified bigint,
  pvt_node character varying(255),
@@ -131,14 +185,45 @@ CREATE TABLE IF NOT EXISTS public.call_stat (
  PRIMARY KEY(_id, _rev)
 );
 ALTER TABLE public.call_stat OWNER TO kazoo;
+
+CREATE TABLE IF NOT EXISTS public.call_stat_archive (
+ _deleted boolean NOT NULL,
+ _changed_on TIMESTAMP(6) NOT NULL,
+ _id character varying(255) NOT NULL,
+ _rev integer NOT NULL,
+ agent_id character varying(255),
+ queue_id character varying(255),
+ entered_timestamp bigint,
+ handled_timestamp bigint,
+ processed_timestamp bigint,
+ hung_up_by character varying(255),
+ entered_position bigint,
+ is_callback boolean,
+ misses jsonb,
+ status character varying(255),
+ caller_id_name character varying(255),
+ caller_id_number character varying(255),
+ required_skills jsonb,
+ wait_time bigint,
+ talk_time bigint,
+ pvt_account_id character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
+ pvt_created bigint,
+ pvt_modified bigint,
+ pvt_node character varying(255),
+ pvt_type character varying(255),
+ other_json jsonb,
+ PRIMARY KEY(_id, _rev)
+);
+ALTER TABLE public.call_stat_archive OWNER TO kazoo;
+
 ----------------------------------------------------------------------------------
--- Cdr
+-- cdr
 -- Table to store all CDR docs
 ----------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.cdr (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
- _deleted boolean NOT NULL,
  custom_channel_vars jsonb,
  to_uri character varying(255),
  to_tag character varying(255),
@@ -179,7 +264,7 @@ CREATE TABLE IF NOT EXISTS public.cdr (
  did_classifier character varying(255),
  pvt_vsn integer,
  pvt_account_id character varying(255),
- pvt_account_db character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
  pvt_created bigint,
  pvt_modified bigint,
  pvt_type character varying(255),
@@ -190,8 +275,64 @@ CREATE TABLE IF NOT EXISTS public.cdr (
 );
 ALTER TABLE public.cdr OWNER TO kazoo;
 
+CREATE TABLE IF NOT EXISTS public.cdr_archive (
+ _deleted boolean NOT NULL,
+ _changed_on TIMESTAMP(6) NOT NULL,
+ _id character varying(255) NOT NULL,
+ _rev integer NOT NULL,
+ custom_channel_vars jsonb,
+ to_uri character varying(255),
+ to_tag character varying(255),
+ "to" character varying(255),
+ from_uri character varying(255),
+ from_tag character varying(255),
+ "from" character varying(255),
+ e164_destination character varying(80),
+ e164_origination character varying(80),
+ "timestamp" bigint,
+ ringing_seconds bigint,
+ request character varying(255),
+ presence_id character varying(255),
+ media_server character varying(255),
+ hangup_code character varying(255),
+ hangup_cause character varying(255),
+ endpoint_disposition character varying(255),
+ duration_seconds bigint,
+ disposition character varying(255),
+ channel_created_time bigint,
+ callee_id_number character varying(255),
+ callee_id_name character varying(255),
+ caller_id_number character varying(255),
+ caller_id_name character varying(255),
+ call_direction character varying(255),
+ billing_seconds bigint,
+ call_id character varying(255),
+ other_leg_call_id character varying(255),
+ node character varying(255),
+ msg_id character varying(255),
+ event_name character varying(255),
+ event_category character varying(255),
+ app_name character varying(255),
+ is_conference boolean,
+ interaction_id character varying(255),
+ interaction_key character varying(255),
+ interaction_time bigint,
+ did_classifier character varying(255),
+ pvt_vsn integer,
+ pvt_account_id character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
+ pvt_created bigint,
+ pvt_modified bigint,
+ pvt_type character varying(255),
+ pvt_node character varying(255),
+ pvt_document_hash character varying(255),
+ other_json jsonb,
+ PRIMARY KEY(_id, _rev)
+);
+ALTER TABLE public.cdr_archive OWNER TO kazoo;
+
 ----------------------------------------------------------------------------------
--- Lookup
+-- lookup
 -- Table is used to keep a reference of all docs by account name and doc id and there corresponding PG table
 ----------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.lookup (
@@ -209,9 +350,8 @@ ALTER TABLE public.lookup OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.other (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
- _deleted boolean NOT NULL,
  pvt_account_id character varying(255),
- pvt_account_db character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
  pvt_created bigint,
  pvt_modified bigint,
  pvt_node character varying(255),
@@ -220,6 +360,22 @@ CREATE TABLE IF NOT EXISTS public.other (
  PRIMARY KEY(_id, _rev)
 );
 ALTER TABLE public.other OWNER TO kazoo;
+
+CREATE TABLE IF NOT EXISTS public.other_archive (
+ _deleted boolean NOT NULL,
+ _changed_on TIMESTAMP(6) NOT NULL,
+ _id character varying(255) NOT NULL,
+ _rev integer NOT NULL,
+ pvt_account_id character varying(255),
+ pvt_account_db character varying(255) NOT NULL,
+ pvt_created bigint,
+ pvt_modified bigint,
+ pvt_node character varying(255),
+ pvt_type character varying(255),
+ other_json jsonb,
+ PRIMARY KEY(_id, _rev)
+);
+ALTER TABLE public.other_archive OWNER TO kazoo;
 
 ----------------------------------------------------------------------------------
 -- Couch PG Views
@@ -237,8 +393,6 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_agent" AS
   agent_id AS _view_key_0,
   timestamp AS _view_key_1
  FROM public.status_stat
- WHERE _rev = (SELECT MAX(_rev) FROM status_stat status_stat1 WHERE status_stat1._id = status_stat._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."agent_stats~most_recent_by_agent" OWNER TO kazoo;
 
@@ -250,8 +404,6 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_timestamp" AS
   timestamp AS _view_key_0,
   agent_id AS _view_key_1
  FROM public.status_stat
- WHERE _rev = (SELECT MAX(_rev) FROM status_stat status_stat1 WHERE status_stat1._id = status_stat._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."agent_stats~most_recent_by_timestamp" OWNER TO kazoo;
 
@@ -264,8 +416,6 @@ CREATE OR REPLACE VIEW public."agent_stats~status_log" AS
   timestamp AS _view_key_1,
   status AS _view_value
  FROM public.status_stat
- WHERE _rev = (SELECT MAX(_rev) FROM status_stat status_stat1 WHERE status_stat1._id = status_stat._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."agent_stats~status_log" OWNER TO kazoo;
 
@@ -287,8 +437,6 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_module" AS
   timestamp AS _view_value_timestamp,
   client_ip AS _view_value_client_ip
  FROM public.auth
- WHERE _rev = (SELECT MAX(_rev) FROM auth auth1 WHERE auth1._id = auth._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."auth~login_attempt_by_auth_module" OWNER TO kazoo;
 
@@ -307,8 +455,6 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_type" AS
   timestamp AS _view_value_timestamp,
   client_ip AS _view_value_client_ip
  FROM public.auth
- WHERE _rev = (SELECT MAX(_rev) FROM auth auth1 WHERE auth1._id = auth._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."auth~login_attempt_by_auth_type" OWNER TO kazoo;
 
@@ -327,8 +473,6 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_status" AS
   timestamp AS _view_value_timestamp,
   client_ip AS _view_value_client_ip
  FROM public.auth
- WHERE _rev = (SELECT MAX(_rev) FROM auth auth1 WHERE auth1._id = auth._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."auth~login_attempt_by_status" OWNER TO kazoo;
 
@@ -346,8 +490,6 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_time" AS
   timestamp AS _view_value_timestamp,
   client_ip AS _view_value_client_ip
  FROM public.auth
- WHERE _rev = (SELECT MAX(_rev) FROM auth auth1 WHERE auth1._id = auth._id)
-  AND _deleted = false
  ORDER BY _view_key_0;
 ALTER TABLE public."auth~login_attempt_by_time" OWNER TO kazoo;
 
@@ -362,8 +504,6 @@ CREATE OR REPLACE VIEW public."call_stats~call_log" AS
   queue_id AS _view_key_0,
   entered_timestamp AS _view_key_1
  FROM public.call_stat
- WHERE _rev = (SELECT MAX(_rev) FROM call_stat call_stat1 WHERE call_stat1._id = call_stat._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."call_stats~call_log" OWNER TO kazoo;
 
@@ -385,8 +525,6 @@ CREATE OR REPLACE VIEW public."call_stats~crossbar_listing" AS
   talk_time AS _view_value_talk_time,
   queue_id AS _view_value_queue_id
  FROM public.call_stat
- WHERE _rev = (SELECT MAX(_rev) FROM call_stat call_stat1 WHERE call_stat1._id = call_stat._id)
-  AND _deleted = false
  ORDER BY _view_key_0;
 ALTER TABLE public."call_stats~crossbar_listing" OWNER TO kazoo;
 
@@ -421,8 +559,6 @@ CREATE OR REPLACE VIEW public."cdrs~crossbar_listing" AS
   custom_channel_vars->>'authorizing_id' AS _view_value_authorizing_id,
   custom_channel_vars->>'media_recordings' AS _view_value_media_recordings
  FROM public.cdr
- WHERE _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."cdrs~crossbar_listing" OWNER TO kazoo;
 
@@ -438,8 +574,6 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing" AS
   COALESCE(channel_created_time, ("timestamp" - duration_seconds)) AS _view_value_channel_time,
   COALESCE((other_json ->> 'channel_loopback_leg'::text), '_'::text) AS _view_value_leg
  FROM public.cdr
- WHERE _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."cdrs~interaction_listing" OWNER TO kazoo;
 
@@ -451,8 +585,6 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing_by_id" AS
   interaction_id AS _view_key_0,
   channel_created_time AS _view_key_1
  FROM public.cdr
- WHERE _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
  ALTER TABLE public."cdrs~interaction_listing_by_id" OWNER TO kazoo;
 
@@ -471,8 +603,6 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing_by_owner" AS
  FROM public.cdr
  WHERE custom_channel_vars->>'owner_id' IS NOT NULL
   AND custom_channel_vars IS NOT NULL
-  AND _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1, _view_key_2, _view_key_3;
 ALTER TABLE public."cdrs~interaction_listing_by_owner" OWNER TO kazoo;
 
@@ -502,8 +632,6 @@ CREATE OR REPLACE VIEW public."cdrs~listing_by_owner" AS
  FROM public.cdr
  WHERE custom_channel_vars->>'owner_id' IS NOT NULL
   AND custom_channel_vars IS NOT NULL
-  AND _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1, _view_key_2;
 ALTER TABLE public."cdrs~listing_by_owner" OWNER TO kazoo;
 
@@ -535,8 +663,6 @@ CREATE OR REPLACE VIEW public."cdrs~offnet-calls" AS
   AND (custom_channel_vars->>'global_resource')::boolean = true
   AND custom_channel_vars->>'channel_authorized' IS NOT NULL
   AND (custom_channel_vars->>'channel_authorized')::boolean = true
-  AND _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."cdrs~offnet-calls" OWNER TO kazoo;
 
@@ -580,12 +706,101 @@ ELSE 'null'
   AND other_json->>'channel_name' !~ '(\d*|\w*)*loopback'
   AND NOT(cdr.call_direction = 'inbound' AND cdr.custom_channel_vars->>'authorizing_id' IS NOT NULL)
   AND NOT(cdr.call_direction = 'outbound' AND cdr.custom_channel_vars->>'resource_id' IS NULL)
-  AND _rev = (SELECT MAX(_rev) FROM cdr cdr1 WHERE cdr1._id = cdr._id)
-  AND _deleted = false
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."cdrs~summarize_cdrs" OWNER TO kazoo;
+
+
+----------------------------------------------------------------------------------
+-- PG Functions
+----------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+-- Handle INSERT, UPDATE or DELETE on data tables
+-- This trigger function should be called for all INSERT, UPDATE and DELETE calls
+-- to non archive tables
+-- This will take care of row/document revision and keeping copies of data in archive
+-- tables when data is altered
+----------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION data_table_changes()
+  RETURNS trigger AS $BODY$
+  DECLARE
+    archive_table_name VARCHAR := TG_TABLE_NAME || '_archive';
+  BEGIN
+    -- Verify _id, pvt_account_db are set for INSERT and UPDATES
+    IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
+      IF NEW._id IS NULL THEN
+        RAISE EXCEPTION '_id cannot be null';
+      END IF;
+      IF NEW.pvt_account_db IS NULL THEN
+        RAISE EXCEPTION 'pvt_account_db cannot be null';
+      END IF;
+    END IF;
+
+    -- Handle INSERT to table
+    IF TG_OP = 'INSERT' THEN
+      -- Add entry in to 'lookup' table
+      -- Calculate next rev for the doc/row and set it on NEW
+      -- Return NEW so it is added to the table
+      INSERT INTO lookup(doc_id, db_name, table_name)
+          VALUES(NEW._id, NEW.pvt_account_db, TG_TABLE_NAME);
+      EXECUTE format('SELECT coalesce(MAX(_rev) + 1, 1) FROM %I.%I WHERE _id = $1', TG_TABLE_SCHEMA, archive_table_name)
+          INTO NEW._rev
+          USING NEW._id;
+      --NEW._rev := revision
+      RETURN NEW;
+
+    -- Handle UPDATE to table
+    ELSIF TG_OP = 'UPDATE' THEN
+      -- Copy old row to archive with _delete set to false and increment NEW rev by 1
+      -- Return NEW so it is added to the table
+      EXECUTE format('INSERT INTO %I.%I SELECT false, now(), $1.*', TG_TABLE_SCHEMA, archive_table_name)
+        USING OLD;
+      NEW._rev = OLD._rev + 1;
+      RETURN NEW;
+
+    -- Handle DELETE to table
+    ELSIF TG_OP = 'DELETE' THEN
+      -- Copy OLD row to archive with _delete set to true and delete lookup table row
+      -- Return OLD so it is deleted from the table
+      EXECUTE format('INSERT INTO %I.%I SELECT true, now(), $1.*', TG_TABLE_SCHEMA, archive_table_name)
+        USING OLD;
+      DELETE FROM lookup WHERE doc_id = OLD._id AND db_name = OLD.pvt_account_db;
+      RETURN OLD;
+    END IF;
+  END;
+  $BODY$ LANGUAGE plpgsql;
+
+
+----------------------------------------------------------------------------------
+-- PG Triggers
+-- See notes on table schema at the top of this file
+-- Every data table must have a trigger for INSERT, DELETE and UPDATE
+----------------------------------------------------------------------------------
+CREATE TRIGGER status_stat_changes_trigger
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON status_stat
+  FOR EACH ROW
+  EXECUTE PROCEDURE data_table_changes();
+
+CREATE TRIGGER auth_changes_trigger
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON auth
+  FOR EACH ROW
+  EXECUTE PROCEDURE data_table_changes();
+
+CREATE TRIGGER call_stat_changes_trigger
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON call_stat
+  FOR EACH ROW
+  EXECUTE PROCEDURE data_table_changes();
+
+CREATE TRIGGER cdr_changes_trigger
+  BEFORE INSERT OR UPDATE OR DELETE
+  ON cdr
+  FOR EACH ROW
+  EXECUTE PROCEDURE data_table_changes();
+
+
 
 --
 -- Kazoo PostgreSQL database schema complete
 --
-

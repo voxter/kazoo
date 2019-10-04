@@ -94,8 +94,8 @@ ensure_list(Any) -> [Any].
 %% @doc Convert and add kz_data options to a postgresql query
 %% @end
 %%------------------------------------------------------------------------------
--spec add_options_to_query(kz_postgresql:connection_pool(), kz_postgresql:postgresql_query(), kz_data:options()) ->
-                                  kz_postgresql:postgresql_query().
+-spec add_options_to_query(kz_postgresql:connection_pool(), kz_postgresql:query_record(), kz_data:options()) ->
+                                  kz_postgresql:query_record().
 add_options_to_query(_ConnPool, Query, []) ->
     Query;
 
@@ -115,7 +115,8 @@ add_options_to_query(ConnPool, Query, [{'skip', Skip} | OtherOptions]) ->
 
 %% ascending kz_data:option()
 %% View query only
-%% Add ORDER BY _view_key_0, _view_key_N ASC
+%% Add ORDER BY _view_key_0 ASC, _view_key_N ASC
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 add_options_to_query(ConnPool
                     ,#kz_postgresql_query{'order_by'=OrderByList, 'from'=[View|[]]}=Query
                     ,['ascending' | OtherOptions]) ->
@@ -130,7 +131,8 @@ add_options_to_query(ConnPool
 
 %% descending kz_data:option()
 %% View query only
-%% Add ORDER BY _view_key_0, _view_key_N DESC
+%% Add ORDER BY _view_key_0 DESC, _view_key_N DESC
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 add_options_to_query(ConnPool
                     ,#kz_postgresql_query{'order_by'=OrderByList, 'from'=[View|[]]}=Query
                     ,['descending' | OtherOptions]) ->
@@ -225,11 +227,11 @@ add_options_to_query(ConnPool
                        'true' ->
                            %% The table is a PG view
                            %% Add TABLE.* to select list
-                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_rev = TABLE._rev
+                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_db_name = TABLE.pvt_account_db
                            TableName = kz_postgresql_schema:pg_view_name_to_pg_table_name(FromStripped),
                            Select = <<"\"",TableName/binary,"\".*">>,
                            InnerJoin = {TableName, [<<From/binary,"._view_id = ",TableName/binary,"._id">>
-                                                   ,<<From/binary,"._view_rev = ",TableName/binary,"._rev">>]},
+                                                   ,<<From/binary,"._view_db_name = ",TableName/binary,".pvt_account_db">>]},
                            Query#kz_postgresql_query{'select' = lists:append(SelectList, [Select])
                                                     ,'inner_join' = InnerJoin}
                    end,
@@ -246,15 +248,18 @@ add_options_to_query(ConnPool, Query, [UnknownOption | OtherOptions]) ->
 %%------------------------------------------------------------------------------
 %% @doc For a given PG View, generate a list of tuples where each tuple contains
 %% the view key N and and the operator defined
+%% Add 'COLLATE "C"' on character varying and varchar columns to match couch sorting
 %% NOTE, This will only work on PG views
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_order_by_list(kz_postgresql:connection_pool(), kz_postgresql:view_name(), kz_term:ne_binary()) ->
+-spec generate_order_by_list(kz_postgresql:connection_pool(), kz_postgresql:view_name(), kz_postgresql:sort_operator()) ->
                                 list(kz_postgresql:order_by()).
 generate_order_by_list(ConnPool, View, Operator) ->
     ViewStripped = binary:replace(View, <<"\"">>, <<"">>, ['global']),
     Columns = kz_postgresql_schema:get_schema(ConnPool, ViewStripped),
-    lists:foldr(fun({<<"_view_key_",_>> = Key, _}, OrderByAcc) -> [{Key, Operator} | OrderByAcc];
+    lists:foldr(fun({<<"_view_key_",_>> = Key, <<"character varying">>}, OrderByAcc) -> [{Key, <<"COLLATE \"C\" ",Operator/binary>>} | OrderByAcc];
+                   ({<<"_view_key_",_>> = Key, <<"varchar">>}, OrderByAcc) -> [{Key, <<"COLLATE \"C\" ",Operator/binary>>} | OrderByAcc];
+                   ({<<"_view_key_",_>> = Key, _Type}, OrderByAcc) -> [{Key, Operator} | OrderByAcc];
                    (_, OrderByAcc) -> OrderByAcc
                 end
                ,[]

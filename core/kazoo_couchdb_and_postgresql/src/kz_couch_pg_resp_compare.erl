@@ -13,7 +13,8 @@
 %% @doc Compare Couch and PG responses and log the diff if any
 %% @end
 %%------------------------------------------------------------------------------
--spec compare_resp({'ok', kz_json:object()} | kz_data:data_error(), {'ok', kz_json:object()} | kz_data:data_error()) -> boolean().
+-spec compare_resp({'ok', kz_json:object()} | boolean() | kz_data:data_error(), {'ok', kz_json:object()} | boolean() | kz_data:data_error()) ->
+                          boolean().
 compare_resp({ErrorOrOk, Resp}, {ErrorOrOk, Resp}) ->
     lager:debug("couch and pg both returned an ~p response", [ErrorOrOk]),
     log_response_same(),
@@ -29,6 +30,9 @@ compare_resp({ErrorOrOk, CouchBody}=CouchResp, {ErrorOrOk, PGBody}=PGResp) ->
             log_response_diff(CouchResp, PGResp),
             'false'
     end;
+compare_resp(Resp, Resp) ->
+    log_response_same(),
+    'true';
 compare_resp(CouchResp, PGResp) ->
     log_response_diff(CouchResp, PGResp),
     'false'.

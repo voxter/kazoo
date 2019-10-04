@@ -15,7 +15,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_table_names(kz_postgresql:connection_pool(), kz_term:ne_binary()) ->
-                             {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | epgsql:error_reply().
+                             {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
 get_table_names(ConnPool, DbName)->
     get_table_names_from_pgsql_db(ConnPool, DbName, []).
 
@@ -27,7 +27,7 @@ get_table_names(ConnPool, DbName)->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_table_names(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries() | kz_doc:object()) ->
-                             {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | epgsql:error_reply().
+                             {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
 %% Doc ID supplied
 get_table_names(ConnPool, DbName, DocId) when is_binary(DocId)->
     get_table_names_from_pgsql_db(ConnPool, DbName, [DocId]);
@@ -50,7 +50,7 @@ get_table_names(ConnPool, DbName, Doc) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_table_names_from_pgsql_db(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binaries()) ->
-                                           {'ok', list({kz_postgresql:table_name(), list()})} | epgsql:error_reply().
+                                           {'ok', list({kz_postgresql:table_name(), list()})} |kz_data:data_error().
 %% No Doc Ids defined, Return list of PG tabes for all Doc Ids related to the db name
 get_table_names_from_pgsql_db(ConnPool, DbName, []) ->
     lager:debug("looking up postgreSQL table name(s) in db for DbName: ~p, No DocIds supplied", [DbName]),
@@ -84,7 +84,7 @@ get_table_names_from_pgsql_db(ConnPool, DbName, DocIds) when is_list(DocIds) ->
     do_get_table_names_from_pgsql_db(ConnPool, Query).
 
 -spec do_get_table_names_from_pgsql_db(kz_postgresql:connection_pool(), kz_types:ne_binary()) ->
-                                              {'ok', list({kz_postgresql:table_name(), list()})} | epgsql:error_reply().
+                                              {'ok', list({kz_postgresql:table_name(), list()})} | kz_data:data_error().
 do_get_table_names_from_pgsql_db(ConnPool, Query) ->
     case kz_postgresql_query:execute_query(ConnPool, Query) of
         {'ok', _, []} ->
@@ -94,7 +94,7 @@ do_get_table_names_from_pgsql_db(ConnPool, Query) ->
             {'ok', group_doc_ids_by_table_name(OkResp)};
         {'error', _}=Error ->
             lager:error("postgresql query (~p) failed, Error: ~p", [Query, Error]),
-            Error
+            {'error', kz_postgresql_response:format_error(Error)}
     end.
 
 %%------------------------------------------------------------------------------

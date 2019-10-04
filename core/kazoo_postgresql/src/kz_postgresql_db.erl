@@ -50,26 +50,25 @@ db_delete(ConnPool, DbName) ->
 %%------------------------------------------------------------------------------
 %% @doc Verify if a couch like DB exists in the PG database
 %% Uses the lookup table to verify if the dbname exists
-%% This will then have to check for all rows (docs) if they are deleted or not
 %% @end
 %%------------------------------------------------------------------------------
 -spec db_exists(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
 db_exists(ConnPool, DbName) ->
     lager:debug("checking if couch like database (~p) exists in postgresql database", [DbName]),
-    case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName) of
-        {'error', Cause} ->
-            lager:error("error when checking if couch like db (~p) exists in postgresql database, Cause: ~p", [DbName, Cause]),
-            'false';
-        {'ok', []} ->
-            lager:debug("couch like db dose not exists in lookup table"),
-            'false';
-        {'ok', PgTablesAndDocIds} ->
-            lager:debug("found multiple docs in lookup table, checking deleted status of each doc"),
-            Fun = fun(TableName, DocIds) -> lists:map(fun(DocId) -> {DocId, TableName} end, DocIds) end,
-            DocIdsAndTableNames = lists:foldl(fun({TableName, DocIds}, List) -> Fun(TableName, DocIds) ++ List end
-                                             ,[]
-                                             ,PgTablesAndDocIds),
-            lists:any(fun(V) -> kz_postgresql_doc:doc_exists(ConnPool, V) end, DocIdsAndTableNames)
+    Query = #kz_postgresql_query{'select' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".doc_id">>]
+                                ,'from' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>]
+                                ,'where' = {<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".db_name">>
+                                                     ,<<"$1">>
+                                                     ]
+                                           }
+                                ,'parameters' = [DbName]
+                                },
+    case kz_postgresql_query:execute_query(ConnPool, Query) of
+        {'ok', _, []} -> 'false';
+        {'ok', _Columns, _Rows} -> 'true';
+        {'error', _}=Error ->
+            lager:error("postgresql query (~p) failed, Error: ~p", [Query, Error]),
+            'false'
     end.
 
 %%------------------------------------------------------------------------------
@@ -88,16 +87,8 @@ db_list(ConnPool, Options) ->
             lager:debug("could not find any couch like dbs in the lookup table"),
             {'error', 'no_results'};
         {'ok', _Columns, Rows} ->
-            %% Verify each of the couch like db exists
-            Fun = fun({DbName}) ->
-                          case db_exists(ConnPool, DbName) of
-                              'true' -> {'true', DbName};
-                              'false' -> false
-                          end
-                  end,
-            ExistingDbs = lists:filtermap(Fun, Rows),
-            {'ok', ExistingDbs};
+            {'ok', lists:map(fun({DbName}) -> DbName end, Rows)};
         {'error', _}=Error ->
             lager:error("postgresql query (~p) failed, Error: ~p", [Query, Error]),
-            Error
+            {'error', kz_postgresql_response:format_error(Error)}
     end.
