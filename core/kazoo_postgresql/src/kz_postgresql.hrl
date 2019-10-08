@@ -34,7 +34,6 @@
 -type where_clause() :: {kz_term:ne_binary(), list(where_clause() | kz_term:ne_binary())}.  %% AST
 -type sort_operator() :: kz_term:ne_binary().                                               %% <<"ASC">> | <<"DESC">> | <<"COLLATE \"C\" ASC">> | <<"COLLATE \"C\" DESC">>
 -type order_by() :: {kz_term:ne_binary(), sort_operator()}.                                 %% {ColumnName, sort_operator()}
--type query_operator() :: kz_term:ne_binary().                                              %% <<"INSERT">> | <<"UPDATE">> | <<"DELETE">>
 
 -record(kz_postgresql_connection, {id = kz_time:current_tstamp() :: kz_time:gregorian_seconds()
                                   ,host = ?DEFAULT_HOST :: string()

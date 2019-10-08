@@ -9,7 +9,6 @@
 
 -export([execute_query/2, execute_query/3
         ,execute_query_with_transaction/2
-        ,generate_query/3
         ]).
 
 -define(COMMON_BUILD_QUERY_ROUTINES, [fun maybe_add_insert_into/2
@@ -80,7 +79,7 @@ build_sub_query_iolist(QueryRecord) ->
 -spec build_query_iolist(kz_postgresql:query_record(), list()) -> kz_postgresql:query().
 build_query_iolist(QueryRecord, Routines) ->
     lists:foldl(fun(Fun, QueryBinary) -> Fun(QueryBinary, QueryRecord) end
-               ,<<"">>
+               ,[]
                ,Routines
                ).
 
@@ -358,128 +357,3 @@ execute_query_with_transaction(ConnPool, EpgsqlFunctions) ->
             lager:debug("successfully completed postgresql transaction (ConnPool: ~p)", [ConnPool]),
             OkResponse
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc For a given table name and operation, look up or generate the postgresql
-%% query and its column list
-%% @end
-%%------------------------------------------------------------------------------
--spec generate_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_postgresql:query_operator()) ->
-                            {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
-generate_query(ConnPool, TableName, Operation) ->
-    lager:debug("generating / looking up cached query for table: ~p, operation: ~p", [TableName, Operation]),
-    case fetch_cache_query(TableName, Operation) of
-        {'ok', {Query, ColumnAndTypes}} ->
-            lager:debug("~p query for table '~p' was found in cache", [Operation, TableName]),
-            {Query, ColumnAndTypes};
-        _Else ->
-            %% Failed to find cached Query
-            %% Generate the Query and cache it for future use
-            lager:debug("~p query for table '~p' was not found in cache, Generating query", [Operation, TableName]),
-            cache_query(TableName, Operation, build_postgresql_query(ConnPool, TableName, Operation))
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Cache a PG query and its column list by Table Name and Operation
-%% @end
-%%------------------------------------------------------------------------------
--spec cache_query(kz_postgresql:table_name(), kz_term:ne_binary(), {kz_postgresql:query_record(), kz_postgresql:table_schema()}) ->
-                         {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
-cache_query(TableName, Operation, {Query, ColumnAndTypes}) ->
-    lager:debug("caching '~p' query for table '~p'", [Operation, TableName]),
-    CacheProps = [{'expires',?KAZOO_POSTGRESQL_CACHE_TIMEOUT}],
-    kz_cache:store_local(?KAZOO_POSTGRESQL_QUERIES_CACHE, {TableName, Operation}, {Query, ColumnAndTypes}, CacheProps),
-    {Query, ColumnAndTypes}.
-
-%%------------------------------------------------------------------------------
-%% @doc Fetch a PG query and its column list from cache by Table Name and Operation
-%% @end
-%%------------------------------------------------------------------------------
--spec fetch_cache_query(kz_postgresql:table_name(), kz_term:ne_binary())->
-                               {'ok', {kz_postgresql:query_record(), kz_postgresql:table_schema()}} | {'error', 'not_found'}.
-fetch_cache_query(TableName, Operation) ->
-    kz_cache:fetch_local(?KAZOO_POSTGRESQL_QUERIES_CACHE, {TableName, Operation}).
-
-%%------------------------------------------------------------------------------
-%% @doc Build a sql query and column list for a given Table Name and Operation
-%% @end
-%%------------------------------------------------------------------------------
--spec build_postgresql_query(kz_postgresql:connection_pool(), kz_postgresql:table_name(), kz_postgresql:query_operator()) ->
-                                    {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
-build_postgresql_query(ConnPool, TableName, Operation) ->
-    ColumnAndTypes = kz_postgresql_schema:get_schema(ConnPool, TableName),
-    ColumnAndTypesSorted = sort_and_drop_columns(ColumnAndTypes),
-    generate_query_record(TableName, ColumnAndTypesSorted, Operation).
-
-%%------------------------------------------------------------------------------
-%% @doc Sort and/or drop the list of columns so:
-%% Drop _rev column as this is handled by the db
-%% "other_json" is the last element in the list
-%% Any remaining json columns are at the end of the list but before "other_json"
-%% All other columns are at the start of the list
-%% @end
-%%------------------------------------------------------------------------------
--spec sort_and_drop_columns(kz_postgresql:table_schema()) -> kz_postgresql:table_schema().
-sort_and_drop_columns(Columns) ->
-    sort_and_drop_columns(Columns, [], [], []).
-
--spec sort_and_drop_columns(kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema(), kz_postgresql:table_schema()) ->
-                                   kz_postgresql:table_schema().
-sort_and_drop_columns([], OtherCols, JsonCols, LastCol) ->
-    lists:reverse(OtherCols) ++ lists:reverse(JsonCols) ++ LastCol;
-sort_and_drop_columns([{<<"_rev">>, _Type} | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_and_drop_columns(Columns, OtherCols, JsonCols, LastCol);
-sort_and_drop_columns([{<<"other_json">>, _Type} = OtherJsonCol | Columns], OtherCols, JsonCols, _LastCol) ->
-    sort_and_drop_columns(Columns, OtherCols, JsonCols, [OtherJsonCol]);
-sort_and_drop_columns([{_ColName, <<"json">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_and_drop_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
-sort_and_drop_columns([{_ColName, <<"jsonb">>} = JsonCol | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_and_drop_columns(Columns, OtherCols, [JsonCol | JsonCols], LastCol);
-sort_and_drop_columns([Column | Columns], OtherCols, JsonCols, LastCol) ->
-    sort_and_drop_columns(Columns, [Column | OtherCols], JsonCols, LastCol).
-
-%%------------------------------------------------------------------------------
-%% @doc Generate a sql query record for a given postgreSQL operation
-%% @end
-%%------------------------------------------------------------------------------
--spec generate_query_record(kz_postgresql:table_name(), kz_postgresql:table_schema(), kz_postgresql:query_operator()) ->
-                                   {kz_postgresql:query_record(), kz_postgresql:table_schema()}.
-generate_query_record(TableName, ColumnAndTypes, <<"INSERT">>) ->
-    {ValuesList, ColumnsList} = generate_query_values_and_column_lists(ColumnAndTypes),
-    QueryRecord = #kz_postgresql_query{'insert_into' = {TableName, ColumnsList}
-                                      ,'values' = [ValuesList]
-                                      ,'returning' = [<<"*">>]
-                                      },
-    {QueryRecord, ColumnAndTypes};
-generate_query_record(TableName, ColumnAndTypes, <<"UPDATE">>) ->
-    {ValuesList, ColumnsList} = generate_query_values_and_column_lists(ColumnAndTypes),
-    SetValues = lists:zip(ColumnsList, ValuesList),
-    {<<"\"_id\"">>, IdPlaceholderValue} = lists:keyfind(<<"\"_id\"">>, 1, SetValues),
-    QueryRecord = #kz_postgresql_query{'update' = <<"\"",TableName/binary,"\"">>
-                                      ,'set' = SetValues
-                                      ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\"._id">>
-                                                           ,IdPlaceholderValue
-                                                           ]
-                                                 }
-                                      ,'returning' = [<<"*">>]
-                                      },
-    {QueryRecord, ColumnAndTypes}.
-
-%%------------------------------------------------------------------------------
-%% @doc Generate a list of value placeholders($1..$N) and list of columns to use
-%% as part of a PG extended query.
-%% Return {List of column names, List of $1..$N placeholders} where both lists
-%% are the same length.
-%% @end
-%%------------------------------------------------------------------------------
--spec generate_query_values_and_column_lists(kz_postgresql:table_schema()) -> {kz_term:ne_binaries(), kz_term:ne_binaries()}.
-generate_query_values_and_column_lists(ColumnAndTypeList) ->
-    generate_query_values_and_column_lists(ColumnAndTypeList, [], []).
-
--spec generate_query_values_and_column_lists(kz_postgresql:table_schema(), kz_term:ne_binaries(), kz_term:ne_binaries()) ->
-                                                    {kz_term:ne_binaries(), kz_term:ne_binaries()}.
-generate_query_values_and_column_lists([], Values, Columns) ->
-    {Values, lists:reverse(Columns)};
-generate_query_values_and_column_lists([{ColumnName, _Type} | OtherColumns] = ColumnAndTypeList, Values, Columns) ->
-    Count = list_to_binary(integer_to_list(length(ColumnAndTypeList))),
-    generate_query_values_and_column_lists(OtherColumns, [<<"$",Count/binary>> | Values], [<<"\"",ColumnName/binary,"\"">> | Columns]).

@@ -46,7 +46,7 @@ get_results(ConnPool, DbName, DesignDoc, ViewOptions) ->
 %% Options - Couch like query options
 %% @end
 %%------------------------------------------------------------------------------
--spec do_view_query(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:ddoc(), kz_data:options()) ->
+-spec do_view_query(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:doc(), kz_data:options()) ->
                            {'ok', kz_json:objects()} | kz_data:data_error().
 do_view_query(ConnPool, DbName, DesignDoc, ViewOptions) when is_binary(DesignDoc) ->
     [DesignName, ViewName|_] = binary:split(DesignDoc, <<"/">>, ['global']),
@@ -61,8 +61,8 @@ do_view_query(ConnPool, DbName,{DesignName, ViewName}, ViewOptions) ->
                                            }
                                 ,'parameters' = [DbName]
                                 },
-    Response = kz_postgresql_query:execute_query(ConnPool, Query, ViewOptions),
-    kz_postgresql_response:parse_response_to_view_doc(ConnPool, View, Response).
+    PGResp = kz_postgresql_query:execute_query(ConnPool, Query, ViewOptions),
+    kz_postgresql_response:parse_response_to_view_doc(PGResp).
 
 %%------------------------------------------------------------------------------
 %% @doc Load all docs for a given couch db from the PG DB and return a couch view like response
@@ -163,8 +163,8 @@ do_all_doc_query(ConnPool, DbName, [{TableName, DocIds} | OtherTables], ViewOpti
                          'true' -> ['include_docs'];
                          'false' -> []
                      end,
-    Resp = kz_postgresql_query:execute_query(ConnPool, Query, ReducedOptions),
-    case kz_postgresql_response:parse_response_to_view_doc(ConnPool, TableName, Resp) of
+    PGResp = kz_postgresql_query:execute_query(ConnPool, Query, ReducedOptions),
+    case kz_postgresql_response:parse_response_to_view_doc(PGResp) of
         {'ok', NewJObjs} when is_list(NewJObjs) ->
             do_all_doc_query(ConnPool, DbName, OtherTables, ViewOptions, JObjs ++ NewJObjs);
         {'ok', NewJObj} ->
@@ -184,7 +184,7 @@ generate_all_docs_table_query(DbName, TableName, []) ->
                                     ,<<"\"",TableName/binary,"\"._rev AS _view_value_rev">>
                                     ]
                         ,'from' = [<<"\"",TableName/binary,"\"">>]
-                        ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
+                        ,'where' = {<<"=">>, [<<"\"",TableName/binary,"\".data->>'pvt_account_db'">>
                                              ,<<"$1">>
                                              ]
                                    }
@@ -196,7 +196,7 @@ generate_all_docs_table_query(DbName, TableName, DocIds) ->
                                     ,<<"\"",TableName/binary,"\"._rev AS _view_value_rev">>
                                     ]
                         ,'from' = [<<"\"",TableName/binary,"\"">>]
-                        ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",TableName/binary,"\".pvt_account_db">>
+                        ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",TableName/binary,"\".data->>'pvt_account_db'">>
                                                           ,<<"$1">>
                                                           ]}
                                                ,{<<"=">>, [<<"\"",TableName/binary,"\"._id">>

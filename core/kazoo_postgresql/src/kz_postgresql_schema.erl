@@ -6,21 +6,10 @@
 %%%-----------------------------------------------------------------------------
 -module(kz_postgresql_schema).
 -include("kz_postgresql.hrl").
--export([pg_table_and_column_to_doc_key_path/2
-        ,db_and_pvt_type_to_pg_table_name/2
+-export([db_and_pvt_type_to_pg_table_name/2
         ,pg_view_name_to_pg_table_name/1
         ,get_schema/2
         ]).
-
-%%------------------------------------------------------------------------------
-%% @doc Map PostgreSQL Table names and Columns to kz_doc key path
-%% (POSTGRESQL_TABLE, POSTGRESQL_COLUMN) -> [JSON_KEY_LIST]
-%% EG. pg_table_and_column_to_doc_key_path(cdr, owner_id) -> [custom_channel_vars, owner_id];
-%% Default assumes column name == json key value
-%% @end
-%%------------------------------------------------------------------------------
--spec pg_table_and_column_to_doc_key_path(kz_postgresql:table_name(), kz_term:ne_binary()) -> list().
-pg_table_and_column_to_doc_key_path(_AnyTable, Column) -> [Column].
 
 %%------------------------------------------------------------------------------
 %% @doc Define the postgreSQL table to use for an couch like DbName and Doc Type

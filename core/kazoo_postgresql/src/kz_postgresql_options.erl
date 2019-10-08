@@ -189,7 +189,7 @@ add_options_to_query(ConnPool
                     ,#kz_postgresql_query{'where'={}, 'parameters'=ParametersList}=Query
                     ,[{'doc_type', DocType} | OtherOptions]) ->
     NextParamCount = integer_to_binary(length(ParametersList)+1),
-    UpdatedWhereClause = {<<"=">>, [<<"pvt_type">>
+    UpdatedWhereClause = {<<"=">>, [<<"data->>'pvt_type'">>
                                    ,<<"$",NextParamCount/binary>>
                                    ]
                          },
@@ -201,7 +201,7 @@ add_options_to_query(ConnPool
                     ,[{'doc_type', DocType} | OtherOptions]) ->
     NextParamCount = integer_to_binary(length(ParametersList)+1),
     UpdatedWhereClause = {<<"AND">>, [WhereClause
-                                     ,{<<"=">>, [<<"pvt_type">>
+                                     ,{<<"=">>, [<<"data->>'pvt_type'">>
                                                ,<<"$",NextParamCount/binary>>
                                                ]}
                                      ]
@@ -227,11 +227,11 @@ add_options_to_query(ConnPool
                        'true' ->
                            %% The table is a PG view
                            %% Add TABLE.* to select list
-                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_db_name = TABLE.pvt_account_db
+                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_db_name = TABLE.data->>pvt_account_db
                            TableName = kz_postgresql_schema:pg_view_name_to_pg_table_name(FromStripped),
                            Select = <<"\"",TableName/binary,"\".*">>,
                            InnerJoin = {TableName, [<<From/binary,"._view_id = ",TableName/binary,"._id">>
-                                                   ,<<From/binary,"._view_db_name = ",TableName/binary,".pvt_account_db">>]},
+                                                   ,<<From/binary,"._view_db_name = ",TableName/binary,".data->>'pvt_account_db'">>]},
                            Query#kz_postgresql_query{'select' = lists:append(SelectList, [Select])
                                                     ,'inner_join' = InnerJoin}
                    end,
