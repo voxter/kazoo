@@ -10,68 +10,68 @@
         ]).
 
 %%------------------------------------------------------------------------------
-%% @doc Lookup the postgreSQL table name and doc ids for a given DbName
+%% @doc Lookup the postgreSQL table name and doc ids for a given KazooDBName
 %% Response will be in the form {'ok', [{TableName, [Doc_Ids...]}...} or {'error', Cause}
 %% @end
 %%------------------------------------------------------------------------------
--spec get_table_names(kz_postgresql:connection_pool(), kz_term:ne_binary()) ->
+-spec get_table_names(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) ->
                              {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
-get_table_names(ConnPool, DbName)->
-    get_table_names_from_pgsql_db(ConnPool, DbName, []).
+get_table_names(ConnPool, KazooDBName)->
+    get_table_names_from_pgsql_db(ConnPool, KazooDBName, []).
 
 %%------------------------------------------------------------------------------
-%% @doc Lookup the postgreSQL table name from the pvt_type for a given DbName and Doc.
+%% @doc Lookup the postgreSQL table name from the pvt_type for a given KazooDBName and Doc.
 %% If pvt_type is not defined then lookup the table name from the PG DB
 %% If [] is supplied as DocIds then a response containing all doc ids and tables for the DB will be returned
 %% Response will be in the form {'ok', [{TableName, [Doc_Ids...]}...} or {'error', Cause}
 %% @end
 %%------------------------------------------------------------------------------
--spec get_table_names(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries() | kz_doc:object()) ->
+-spec get_table_names(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary() | kz_term:ne_binaries() | kz_doc:object()) ->
                              {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
 %% Doc ID supplied
-get_table_names(ConnPool, DbName, DocId) when is_binary(DocId)->
-    get_table_names_from_pgsql_db(ConnPool, DbName, [DocId]);
+get_table_names(ConnPool, KazooDBName, DocId) when is_binary(DocId)->
+    get_table_names_from_pgsql_db(ConnPool, KazooDBName, [DocId]);
 
 %% List of Doc Ids supplied
-get_table_names(ConnPool, DbName, DocIds) when is_list(DocIds) ->
-    get_table_names_from_pgsql_db(ConnPool, DbName, DocIds);
+get_table_names(ConnPool, KazooDBName, DocIds) when is_list(DocIds) ->
+    get_table_names_from_pgsql_db(ConnPool, KazooDBName, DocIds);
 
 %% Doc supplied
-get_table_names(ConnPool, DbName, Doc) ->
+get_table_names(ConnPool, KazooDBName, Doc) ->
     case kz_doc:type(Doc) of
-        'undefined' -> get_table_names_from_pgsql_db(ConnPool, DbName, [kz_doc:id(Doc, Doc)]);
-        DocType -> {'ok', [{kz_postgresql_schema:db_and_pvt_type_to_pg_table_name(DbName, DocType), [kz_doc:id(Doc, Doc)]}]}
+        'undefined' -> get_table_names_from_pgsql_db(ConnPool, KazooDBName, [kz_doc:id(Doc, Doc)]);
+        DocType -> {'ok', [{kz_postgresql_schema:db_and_pvt_type_to_pg_table_name(KazooDBName, DocType), [kz_doc:id(Doc, Doc)]}]}
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc Lookup the postgreSQL table name(s) for a given couch like DbName and DocId(optional)
-%% PostgreSQL 'lookup' table is used to define the table for every Doc_id and DbName in the PG database
+%% @doc Lookup the postgreSQL table name(s) for a given couch like KazooDBName and DocId(optional)
+%% PostgreSQL 'lookup' table is used to define the table for every Doc_id and KazooDBName in the PG database
 %% Response will be in the form {'ok', [{TableName, [Doc_Ids...]}...} or {'error', Cause}
 %% @end
 %%------------------------------------------------------------------------------
--spec get_table_names_from_pgsql_db(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binaries()) ->
+-spec get_table_names_from_pgsql_db(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binaries()) ->
                                            {'ok', list({kz_postgresql:table_name(), list()})} |kz_data:data_error().
 %% No Doc Ids defined, Return list of PG tabes for all Doc Ids related to the db name
-get_table_names_from_pgsql_db(ConnPool, DbName, []) ->
-    lager:debug("looking up postgreSQL table name(s) in db for DbName: ~p, No DocIds supplied", [DbName]),
+get_table_names_from_pgsql_db(ConnPool, KazooDBName, []) ->
+    lager:debug("looking up postgreSQL table name(s) in db for KazooDBName: ~p, No DocIds supplied", [KazooDBName]),
     Query = #kz_postgresql_query{'select' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".table_name">>
                                             ,<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".doc_id">>
                                             ]
                                 ,'from' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>]
-                                ,'where' = {<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".db_name">>
+                                ,'where' = {<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".kazoo_db_name">>
                                                      ,<<"$1">>
                                                      ]
                                            }
-                                ,'parameters' = [DbName]
+                                ,'parameters' = [KazooDBName]
                                 },
     do_get_table_names_from_pgsql_db(ConnPool, Query);
-get_table_names_from_pgsql_db(ConnPool, DbName, DocIds) when is_list(DocIds) ->
-    lager:debug("looking up postgreSQL table name(s) in db for DbName: ~p, doc ids: ~p", [DbName, DocIds]),
+get_table_names_from_pgsql_db(ConnPool, KazooDBName, DocIds) when is_list(DocIds) ->
+    lager:debug("looking up postgreSQL table name(s) in db for KazooDBName: ~p, doc ids: ~p", [KazooDBName, DocIds]),
     Query = #kz_postgresql_query{'select' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".table_name">>
                                             ,<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".doc_id">>
                                             ]
                                 ,'from' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>]
-                                ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".db_name">>
+                                ,'where' = {<<"AND">>, [{<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".kazoo_db_name">>
                                                                   ,<<"$1">>
                                                                   ]}
                                                        ,{<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".doc_id">>
@@ -79,7 +79,7 @@ get_table_names_from_pgsql_db(ConnPool, DbName, DocIds) when is_list(DocIds) ->
                                                                   ]}
                                                        ]
                                            }
-                                ,'parameters' = [DbName, DocIds]
+                                ,'parameters' = [KazooDBName, DocIds]
                                 },
     do_get_table_names_from_pgsql_db(ConnPool, Query).
 

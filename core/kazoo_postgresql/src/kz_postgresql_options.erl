@@ -227,11 +227,11 @@ add_options_to_query(ConnPool
                        'true' ->
                            %% The table is a PG view
                            %% Add TABLE.* to select list
-                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_db_name = TABLE.data->>pvt_account_db
+                           %% Add INNER JOIN on VIEW._view_id = TABLE._id and VIEW._view_db_name = TABLE.kazoo_db_name
                            TableName = kz_postgresql_schema:pg_view_name_to_pg_table_name(FromStripped),
                            Select = <<"\"",TableName/binary,"\".*">>,
                            InnerJoin = {TableName, [<<From/binary,"._view_id = ",TableName/binary,"._id">>
-                                                   ,<<From/binary,"._view_db_name = ",TableName/binary,".data->>'pvt_account_db'">>]},
+                                                   ,<<From/binary,"._view_db_name = ",TableName/binary,".kazoo_db_name">>]},
                            Query#kz_postgresql_query{'select' = lists:append(SelectList, [Select])
                                                     ,'inner_join' = InnerJoin}
                    end,

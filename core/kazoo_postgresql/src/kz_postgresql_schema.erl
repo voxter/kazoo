@@ -12,16 +12,16 @@
         ]).
 
 %%------------------------------------------------------------------------------
-%% @doc Define the postgreSQL table to use for an couch like DbName and Doc Type
+%% @doc Define the postgreSQL table to use for an couch like KazooDBName and Doc Type
 %% If no table is defined the default table used is "other"
 %% @end
 %%------------------------------------------------------------------------------
--spec db_and_pvt_type_to_pg_table_name(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_postgresql:table_name().
-db_and_pvt_type_to_pg_table_name(_DbName, <<"call_stat">>) -> <<"call_stat">>;
-db_and_pvt_type_to_pg_table_name(_DbName, <<"cdr">>) -> <<"cdr">>;
-db_and_pvt_type_to_pg_table_name(_DbName, <<"login_attempt">>) -> <<"auth">>;
-db_and_pvt_type_to_pg_table_name(_DbName, <<"status_stat">>) -> <<"status_stat">>;
-db_and_pvt_type_to_pg_table_name(_DbName, _DocType) -> <<"other">>.
+-spec db_and_pvt_type_to_pg_table_name(kz_postgresql:kazoo_db_name(), kz_term:ne_binary()) -> kz_postgresql:table_name().
+db_and_pvt_type_to_pg_table_name(_KazooDBName, <<"call_stat">>) -> <<"call_stat">>;
+db_and_pvt_type_to_pg_table_name(_KazooDBName, <<"cdr">>) -> <<"cdr">>;
+db_and_pvt_type_to_pg_table_name(_KazooDBName, <<"login_attempt">>) -> <<"auth">>;
+db_and_pvt_type_to_pg_table_name(_KazooDBName, <<"status_stat">>) -> <<"status_stat">>;
+db_and_pvt_type_to_pg_table_name(_KazooDBName, _DocType) -> <<"other">>.
 
 %%------------------------------------------------------------------------------
 %% @doc Define the postgreSQL table to use for a given view name
