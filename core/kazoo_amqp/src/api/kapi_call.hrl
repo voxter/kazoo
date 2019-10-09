@@ -46,7 +46,6 @@
         ,<<"DTMF-Digit">> %% DTMF and Tones
         ,<<"DTMF-Duration">>
         ,<<"Duration-Seconds">>
-        ,<<"Endpoint-Disposition">>
         ,<<"Fax-Info">>
         ,<<"From">>
         ,<<"From-Tag">>

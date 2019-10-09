@@ -1231,7 +1231,7 @@ unbind_from_q(Q, [{'event', ConfIdOrProps}|T], Props) ->
     'ok' = kz_amqp_util:unbind_q_from_conference(Q, 'event', event_binding_key(ConfIdOrProps)),
     unbind_from_q(Q, T, Props);
 unbind_from_q(Q, [{'command', ConfId}|T], Props) ->
-    'ok' = kz_amqp_util:bind_q_to_conference(Q, 'command', ConfId),
+    'ok' = kz_amqp_util:unbind_q_from_conference(Q, 'command', ConfId),
     unbind_from_q(Q, T, Props);
 unbind_from_q(_Q, [], _) -> 'ok'.
 

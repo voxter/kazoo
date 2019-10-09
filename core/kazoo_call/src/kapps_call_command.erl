@@ -2413,16 +2413,6 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
 
 -spec collect_digits(integer() | kz_term:ne_binary(), integer() | kz_term:ne_binary(), integer() | kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_object(), kapps_call:call()) ->
                             collect_digits_return().
-%% When noop id is undefined, do not wait for the noop_complete before applying timeout
-collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
-                                         ,timeout=kz_term:to_integer(Timeout)
-                                         ,interdigit=kz_term:to_integer(Interdigit)
-                                         ,noop_id='undefined'
-                                         ,terminators=Terminators
-                                         ,call=Call
-                                         ,after_timeout=kz_term:to_integer(Timeout)
-                                         });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
     do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
                                          ,timeout=kz_term:to_integer(Timeout)

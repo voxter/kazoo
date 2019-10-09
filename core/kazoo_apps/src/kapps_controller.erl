@@ -197,8 +197,8 @@ app_running(AppName) when is_atom(AppName) ->
              AppName =:= App
          ]
     of
-        [] -> false;
-        _ -> true
+        [] -> 'false';
+        _ -> 'true'
     end;
 app_running(AppName) ->
     try
