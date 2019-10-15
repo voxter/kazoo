@@ -12,11 +12,11 @@ all: compile
 
 compile: compile-autogen $(ERL_FILES)
 
+compile-test: compile-autogen $(ERL_FILES)
+
 compile-autogen: $(addsuffix -compile,$(SRC_FILES))
 
-# Re-enable when fixed by 2600hz
-clean:
-	:
+clean: clean-autogen
 
 clean-autogen: $(addsuffix -clean,$(SRC_FILES))
 

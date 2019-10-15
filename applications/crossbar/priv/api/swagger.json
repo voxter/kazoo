@@ -2672,6 +2672,9 @@
                     "type": "string"
                 }
             },
+            "required": [
+                "type"
+            ],
             "type": "object"
         },
         "callflows.hangup": {
