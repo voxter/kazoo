@@ -10,6 +10,7 @@ Accounts represent tenants or customers on the system. Each account represents a
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
+`account_type` | The type of the account | `string()` |   | `false` | `supported`
 `call_recording.account` | endpoint recording settings | [#/definitions/call_recording](#call_recording) |   | `false` |  
 `call_recording.endpoint` | endpoint recording settings | [#/definitions/call_recording](#call_recording) |   | `false` |  
 `call_recording` | call recording configuration | `object()` |   | `false` |  

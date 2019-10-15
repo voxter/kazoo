@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "account_config.accounts",
+    "description": "Schema for accounts account_config",
+    "properties": {
+        "account_types_list": {
+            "description": "list of account types",
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

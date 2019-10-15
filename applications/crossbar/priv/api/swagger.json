@@ -34,6 +34,16 @@
             ],
             "type": "object"
         },
+        "account_config.accounts": {
+            "description": "Schema for accounts account_config",
+            "properties": {
+                "account_types_list": {
+                    "description": "list of account types",
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "account_config.call_command": {
             "description": "Schema for call_command account_config",
             "properties": {
@@ -485,6 +495,10 @@
         "accounts": {
             "description": "Accounts represent tenants or customers on the system. Each account represents an individual dataset or sandbox that only one tenant can access. The data set is architecturally independent from other tenants.",
             "properties": {
+                "account_type": {
+                    "description": "The type of the account",
+                    "type": "string"
+                },
                 "call_recording": {
                     "additionalProperties": false,
                     "description": "call recording configuration",
@@ -30273,6 +30287,10 @@
         "system_config.accounts": {
             "description": "Schema for accounts system_config",
             "properties": {
+                "account_types_list": {
+                    "description": "list of account types",
+                    "type": "array"
+                },
                 "allow_subaccounts_for_direct": {
                     "default": true,
                     "description": "accounts allow subaccounts for direct",
