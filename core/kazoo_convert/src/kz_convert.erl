@@ -6,7 +6,7 @@
 -module(kz_convert).
 
 -export([fax/3, fax/4,
-         resize_image/3
+         resize_image/3, resize_image/4
         ]).
 
 -include_lib("kazoo_convert/include/kz_convert.hrl").
@@ -56,19 +56,37 @@ fax(FromFormat, ToFormat, Content, Options) ->
 convert_to_module(Conversion) ->
     kz_term:to_atom(<<"kz_", Conversion/binary>>, 'true').
 
--spec resize_image(iodata(), kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
+-spec resize_image(iodata(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
+                          {'ok', kz_term:api_binary()} | {'error', atom()}.
 resize_image(ImageData, FileName, Dimensions) ->
+    resize_image(ImageData, FileName, "post_" ++ FileName, Dimensions).
+
+-spec resize_image(iodata(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
+                          {'ok', kz_term:api_binary()} | {'error', atom()}.
+resize_image(ImageData, FileName, DestinationFileName, Dimensions) ->
     OgTempFile = "/tmp/pre_" ++ FileName,
-    ToTempFile = "/tmp/post_" ++ FileName,
-
+    DestinationWithPath = "/tmp/" ++ DestinationFileName,
     kz_util:write_file(OgTempFile, ImageData),
+    build_and_run(OgTempFile, DestinationWithPath, Dimensions).
 
-    Args = [{<<"FROM">>, OgTempFile}
-           ,{<<"TO">>, ToTempFile}
+-spec build_and_run(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
+                           {'ok', kz_term:api_binary()} | {'error', atom()}.
+build_and_run(From, To, 'undefined') ->
+    Args = [{<<"FROM">>, From}
+           ,{<<"TO">>, To}],
+    Command = "convert $FROM $TO",
+    run_command(Command, Args);
+build_and_run(From, To, Dimensions) ->
+    Args = [{<<"FROM">>, From}
+           ,{<<"TO">>, To}
            ,{<<"DIMENSIONS">>, Dimensions}],
-
     Command = "convert $FROM -resize $DIMENSIONS $TO",
+    run_command(Command, Args).
+
+-spec run_command(kz_term:ne_binary(), binary()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
+run_command(Command, Args) ->
+    lager:debug("running convert command ~p with args ~p", [Command, Args]),
     case kz_os:cmd(Command, Args, []) of
-        {'ok', _Result} -> file:read_file(ToTempFile);
+        {'ok', _Result} -> file:read_file(proplists:get_value(<<"TO">>, Args));
         {'error', _, Reason} ->  {'error', Reason}
     end.

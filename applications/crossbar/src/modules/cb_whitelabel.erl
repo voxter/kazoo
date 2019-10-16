@@ -35,6 +35,8 @@
 
 -define(WHITELABEL_MIME_TYPES, ?IMAGE_CONTENT_TYPES ++ ?BASE64_CONTENT_TYPES).
 
+-define(HERO_WHITELABEL_MIME_TYPES, ?BASE64_CONTENT_TYPES).
+
 %% Commonly found ico mime types
 -define(WHITELABEL_ICON_MIME_TYPES, [{<<"image">>, <<"ico">>}
                                     ,{<<"image">>, <<"vnd.microsoft.icon">>}
@@ -280,13 +282,13 @@ content_types_accepted(Context, ?LOGO_REQ, ?HTTP_POST) ->
     CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted(Context, ?HERO_LOGO_REQ, ?HTTP_POST) ->
-    CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
+    CTA = [{'from_binary', ?HERO_WHITELABEL_MIME_TYPES}],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted(Context, ?HERO_INTERNAL_LOGO_REQ, ?HTTP_POST) ->
-    CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
+    CTA = [{'from_binary', ?HERO_WHITELABEL_MIME_TYPES}],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted(Context, ?HERO_ICON_REQ, ?HTTP_POST) ->
-    CTA = [{'from_binary', ?WHITELABEL_MIME_TYPES}],
+    CTA = [{'from_binary', ?HERO_WHITELABEL_MIME_TYPES}],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted(Context, ?ICON_REQ, ?HTTP_POST) ->
     CTA = [{'from_binary', ?WHITELABEL_ICON_MIME_TYPES}],
@@ -362,32 +364,56 @@ convert_to_requested_dimensions(Context, AttachmentId, JObj) ->
                    kz_json:get_integer_value(<<"width">>, QueryString),
                    kz_json:get_integer_value(<<"height">>, QueryString)
                   ),
+    FileTypeReq = cb_context:req_value(Context, <<"file_type">>),
     case Dimensions of
-        'undefined' -> update_response_with_attachment(Context, AttachmentId, JObj);
-        _ ->
-            Options = ?TYPE_CHECK_OPTION(kzd_whitelabel:type()),
-
-            case kz_datamgr:fetch_attachment(cb_context:account_db(Context), ?DOC_ID, AttachmentId, Options) of
-                {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, ?DOC_ID, Context);
-                {'ok', AttachBin} ->
-                    Context1 = crossbar_doc:load(?DOC_ID, Context, Options),
-                    'success' = cb_context:resp_status(Context1),
-                    manipulate_image(Context1, AttachmentId, Dimensions, AttachBin, JObj)
-            end
+        'undefined' when FileTypeReq =:= 'undefined' -> update_response_with_attachment(Context, AttachmentId, JObj);
+        _ -> fetch_hero_attachment(Context, AttachmentId, JObj, Dimensions)
     end.
 
--spec manipulate_image(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary(), iodata(), kz_json:object()) -> cb_context:context().
-manipulate_image(Context, AttachmentId, Dimensions, OrigImageData, JObj) ->
+-spec fetch_hero_attachment(cb_context:context(), kz_term:ne_binary(), kz_json:object(), kz_term:api_ne_binary()) ->
+                                   cb_context:context().
+fetch_hero_attachment(Context, AttachmentId, JObj, Dimensions) ->
+    Options = ?TYPE_CHECK_OPTION(kzd_whitelabel:type()),
+    FileTypeReq = cb_context:req_value(Context, <<"file_type">>),
+
+    case kz_datamgr:fetch_attachment(cb_context:account_db(Context), ?DOC_ID, AttachmentId, Options) of
+        {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, ?DOC_ID, Context);
+        {'ok', AttachBin} ->
+            Context1 = crossbar_doc:load(?DOC_ID, Context, Options),
+            manipulate_image(Context1, AttachmentId, Dimensions, AttachBin, JObj, FileTypeReq)
+    end.
+
+-spec manipulate_image(cb_context:context(), kz_term:ne_binary(), kz_term:api_ne_binary()
+                      ,iodata(), kz_json:object(), kz_term:ne_binary()) ->
+                              cb_context:context().
+manipulate_image(Context, AttachmentId, Dimensions, OrigImageData, _JObj, <<"png">>) ->
+    case kz_convert:resize_image(OrigImageData
+                                ,binary_to_list(AttachmentId)
+                                ,binary_to_list(AttachmentId) ++ "_tempfile.png"
+                                ,Dimensions) of
+        {'error', Reason} -> cb_context:add_system_error(Reason, Context);
+        {'ok', ImageData} ->
+            convert_image(Context, ImageData, AttachmentId, <<"image/png">>)
+    end;
+manipulate_image(Context, AttachmentId, Dimensions, OrigImageData, JObj, _) ->
     case kz_convert:resize_image(OrigImageData, binary_to_list(AttachmentId), Dimensions) of
         {'error', Reason} -> cb_context:add_system_error(Reason, Context);
         {'ok', ImageData} ->
-            LoadedContext = cb_context:setters(Context
-                                              ,[{fun cb_context:set_resp_data/2, ImageData}
-                                               ,{fun cb_context:set_resp_etag/2, crossbar_doc:rev_to_etag(cb_context:doc(Context))}
-                                               ]),
-
-            update_response_with_headers(LoadedContext, AttachmentId, JObj)
+            convert_image(Context, ImageData, AttachmentId, kz_json:get_value([AttachmentId, <<"content_type">>], JObj))
     end.
+
+-spec convert_image(cb_context:context(), iodata(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
+convert_image(Context, ImageData, AttachmentId, ContentType) ->
+    LoadedContext = cb_context:setters(Context
+                                      ,[{fun cb_context:set_resp_data/2, ImageData}
+                                       ,{fun cb_context:set_resp_etag/2, crossbar_doc:rev_to_etag(cb_context:doc(Context))}
+                                       ]),
+    ContextWithHeaders = cb_context:add_resp_headers(LoadedContext
+                                                    ,#{<<"content-disposition">> => <<"attachment; filename=", AttachmentId/binary>>
+                                                      ,<<"content-type">> => ContentType
+                                                      }
+                                                    ),
+    cb_context:set_resp_etag(ContextWithHeaders, 'undefined').
 
 -spec fetch_hero_binary_meta(cb_context:context(), path_token()) -> cb_context:context().
 fetch_hero_binary_meta(Context, PathToken) ->

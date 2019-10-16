@@ -310,10 +310,10 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo
 ```
 
-If you wish to define the size of the returned Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048
+If you wish to define the size of the returned Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048. You can also request the response file be of content type `image/png` with the query request `file_type=png`
 
 
-> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo?width=600&height=650
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_logo?width=600&height=650&file_type=png
 
 ```shell
 curl -v -X GET \
@@ -343,10 +343,10 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon
 ```
 
-If you wish to define the size of the returned Desktop Client icon, the parameters `height` and `width` are accepted with maximum values of 2048
+If you wish to define the size of the returned Desktop Client icon, the parameters `height` and `width` are accepted with maximum values of 2048. You can also request the response file be of content type `image/png` with the query request `file_type=png`
 
 
-> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon?width=600&height=650
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_icon?width=600&height=650&file_type=png
 
 ```shell
 curl -v -X GET \
@@ -376,10 +376,10 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo
 ```
 
-If you wish to define the size of the returned internal Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048
+If you wish to define the size of the returned internal Desktop Client logo, the parameters `height` and `width` are accepted with maximum values of 2048. You can also request the response file be of content type `image/png` with the query request `file_type=png`
 
 
-> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo?width=600&height=650
+> GET /v2/accounts/{ACCOUNT_ID}/whitelabel/hero_internal_logo?width=600&height=650&file_type=png
 
 ```shell
 curl -v -X GET \
