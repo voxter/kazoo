@@ -16,6 +16,9 @@
             },
             "type": "array"
         },
+        "broadsmart_mwi_server": {
+            "description": "callflow broadsmart_mwi_server"
+        },
         "call_recording": {
             "properties": {
                 "extension": {

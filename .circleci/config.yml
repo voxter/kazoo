@@ -13,6 +13,10 @@ jobs:
       - image: rabbitmq:3.7
     steps:
       - checkout
+      - run:
+          name: "Pull Submodules"
+          command: |
+            git submodule update --init --recursive
       - run: make changed
       - run: mkdir -p $CIRCLE_ARTIFACTS
 

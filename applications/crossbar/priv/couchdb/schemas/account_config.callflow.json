@@ -3,6 +3,9 @@
     "_id": "account_config.callflow",
     "description": "Schema for callflow account_config",
     "properties": {
+        "broadsmart_mwi_server": {
+            "description": "callflow broadsmart_mwi_server"
+        },
         "dialog_subscribed_mwi_prefix": {
             "description": "callflow dialog_subscribed_mwi_prefix",
             "type": "string"
