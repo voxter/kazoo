@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+
+from jinja2 import Template
+import json
+import sys
+import os
+import re
+import subprocess
+import yaml
+from datetime import datetime
+from circle_env import CircleEnv
+
+class Release(CircleEnv):
+
+    def __init__(self):
+        super(Release, self).__init__()
+        self.run()
+
+
+    def run(self):
+        if self.is_release():
+            release = self.make_release_release()
+        elif self.is_master():
+            release = self.make_master_release()
+        elif self.is_pull_request():
+            release = self.make_pr_release()
+        elif self.is_release_branch():
+            release = self.make_branch_release()
+        else:
+            release = self.make_default_release()
+        print(release)
+
+    def make_default_release(self):
+        now = datetime.now()
+        branch = self.get_env('CIRCLE_BRANCH').replace('-', '_').replace(':', '_')
+        return now.strftime("%-d.{}.{}".format(branch, self.build_number))
+
+    def make_pr_release(self):
+        version = self.get_pr_parent_branch()
+        if version == 'master':
+            return "pr{}.{}".format(self.pull_request, self.build_number)
+        return '{}.pr{}.{}'.format(self.get_next_release(), self.pull_request, self.build_number)
+
+    def get_pr_parent_branch(self):
+        pr = self.fetch_gh(self.base_url + "pulls/{}".format(self.pull_request))
+        return pr['base']['ref']
+
+    def make_master_release(self):
+        return "master.{}".format(self.build_number)
+
+    def make_branch_release(self):
+        now = datetime.now()
+        return "{}.rc.{}".format(self.get_next_release(), self.build_number)
+
+    def get_next_release(self):
+        latest = self.run_cmd([self.build_root +'/parent_tag'])
+        return self.increment_release(self.tag_to_release(latest))
+
+    def increment_release(self, release):
+        if release.find('.') != -1:
+            parts = release.split('.')
+            pkgrel = parts.pop()
+            if pkgrel.isnumeric():
+                parts.insert(0, str(int(pkgrel) +1))
+            return '.'.join(parts)
+        return str(int(release) + 1)
+
+    def make_release_release(self):
+        return self.tag_to_release(self.tag)
+
+if __name__ == "__main__":
+    Release()
