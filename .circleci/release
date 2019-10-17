@@ -41,10 +41,6 @@ class Release(CircleEnv):
             return "pr{}.{}".format(self.pull_request, self.build_number)
         return '{}.pr{}.{}'.format(self.get_next_release(), self.pull_request, self.build_number)
 
-    def get_pr_parent_branch(self):
-        pr = self.fetch_gh(self.base_url + "pulls/{}".format(self.pull_request))
-        return pr['base']['ref']
-
     def make_master_release(self):
         return "master.{}".format(self.build_number)
 

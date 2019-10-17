@@ -338,13 +338,15 @@ jobs:
           name: Generating version info
           command: |
             cd $BUILD_ROOT
+            cp $KAZOO_ROOT/.circleci/circle_env.py .
+            cp $KAZOO_ROOT/.circleci/release .
             VERSION=$(./version)
             RELEASE=$(./release)
-            PACKAGE_NAME=$(./package_name)
+            PACKAGE_NAME=kazoo-core
             echo "export PACKAGE_NAME=${PACKAGE_NAME}" >> $BASH_ENV
             echo "export VERSION=${VERSION}" >> $BASH_ENV
             echo "export RELEASE=${RELEASE}" >> $BASH_ENV
-            PACKAGE_NAME=$(./package_name)
+            PACKAGE_NAME=kazoo-core
             echo "export PACKAGE_NAME=${PACKAGE_NAME}" >> $BASH_ENV
             echo "build version for ${PACKAGE_NAME} version: ${VERSION} release: ${RELEASE}"
       - run:
@@ -361,6 +363,8 @@ jobs:
             echo " - generate build version and changelog"
             ./package_docs
             cd $BUILD_SOURCES
+            touch CHANGELOG
+            cp $KAZOO_ROOT/VERSION .
             echo " - removing files that should not be packaged in the source tar"
             rm -rf ${BUILD_SOURCES}/.??*
             rm -rf ${BUILD_SOURCES}/doc*

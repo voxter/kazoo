@@ -155,16 +155,18 @@ class CircleEnv(object):
         return self._spec_file
 
     @property
-    def github_user(self):
-        if not hasattr(self, '_github_user'):
-            self._github_user = self.get_env('CIRCLE_GH_USER')
-        return self._github_user
+    def vcs_user(self):
+        if not hasattr(self, '_vcs_user'):
+            GH_USER = self.get_env('CIRCLE_GH_USER')
+            self._vcs_user = GH_USER if GH_USER is not None else self.get_env('CIRCLE_BB_USER')
+        return self._vcs_user
 
     @property
-    def github_token(self):
-        if not hasattr(self, '_github_token'):
-            self._github_token = self.get_env('CIRCLE_GH_TOKEN')
-        return self._github_token
+    def vcs_token(self):
+        if not hasattr(self, '_vcs_token'):
+            GH_TOKEN = self.get_env('CIRCLE_GH_TOKEN')
+            self._vcs_token = GH_TOKEN if GH_TOKEN is not None else self.get_env('CIRCLE_BB_PASSWORD')
+        return self._vcs_token
 
     @property
     def project_username(self):
@@ -245,14 +247,29 @@ class CircleEnv(object):
         return result.stdout.decode('ascii').strip()
 
     def get_pr_parent_branch(self):
-        pr = self.fetch_gh(self.base_url + "pulls/{}".format(self.pull_request))
-        return pr['base']['ref']
+        if self.get_env('CIRCLE_GH_USER') is not None:
+            pr = self.fetch_gh(self.base_url + "pulls/{}".format(self.pull_request))
+            return pr['base']['ref']
+        else:
+            pr = self.fetch_bitbucket(self.base_url + "pullrequests/{}".format(self.pull_request))
+            return pr['destination']['branch']['name']
 
     def fetch_gh(self, url):
         response = requests.get(url)
         if response.status_code == 404:
-            if self.github_token and self.github_user:
-                response = requests.get(url, auth=(self.github_user, self.github_token))
+            if self.vcs_token and self.vcs_user:
+                response = requests.get(url, auth=(self.vcs_user, self.vcs_token))
+            else:
+                sys.exit("invalid request, this repo is private, maybe you forgot to include something?")
+        if response.status_code == 200:
+            return response.json()
+        response.raise_for_status()
+
+    def fetch_bitbucket(self, url):
+        response = requests.get(url)
+        if response.status_code == 403 or response.status_code == 404:
+            if self.vcs_token and self.vcs_user:
+                response = requests.get(url, auth=(self.vcs_user, self.vcs_token))
             else:
                 sys.exit("invalid request, this repo is private, maybe you forgot to include something?")
         if response.status_code == 200:
@@ -260,7 +277,10 @@ class CircleEnv(object):
         response.raise_for_status()
 
     def make_base_url(self):
-        return "https://api.github.com/repos/{}/{}/".format(self.project_username, self.project_reponame)
+        if self.get_env('CIRCLE_GH_USER') is not None:
+            return "https://api.github.com/repos/{}/{}/".format(self.project_username, self.project_reponame)
+        else:
+            return "https://api.bitbucket.org/2.0/repositories/{}/{}/".format(self.project_username, self.project_reponame)
 
     def tag_to_pkg_version(self, tag):
         return self.tag_to_version(tag) + '-' + self.tag_to_release(tag)
