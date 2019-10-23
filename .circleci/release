@@ -22,8 +22,6 @@ class Release(CircleEnv):
             release = self.make_release_release()
         elif self.is_master():
             release = self.make_master_release()
-        elif self.is_pull_request():
-            release = self.make_pr_release()
         elif self.is_release_branch():
             release = self.make_branch_release()
         else:
@@ -40,6 +38,10 @@ class Release(CircleEnv):
         if version == 'master':
             return "pr{}.{}".format(self.pull_request, self.build_number)
         return '{}.pr{}.{}'.format(self.get_next_release(), self.pull_request, self.build_number)
+
+    def get_pr_parent_branch(self):
+        pr = self.fetch_gh(self.base_url + "pulls/{}".format(self.pull_request))
+        return pr['base']['ref']
 
     def make_master_release(self):
         return "master.{}".format(self.build_number)

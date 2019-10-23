@@ -342,7 +342,7 @@ jobs:
           name: Generating version info
           command: |
             cd $BUILD_ROOT
-            cp $KAZOO_ROOT/.circleci/circle_env.py .
+            cp $KAZOO_ROOT/.circleci/version .
             cp $KAZOO_ROOT/.circleci/release .
             VERSION=$(./version)
             RELEASE=$(./release)
