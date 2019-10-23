@@ -20,8 +20,9 @@
 --   All data tables must contain the defined set of columns and a PKEY as defined below:
 --    _id character varying(255) NOT NULL,
 --    _rev integer NOT NULL,
+--    kazoo_db_name character varying(255) NOT NULL,
 --    data jsonb,
---    PRIMARY KEY(_id, _rev)
+--    PRIMARY KEY(_id, _rev, kazoo_db_name)
 
 --   All archive tables must contain the same columns as the corresponding data table with the following leading columns in the order:
 --    _deleted boolean NOT NULL
@@ -64,8 +65,9 @@
 CREATE TABLE IF NOT EXISTS public.status_stat (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.status_stat OWNER TO kazoo;
 
@@ -74,8 +76,9 @@ CREATE TABLE IF NOT EXISTS public.status_stat_archive (
  _changed_on TIMESTAMP(6) NOT NULL,
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.status_stat_archive OWNER TO kazoo;
 
@@ -86,8 +89,9 @@ ALTER TABLE public.status_stat_archive OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.auth (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.auth OWNER TO kazoo;
 
@@ -96,8 +100,9 @@ CREATE TABLE IF NOT EXISTS public.auth_archive (
  _changed_on TIMESTAMP(6) NOT NULL,
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.auth_archive OWNER TO kazoo;
 
@@ -108,8 +113,9 @@ ALTER TABLE public.auth_archive OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.call_stat (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.call_stat OWNER TO kazoo;
 
@@ -118,8 +124,9 @@ CREATE TABLE IF NOT EXISTS public.call_stat_archive (
  _changed_on TIMESTAMP(6) NOT NULL,
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.call_stat_archive OWNER TO kazoo;
 
@@ -130,8 +137,9 @@ ALTER TABLE public.call_stat_archive OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.cdr (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.cdr OWNER TO kazoo;
 
@@ -140,8 +148,9 @@ CREATE TABLE IF NOT EXISTS public.cdr_archive (
  _changed_on TIMESTAMP(6) NOT NULL,
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.cdr_archive OWNER TO kazoo;
 
@@ -151,9 +160,9 @@ ALTER TABLE public.cdr_archive OWNER TO kazoo;
 ----------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.lookup (
  doc_id character varying(255) NOT NULL,
- db_name character varying(255) NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  table_name character varying(63) NOT NULL,
- PRIMARY KEY(doc_id, db_name)
+ PRIMARY KEY(doc_id, kazoo_db_name)
 );
 ALTER TABLE public.lookup OWNER TO kazoo;
 
@@ -164,8 +173,9 @@ ALTER TABLE public.lookup OWNER TO kazoo;
 CREATE TABLE IF NOT EXISTS public.other (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.other OWNER TO kazoo;
 
@@ -174,8 +184,9 @@ CREATE TABLE IF NOT EXISTS public.other_archive (
  _changed_on TIMESTAMP(6) NOT NULL,
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
+ kazoo_db_name character varying(255) NOT NULL,
  data jsonb,
- PRIMARY KEY(_id, _rev)
+ PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
 ALTER TABLE public.other_archive OWNER TO kazoo;
 
@@ -191,7 +202,7 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_agent" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'agent_id' AS _view_key_0,
   (data->>'timestamp')::bigint AS _view_key_1
  FROM public.status_stat
@@ -202,7 +213,7 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_timestamp" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   (data->>'timestamp')::bigint AS _view_key_0,
   data->>'agent_id' AS _view_key_1
  FROM public.status_stat
@@ -213,7 +224,7 @@ CREATE OR REPLACE VIEW public."agent_stats~status_log" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'agent_id' AS _view_key_0,
   (data->>'timestamp')::bigint AS _view_key_1,
   data->>'status' AS _view_value
@@ -228,7 +239,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_module" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'auth_module' AS _view_key_0,
   (data->>'pvt_created')::bigint AS _view_key_1,
   _id AS _view_value_id,
@@ -246,7 +257,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_type" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'auth_type' AS _view_key_0,
   (data->>'pvt_created')::bigint AS _view_key_1,
   _id AS _view_value_id,
@@ -264,7 +275,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_status" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'status' AS _view_key_0,
   (data->>'pvt_created')::bigint AS _view_key_1,
   _id AS _view_value_id,
@@ -282,7 +293,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_time" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   (data->>'pvt_created')::bigint AS _view_key_0,
   _id AS _view_value_id,
   data->>'auth_type' AS _view_value_auth_type,
@@ -302,7 +313,7 @@ CREATE OR REPLACE VIEW public."call_stats~call_log" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'queue_id' AS _view_key_0,
   (data->>'entered_timestamp')::bigint AS _view_key_1
  FROM public.call_stat
@@ -313,7 +324,7 @@ CREATE OR REPLACE VIEW public."call_stats~crossbar_listing" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   (data->>'entered_timestamp')::bigint AS _view_key_0,
   _id AS _view_value_id,
   (data->>'entered_timestamp')::bigint AS _view_value_entered_timestamp,
@@ -337,7 +348,7 @@ CREATE OR REPLACE VIEW public."cdrs~crossbar_listing" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   (data->>'pvt_created')::bigint AS _view_key_0,
   _id AS _view_key_1,
   _id AS _view_value_id,
@@ -368,7 +379,7 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'interaction_time' AS _view_key_0,
   data->>'interaction_key' AS _view_key_1,
   COALESCE((data->>'channel_created_time')::bigint, ((data->>'timestamp')::bigint - (data->>'duration_seconds')::bigint)) AS _view_key_2,
@@ -383,7 +394,7 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing_by_id" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'interaction_id' AS _view_key_0,
   (data->>'channel_created_time')::bigint AS _view_key_1
  FROM public.cdr
@@ -394,7 +405,7 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing_by_owner" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->'custom_channel_vars'->>'owner_id' AS _view_key_0,
   data->>'interaction_time' AS _view_key_1,
   data->>'interaction_key' AS _view_key_2,
@@ -412,7 +423,7 @@ CREATE OR REPLACE VIEW public."cdrs~listing_by_owner" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->'custom_channel_vars'->'owner_id' AS _view_key_0,
   (data->>'pvt_created')::bigint AS _view_key_1,
   _id AS _view_key_2,
@@ -441,7 +452,7 @@ CREATE OR REPLACE VIEW public."cdrs~offnet-calls" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' AS _view_db_name,
+  kazoo_db_name AS _view_db_name,
   data->>'call_id' AS _view_key_0,
   (data->>'pvt_created')::bigint AS _view_key_1,
   _id AS _view_value_id,
@@ -471,7 +482,7 @@ CREATE OR REPLACE VIEW public."cdrs~summarize_cdrs" AS
  SELECT
   _id AS _view_id,
   _rev AS _view_rev,
-  data->>'pvt_account_db' as _view_db_name,
+  kazoo_db_name as _view_db_name,
   (data->>'pvt_created')::bigint AS _view_key_0,
   _id AS _view_key_1,
   data->>'call_direction' AS _view_value_direction,
@@ -533,8 +544,8 @@ CREATE OR REPLACE FUNCTION data_table_changes()
       IF NEW._id IS NULL THEN
         RAISE EXCEPTION '_id cannot be null';
       END IF;
-      IF NOT NEW.data ? 'pvt_account_db' THEN
-        RAISE EXCEPTION 'data->pvt_account_db ';
+      IF NEW.kazoo_db_name IS NULL THEN
+        RAISE EXCEPTION 'kazoo_db_name cannot be null';
       END IF;
     END IF;
 
@@ -543,12 +554,13 @@ CREATE OR REPLACE FUNCTION data_table_changes()
       -- Add entry in to 'lookup' table
       -- Calculate next rev for the doc/row and set it on NEW
       -- Return NEW so it is added to the table
-      INSERT INTO lookup(doc_id, db_name, table_name)
-          VALUES(NEW._id, NEW.data->>'pvt_account_db', TG_TABLE_NAME);
-      EXECUTE format('SELECT coalesce(MAX(_rev) + 1, 1) FROM %I.%I WHERE _id = $1', TG_TABLE_SCHEMA, archive_table_name)
+      INSERT INTO lookup(doc_id, kazoo_db_name, table_name)
+          VALUES(NEW._id, NEW.kazoo_db_name, TG_TABLE_NAME);
+      EXECUTE format('SELECT coalesce(MAX(_rev) + 1, 1)
+                      FROM %I.%I
+                      WHERE _id = $1 AND kazoo_db_name = $2', TG_TABLE_SCHEMA, archive_table_name)
           INTO NEW._rev
-          USING NEW._id;
-      --NEW._rev := revision
+          USING NEW._id, NEW.kazoo_db_name;
       RETURN NEW;
 
     -- Handle UPDATE to table
@@ -566,7 +578,7 @@ CREATE OR REPLACE FUNCTION data_table_changes()
       -- Return OLD so it is deleted from the table
       EXECUTE format('INSERT INTO %I.%I SELECT true, now(), $1.*', TG_TABLE_SCHEMA, archive_table_name)
         USING OLD;
-      DELETE FROM lookup WHERE doc_id = OLD._id AND db_name = OLD.data->>'pvt_account_db';
+      DELETE FROM lookup WHERE doc_id = OLD._id AND kazoo_db_name = OLD.kazoo_db_name;
       RETURN OLD;
     END IF;
   END;

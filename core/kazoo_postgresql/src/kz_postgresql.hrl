@@ -33,6 +33,7 @@
 -type view_name() :: kz_term:ne_binary().                                                   %% DesignName~ViewName
 -type where_clause() :: {kz_term:ne_binary(), list(where_clause() | kz_term:ne_binary())}.  %% AST
 -type sort_operator() :: kz_term:ne_binary().                                               %% <<"ASC">> | <<"DESC">> | <<"COLLATE \"C\" ASC">> | <<"COLLATE \"C\" DESC">>
+-type kazoo_db_name() :: kz_term:ne_binary().                                               %% Database name assigned by kazoo
 -type order_by() :: {kz_term:ne_binary(), sort_operator()}.                                 %% {ColumnName, sort_operator()}
 
 -record(kz_postgresql_connection, {id = kz_time:current_tstamp() :: kz_time:gregorian_seconds()

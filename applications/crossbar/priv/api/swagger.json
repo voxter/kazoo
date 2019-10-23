@@ -48,6 +48,9 @@
         "account_config.callflow": {
             "description": "Schema for callflow account_config",
             "properties": {
+                "broadsmart_mwi_server": {
+                    "description": "callflow broadsmart_mwi_server"
+                },
                 "dialog_subscribed_mwi_prefix": {
                     "description": "callflow dialog_subscribed_mwi_prefix",
                     "type": "string"
@@ -21497,6 +21500,61 @@
             ],
             "type": "object"
         },
+        "kapi.ooma_services.voicemail_broadsmart_mwi": {
+            "description": "AMQP API for ooma_services.voicemail_broadsmart_mwi",
+            "properties": {
+                "Account-DB": {
+                    "type": "string"
+                },
+                "Account-Realm": {
+                    "type": "string"
+                },
+                "App-Name": {
+                    "enum": [
+                        "ooma_services"
+                    ],
+                    "type": "string"
+                },
+                "App-Version": {
+                    "enum": [
+                        "4.x"
+                    ],
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "notification"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "broadsmart_mwi"
+                    ],
+                    "type": "string"
+                },
+                "Mail-Box": {
+                    "type": "string"
+                },
+                "Mwi-Server": {
+                    "type": "string"
+                },
+                "New-Msgs": {
+                    "type": "string"
+                },
+                "Phone-Number": {
+                    "type": "string"
+                },
+                "Saved-Msgs": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "New-Msgs",
+                "Saved-Msgs"
+            ],
+            "type": "object"
+        },
         "kapi.pivot.failed": {
             "description": "AMQP API for pivot.failed",
             "properties": {
@@ -30632,6 +30690,9 @@
                         "type": "string"
                     },
                     "type": "array"
+                },
+                "broadsmart_mwi_server": {
+                    "description": "callflow broadsmart_mwi_server"
                 },
                 "call_recording": {
                     "properties": {

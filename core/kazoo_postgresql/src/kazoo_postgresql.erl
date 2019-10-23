@@ -72,13 +72,13 @@ server_url(_ConnPool) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec get_db(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> any().
-get_db(_ConnPool, _DbName) ->
+-spec get_db(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> any().
+get_db(_ConnPool, _KazooDBName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     'undefined'.
 
--spec db_url(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> kz_term:ne_binary().
-db_url(_ConnPool, _DbName) ->
+-spec db_url(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> kz_term:ne_binary().
+db_url(_ConnPool, _KazooDBName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     'undefined'.
 
@@ -88,17 +88,17 @@ server_info(ConnPool) ->
 
 
 %% DB operations
--spec db_create(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:options()) -> boolean().
-db_create(_ConnPool, _DbName, _Options) ->
+-spec db_create(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:options()) -> boolean().
+db_create(_ConnPool, _KazooDBName, _Options) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     false.
 
--spec db_delete(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
-db_delete(ConnPool, DbName) ->
-    kz_postgresql_db:db_delete(ConnPool, DbName).
+-spec db_delete(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> boolean().
+db_delete(ConnPool, KazooDBName) ->
+    kz_postgresql_db:db_delete(ConnPool, KazooDBName).
 
--spec db_view_cleanup(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
-db_view_cleanup(_ConnPool, _DbName) ->
+-spec db_view_cleanup(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> boolean().
+db_view_cleanup(_ConnPool, _KazooDBName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     false.
 
@@ -107,18 +107,18 @@ db_info(_ConnPool) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec db_info(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> {'ok', kz_json:object()} | kz_data:data_error().
-db_info(_ConnPool, _DbName) ->
+-spec db_info(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> {'ok', kz_json:object()} | kz_data:data_error().
+db_info(_ConnPool, _KazooDBName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
 
--spec db_exists(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
-db_exists(ConnPool, DbName) ->
-    kz_postgresql_db:db_exists(ConnPool, DbName).
+-spec db_exists(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> boolean().
+db_exists(ConnPool, KazooDBName) ->
+    kz_postgresql_db:db_exists(ConnPool, KazooDBName).
 
--spec db_archive(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok' | kz_data:data_error().
-db_archive(_ConnPool, _DbName, _Filename) ->
+-spec db_archive(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary()) -> 'ok' | kz_data:data_error().
+db_archive(_ConnPool, _KazooDBName, _Filename) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
@@ -128,97 +128,97 @@ db_list(ConnPool, Options) ->
 
 
 %% Document operations
--spec open_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) ->
+-spec open_doc(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_data:options()) ->
                       {'ok', kz_json:object()} | kz_data:data_error().
-open_doc(ConnPool, DbName, DocId, Options) ->
-    kz_postgresql_doc:open_doc(ConnPool, DbName, DocId, Options).
+open_doc(ConnPool, KazooDBName, DocId, Options) ->
+    kz_postgresql_doc:open_doc(ConnPool, KazooDBName, DocId, Options).
 
--spec lookup_doc_rev(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+-spec lookup_doc_rev(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary()) ->
                             {'ok', kz_term:ne_binary()} | kz_data:data_error().
-lookup_doc_rev(ConnPool, DbName, DocId) ->
-    kz_postgresql_doc:lookup_doc_rev(ConnPool, DbName, DocId).
+lookup_doc_rev(ConnPool, KazooDBName, DocId) ->
+    kz_postgresql_doc:lookup_doc_rev(ConnPool, KazooDBName, DocId).
 
--spec save_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
+-spec save_doc(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:document(), kz_data:options()) ->
                       {'ok', kz_json:object()} | kz_data:data_error().
-save_doc(ConnPool, DbName, Doc, Options) ->
-    kz_postgresql_doc:save_doc(ConnPool, DbName, Doc, Options).
+save_doc(ConnPool, KazooDBName, Doc, Options) ->
+    kz_postgresql_doc:save_doc(ConnPool, KazooDBName, Doc, Options).
 
--spec save_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options()) ->
+-spec save_docs(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:documents(), kz_data:options()) ->
                        {'ok', kz_json:objects()} | kz_data:data_error().
-save_docs(ConnPool, DbName, Docs, Options) ->
-    kz_postgresql_doc:save_docs(ConnPool, DbName, Docs, Options).
+save_docs(ConnPool, KazooDBName, Docs, Options) ->
+    kz_postgresql_doc:save_docs(ConnPool, KazooDBName, Docs, Options).
 
 
--spec del_doc(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
+-spec del_doc(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:document(), kz_data:options()) ->
                      {'ok', kz_json:object()} | kz_data:data_error().
-del_doc(ConnPool, DbName, Doc, Options) ->
-    kz_postgresql_doc:del_doc(ConnPool, DbName, Doc, Options).
+del_doc(ConnPool, KazooDBName, Doc, Options) ->
+    kz_postgresql_doc:del_doc(ConnPool, KazooDBName, Doc, Options).
 
--spec del_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:documents(), kz_data:options()) ->
+-spec del_docs(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:documents(), kz_data:options()) ->
                       {'ok', kz_json:objects()} | kz_data:data_error().
-del_docs(ConnPool, DbName, Docs, Options) ->
-    kz_postgresql_doc:del_docs(ConnPool, DbName, Docs, Options).
+del_docs(ConnPool, KazooDBName, Docs, Options) ->
+    kz_postgresql_doc:del_docs(ConnPool, KazooDBName, Docs, Options).
 
--spec ensure_saved(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:document(), kz_data:options()) ->
+-spec ensure_saved(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:document(), kz_data:options()) ->
                           {'ok', kz_json:object()} | kz_data:data_error().
-ensure_saved(ConnPool, DbName, Doc, Options) ->
-    kz_postgresql_doc:save_doc(ConnPool, DbName, Doc, Options).
+ensure_saved(ConnPool, KazooDBName, Doc, Options) ->
+    kz_postgresql_doc:save_doc(ConnPool, KazooDBName, Doc, Options).
 
 
 %% Attachment-related
--spec fetch_attachment(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> any().
-fetch_attachment(_ConnPool, _DbName, _DocId, _AName) ->
+-spec fetch_attachment(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_term:ne_binary()) -> any().
+fetch_attachment(_ConnPool, _KazooDBName, _DocId, _AName) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec stream_attachment(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), pid()) ->
+-spec stream_attachment(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_term:ne_binary(), pid()) ->
                                {'ok', kz_data:document()} | {'error', any()}.
-stream_attachment(_ConnPool, _DbName, _DocId, _AName, _Caller) ->
+stream_attachment(_ConnPool, _KazooDBName, _DocId, _AName, _Caller) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec put_attachment(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()
+-spec put_attachment(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()
                     ,kz_data:options()) ->
                             any().
-put_attachment(_ConnPool, _DbName, _DocId, _AName, _Contents, _Options) ->
+put_attachment(_ConnPool, _KazooDBName, _DocId, _AName, _Contents, _Options) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec delete_attachment(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) -> any().
-delete_attachment(_ConnPool, _DbName, _DocId, _AName, _Options) ->
+-spec delete_attachment(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) -> any().
+delete_attachment(_ConnPool, _KazooDBName, _DocId, _AName, _Options) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec attachment_url(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) -> any().
-attachment_url(_ConnPool, _DbName, _DocId, _AName, _Options) ->
+-spec attachment_url(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) -> any().
+attachment_url(_ConnPool, _KazooDBName, _DocId, _AName, _Options) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
 %% View-related
--spec design_info(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+-spec design_info(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary()) ->
                          {'ok', kz_json:object()} | kz_data:data_error().
-design_info(_ConnPool, _DBName, _Design) ->
+design_info(_ConnPool, _KazooDBName, _Design) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec all_design_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:options()) ->
+-spec all_design_docs(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:options()) ->
                              {'ok', kz_json:objects()} | kz_data:data_error().
-all_design_docs(_ConnPool, ?NE_BINARY = _DBName, _Options) ->
+all_design_docs(_ConnPool, ?NE_BINARY = _KazooDBName, _Options) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec get_results(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) ->
+-spec get_results(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_data:options()) ->
                          {'ok', kz_json:objects() | kz_json:path()} | kz_data:data_error().
-get_results(ConnPool, DbName, DesignDoc, Options) ->
-    kz_postgresql_view:get_results(ConnPool, DbName, DesignDoc, Options).
+get_results(ConnPool, KazooDBName, DesignDoc, Options) ->
+    kz_postgresql_view:get_results(ConnPool, KazooDBName, DesignDoc, Options).
 
--spec get_results_count(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_term:ne_binary(), kz_data:options()) ->
+-spec get_results_count(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_data:options()) ->
                                {'ok', integer()} | kz_data:data_error().
-get_results_count(_ConnPool, _DbName, _DesignDoc, _ViewOptions) ->
+get_results_count(_ConnPool, _KazooDBName, _DesignDoc, _ViewOptions) ->
     lager:error("~p/~p, function not implemented", [?FUNCTION_NAME, ?FUNCTION_ARITY]),
     {'error', 'function_not_implemented'}.
 
--spec all_docs(kz_postgresql:connection_pool(), kz_term:ne_binary(), kz_data:options()) ->
+-spec all_docs(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:options()) ->
                       {'ok', kz_json:objects()} | kz_data:data_error().
-all_docs(ConnPool, DbName, Options) ->
-    kz_postgresql_view:all_docs(ConnPool, DbName, Options).
+all_docs(ConnPool, KazooDBName, Options) ->
+    kz_postgresql_view:all_docs(ConnPool, KazooDBName, Options).

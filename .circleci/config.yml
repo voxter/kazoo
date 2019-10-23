@@ -128,6 +128,10 @@ jobs:
     steps:
       - checkout
       - run: 
+          name: "Pull Submodules"
+          command: |
+            git submodule update --init --recursive
+      - run:
           name: Listing Changes
           command: make changed
       - persist_to_workspace:

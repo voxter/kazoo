@@ -16,12 +16,12 @@
 %% This will use the lookup table to find all rows (docs) with the associated table name and delete those rows (docs)
 %% @end
 %%------------------------------------------------------------------------------
--spec db_delete(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
-db_delete(ConnPool, DbName) ->
-    lager:debug("deleting all docs for couch like database: ~p in postgresql database", [DbName]),
-    case kz_postgresql_db_table_translation:get_table_names(ConnPool, DbName) of
+-spec db_delete(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> boolean().
+db_delete(ConnPool, KazooDBName) ->
+    lager:debug("deleting all docs for couch like database: ~p in postgresql database", [KazooDBName]),
+    case kz_postgresql_db_table_translation:get_table_names(ConnPool, KazooDBName) of
         {'error', Cause} ->
-            lager:error("error when deleting couch like database: ~p in postgresql database, Cause: ~p", [DbName, Cause]),
+            lager:error("error when deleting couch like database: ~p in postgresql database, Cause: ~p", [KazooDBName, Cause]),
             'false';
         {'ok', []} ->
             lager:debug("couch like db does not exists in lookup table"),
@@ -37,12 +37,12 @@ db_delete(ConnPool, DbName) ->
                                                      ,DocIds)
                   end,
             Docs = lists:foldl(fun({TableName, DocIds}, Docs) -> Fun(TableName, DocIds) ++ Docs end, [], PgTablesAndDocIds),
-            case kazoo_postgresql:del_docs(ConnPool, DbName, Docs, []) of
+            case kazoo_postgresql:del_docs(ConnPool, KazooDBName, Docs, []) of
                 {'ok', _} ->
-                    lager:debug("deleted all docs for the db ~p in postgresql db", [DbName]),
+                    lager:debug("deleted all docs for the db ~p in postgresql db", [KazooDBName]),
                     'true';
                 {'error', Cause} ->
-                    lager:error("error when deleting all docs for the db ~p, Cause: ~p", [DbName, Cause]),
+                    lager:error("error when deleting all docs for the db ~p, Cause: ~p", [KazooDBName, Cause]),
                     'false'
             end
     end.
@@ -52,16 +52,16 @@ db_delete(ConnPool, DbName) ->
 %% Uses the lookup table to verify if the dbname exists
 %% @end
 %%------------------------------------------------------------------------------
--spec db_exists(kz_postgresql:connection_pool(), kz_term:ne_binary()) -> boolean().
-db_exists(ConnPool, DbName) ->
-    lager:debug("checking if couch like database (~p) exists in postgresql database", [DbName]),
+-spec db_exists(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()) -> boolean().
+db_exists(ConnPool, KazooDBName) ->
+    lager:debug("checking if couch like database (~p) exists in postgresql database", [KazooDBName]),
     Query = #kz_postgresql_query{'select' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".doc_id">>]
                                 ,'from' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>]
-                                ,'where' = {<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".db_name">>
+                                ,'where' = {<<"=">>, [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\".kazoo_db_name">>
                                                      ,<<"$1">>
                                                      ]
                                            }
-                                ,'parameters' = [DbName]
+                                ,'parameters' = [KazooDBName]
                                 },
     case kz_postgresql_query:execute_query(ConnPool, Query) of
         {'ok', _, []} -> 'false';
@@ -73,13 +73,13 @@ db_exists(ConnPool, DbName) ->
 
 %%------------------------------------------------------------------------------
 %% @doc List all the couch like dbs in the postgresql database
-%% This will get all the db_names from the lookup table
+%% This will get all the kazoo_db_names from the lookup table
 %% @end
 %%------------------------------------------------------------------------------
 -spec db_list(kz_postgresql:connection_pool(), kz_data:options()) -> {'ok', kz_term:ne_binaries()} | kz_data:data_error().
 db_list(ConnPool, Options) ->
     lager:debug("getting a list of all couch like dbs in postgresql db"),
-    Query = #kz_postgresql_query{'select' = [<<"DISTINCT(\"",?PG_LOOKUP_TABLE_NAME/binary,"\".db_name)">>]
+    Query = #kz_postgresql_query{'select' = [<<"DISTINCT(\"",?PG_LOOKUP_TABLE_NAME/binary,"\".kazoo_db_name)">>]
                                 ,'from' = [<<"\"",?PG_LOOKUP_TABLE_NAME/binary,"\"">>]
                                 },
     case kz_postgresql_query:execute_query(ConnPool, Query, Options) of
@@ -87,7 +87,7 @@ db_list(ConnPool, Options) ->
             lager:debug("could not find any couch like dbs in the lookup table"),
             {'error', 'no_results'};
         {'ok', _Columns, Rows} ->
-            {'ok', lists:map(fun({DbName}) -> DbName end, Rows)};
+            {'ok', lists:map(fun({KazooDBName}) -> KazooDBName end, Rows)};
         {'error', _}=Error ->
             lager:error("postgresql query (~p) failed, Error: ~p", [Query, Error]),
             {'error', kz_postgresql_response:format_error(Error)}

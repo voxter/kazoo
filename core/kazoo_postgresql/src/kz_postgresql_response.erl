@@ -213,8 +213,8 @@ add_postgresql_value_to_jobj(<<"data">>, Value, 'jsonb'=Type, JObj, PrePath) ->
     DecodedValue = kz_postgresql_util:decode_query_value(Type, Value),
     add_value_to_jobj(PrePath, DecodedValue,JObj);
 
-%% Ignore _deleted
-add_postgresql_value_to_jobj(<<"_deleted">>, _Value, _Type, JObj, _PrePath) ->
+%% Ignore kazoo_db_name
+add_postgresql_value_to_jobj(<<"kazoo_db_name">>, _Value, _Type, JObj, _PrePath) ->
     JObj;
 
 %% Ignore any column with the value set to null
