@@ -324,6 +324,10 @@ jobs:
       APP_DIR: "/home/circleci/2600hz/kazoo"
     steps:
       - checkout
+      - run:
+          name: "Pull Submodules"
+          command: |
+            git submodule update --init --recursive
       - restore_cache:
           keys:
             - deps-centos7-v3.2-{{ checksum "make/deps.mk" }}
