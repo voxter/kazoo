@@ -9,6 +9,9 @@
         "Call-ID": {
             "type": "string"
         },
+        "Callback-Number": {
+            "type": "string"
+        },
         "Caller-ID-Name": {
             "type": "string"
         },

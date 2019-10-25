@@ -136,7 +136,7 @@
 -define(ABANDON_VALUES, ?CALL_REQ_VALUES(<<"abandoned">>)).
 -define(ABANDON_TYPES, []).
 
--define(MARKED_CALLBACK_HEADERS, [<<"Caller-ID-Name">>]).
+-define(MARKED_CALLBACK_HEADERS, [<<"Callback-Number">>, <<"Caller-ID-Name">>]).
 -define(MARKED_CALLBACK_VALUES, ?CALL_REQ_VALUES(<<"marked_callback">>)).
 -define(MARKED_CALLBACK_TYPES, []).
 

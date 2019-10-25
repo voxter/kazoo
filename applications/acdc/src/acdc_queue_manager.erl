@@ -751,7 +751,7 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
         Call ->
             lager:debug("call ~s marked as callback", [CallId]),
             Number = kz_json:get_value(<<"Number">>, JObj),
-            Call1 = callback_flag(AccountId, QueueId, Call),
+            Call1 = callback_flag(AccountId, QueueId, Call, Number),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
             Priority = queue_member_priority(CallId, Calls),
             Position = queue_member_position(CallId, Calls),
@@ -1559,7 +1559,7 @@ maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
             Number = kz_json:get_ne_binary_value(<<"Callback-Number">>, JObj),
             Priority = kz_json:get_integer_value(<<"Member-Priority">>, JObj),
             Position = queue_member_position(CallId, Calls),
-            Call1 = callback_flag(AccountId, QueueId, Call),
+            Call1 = callback_flag(AccountId, QueueId, Call, Number),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
 
             State1 = State#state{registered_callbacks=props:set_value(CallId, {Number, CIDPrepend}, RegCallbacks)},
@@ -1572,15 +1572,16 @@ maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
 %%
 %% @end
 %%------------------------------------------------------------------------------
--spec callback_flag(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) ->
+-spec callback_flag(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) ->
                            kapps_call:call().
-callback_flag(AccountId, QueueId, Call) ->
+callback_flag(AccountId, QueueId, Call, CallbackNumber) ->
     Call1 = prepend_cid_name(<<"CB:">>, Call),
     {_, CIDName} = acdc_util:caller_id(Call1),
     _ = acdc_stats:call_marked_callback(AccountId
                                        ,QueueId
                                        ,kapps_call:call_id(Call)
                                        ,CIDName
+                                       ,CallbackNumber
                                        ),
     Call1.
 

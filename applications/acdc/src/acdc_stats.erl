@@ -12,7 +12,7 @@
 %% Public API
 -export([call_waiting/9
         ,call_abandoned/4
-        ,call_marked_callback/4
+        ,call_marked_callback/5
         ,call_handled/4
         ,call_missed/5
         ,call_processed/5
@@ -118,13 +118,15 @@ call_abandoned(AccountId, QueueId, CallId, Reason) ->
                           ,kz_term:ne_binary()
                           ,kz_term:ne_binary()
                           ,kz_term:ne_binary()
+                          ,kz_term:ne_binary()
                           ) -> 'ok' | {'error', any()}.
-call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
+call_marked_callback(AccountId, QueueId, CallId, CallerIdName, CallbackNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Caller-ID-Name">>, CallerIdName}
+             ,{<<"Callback-Number">>, CallbackNumber}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kz_amqp_worker:cast(
@@ -1205,6 +1207,7 @@ call_stat_to_doc(#call_stat{id=Id
                            ,exited_position=ExitedPos
                            ,abandoned_reason=AbandonedR
                            ,is_callback=IsCallback
+                           ,callback_number=CallbackNumber
                            ,misses=Misses
                            ,status=Status
                            ,caller_id_name=CallerIdName
@@ -1227,6 +1230,7 @@ call_stat_to_doc(#call_stat{id=Id
                                    ,{<<"exited_position">>, ExitedPos}
                                    ,{<<"abandoned_reason">>, AbandonedR}
                                    ,{<<"is_callback">>, IsCallback}
+                                   ,{<<"callback_number">>, CallbackNumber}
                                    ,{<<"misses">>, misses_to_docs(Misses)}
                                    ,{<<"status">>, Status}
                                    ,{<<"caller_id_name">>, CallerIdName}
@@ -1258,6 +1262,7 @@ call_stat_to_json(#call_stat{id=Id
                             ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
                             ,is_callback=IsCallback
+                            ,callback_number=CallbackNumber
                             ,misses=Misses
                             ,status=Status
                             ,caller_id_name=CallerIdName
@@ -1280,6 +1285,7 @@ call_stat_to_json(#call_stat{id=Id
       ,{<<"Exited-Position">>, ExitedPos}
       ,{<<"Abandoned-Reason">>, AbandonedR}
       ,{<<"Is-Callback">>, IsCallback}
+      ,{<<"Callback-Number">>, CallbackNumber}
       ,{<<"Misses">>, misses_to_docs(Misses)}
       ,{<<"Status">>, Status}
       ,{<<"Caller-ID-Name">>, CallerIdName}
@@ -1440,6 +1446,7 @@ handle_marked_callback_stat(JObj, Props) ->
     Id = call_stat_id(JObj),
     Updates = props:filter_undefined(
                 [{#call_stat.is_callback, 'true'}
+                ,{#call_stat.callback_number, kz_json:get_ne_binary_value(<<"Callback-Number">>, JObj)}
                 ,{#call_stat.caller_id_name, kz_json:get_value(<<"Caller-ID-Name">>, JObj)}
                 ]),
     update_call_stat(Id, Updates, Props).

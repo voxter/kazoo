@@ -36,6 +36,7 @@
 
                    ,abandoned_reason :: kz_term:api_binary() | '_'
                    ,is_callback = 'false' :: boolean() | '_'
+                   ,callback_number :: kz_term:api_ne_binary() | '_'
                    ,misses = [] :: agent_misses() | '$4' | '_'
 
                    ,status :: kz_term:api_binary() | '$1' | '$2' | '$4' | '$5' | '_'
