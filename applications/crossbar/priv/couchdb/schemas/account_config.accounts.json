@@ -6,6 +6,14 @@
         "account_types_list": {
             "description": "list of account types",
             "type": "array"
+        },
+        "default_seat_type": {
+            "description": "The default seat type",
+            "type": "string"
+        },
+        "seat_types_list": {
+            "description": "list of seat types",
+            "type": "array"
         }
     },
     "type": "object"

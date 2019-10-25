@@ -12,6 +12,10 @@
             "description": "accounts allow subaccounts for direct",
             "type": "boolean"
         },
+        "default_seat_type": {
+            "description": "The default seat type",
+            "type": "string"
+        },
         "default_timezone": {
             "default": "America/Los_Angeles",
             "description": "accounts default timezone",
@@ -20,6 +24,10 @@
         "master_account_id": {
             "description": "accounts master account id",
             "type": "string"
+        },
+        "seat_types_list": {
+            "description": "list of seat types",
+            "type": "array"
         }
     },
     "type": "object"
