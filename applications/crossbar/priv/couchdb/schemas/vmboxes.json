@@ -119,7 +119,14 @@
         },
         "operator_number": {
             "description": "Alternate/override number to use when calling operator from voicemail",
-            "type": "string"
+            "oneOf": [
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "string"
+                }
+            ]
         },
         "owner_id": {
             "description": "The ID of the user object that 'owns' the voicemail box",
