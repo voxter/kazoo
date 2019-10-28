@@ -937,6 +937,7 @@ def_path_param(<<"{TEMPLATE_NAME}">>=P) -> base_path_param(P);
 def_path_param(<<"{THING}">>=P) -> base_path_param(P);
 def_path_param(<<"{TRANSACTION_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{USERNAME}">>=P) -> base_path_param(P);
+def_path_param(<<"{VERSION_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{VM_MSG_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{WHITELABEL_DOMAIN}">>=P) -> base_path_param(P);
 

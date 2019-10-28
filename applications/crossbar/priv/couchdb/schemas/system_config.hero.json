@@ -7,6 +7,28 @@
             "default": [],
             "description": "hero apps",
             "type": "array"
+        },
+        "electron_release_server": {
+            "description": "configuration for version and asset management in Electron Release Server (ERS)",
+            "properties": {
+                "base_url": {
+                    "description": "base URL for ERS, format: http://ip.add.re.sss:port",
+                    "type": "string"
+                },
+                "max_defer_time_s": {
+                    "description": "max number of seconds since a version was released that its rollout can be deferred",
+                    "type": "integer"
+                },
+                "password": {
+                    "description": "admin password for admin-protected routes in ERS",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "admin username for admin-protected routes in ERS",
+                    "type": "string"
+                }
+            },
+            "type": "object"
         }
     },
     "type": "object"

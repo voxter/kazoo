@@ -52,6 +52,7 @@ pages:
     - 'applications/crossbar/doc/comments.md'
     - 'applications/crossbar/doc/hero.md'
     - 'applications/crossbar/doc/hero_preferences.md'
+    - 'applications/crossbar/doc/hero_releases.md'
     - 'applications/crossbar/doc/freeswitch.md'
     - 'applications/crossbar/doc/kudos.md'
     - 'applications/crossbar/doc/lists.md'
