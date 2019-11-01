@@ -35799,6 +35799,83 @@
             },
             "type": "object"
         },
+        "system_config.rbac": {
+            "description": "Schema for rbac (rule based access controls)",
+            "properties": {
+                "full_access_user_ids": {
+                    "description": "List of user ids with full access to all api requests",
+                    "type": "array"
+                },
+                "http_methods": {
+                    "default": {},
+                    "description": "Rules for limiting access for each http method/verb",
+                    "properties": {
+                        "DELETE": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "GET": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "HEAD": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "PATCH": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "POST": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        },
+                        "PUT": {
+                            "default": {},
+                            "properties": {
+                                "restricted_endpoints": {
+                                    "description": "List of endpoints/request nouns that are restricted to admin users, or those listed in full_access_account_ids",
+                                    "type": "array"
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "type": "object"
+                }
+            },
+            "type": "object"
+        },
         "system_config.registrar": {
             "description": "Schema for registrar system_config",
             "properties": {
