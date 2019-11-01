@@ -84,7 +84,7 @@ build_and_run(From, To, Dimensions) ->
     Command = "convert -density $DENSITY $FROM -resize $DIMENSIONS $TO",
     run_command(Command, Args).
 
--spec run_command(kz_term:ne_binary(), binary()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
+-spec run_command(kz_term:ne_binary(), kz_term:proplist()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
 run_command(Command, Args) ->
     lager:debug("running convert command ~p with args ~p", [Command, Args]),
     case kz_os:cmd(Command, Args, []) of

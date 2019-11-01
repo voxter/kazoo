@@ -498,7 +498,7 @@ try_ers_authed_api_req(Method, Route, BodyJObj, Retries, Token) ->
     lager:debug("BodyJObj ~p", [BodyJObj]),
 
     case ers_api_req(Method, Route, Headers, BodyJObj) of
-        {'ok', 403, _, _} when Retries > 0 ->
+        {'error', 403, _, _} when Retries > 0 ->
             %% Re-attempt request in case the cached token had expired
             kz_cache:erase_local(?CACHE_NAME, {?MODULE, ?ERS_AUTH_TOKEN_CACHE_KEY}),
             lager:info("cleared cached ERS auth token, reauthenticating and replaying request"),

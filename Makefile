@@ -157,7 +157,7 @@ DIALYZER += --statistics --no_native
 PLT ?= .kazoo.plt
 
 OTP_APPS ?= erts kernel stdlib crypto public_key ssl asn1 inets xmerl
-EXCLUDE_DEPS = $(ROOT)/deps/erlang_localtime/ebin
+EXCLUDE_DEPS = $(ROOT)/deps/erlang_localtime/ebin $(ROOT)/deps/gm/ebin
 $(PLT): DEPS_EBIN ?= $(filter-out $(EXCLUDE_DEPS),$(wildcard $(ROOT)/deps/*/ebin))
 # $(PLT): CORE_EBINS ?= $(shell find $(ROOT)/core -name ebin)
 $(PLT):

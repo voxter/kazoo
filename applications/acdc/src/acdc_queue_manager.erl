@@ -663,14 +663,14 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                          lager:warning("skills ~p required, but queue ~s is not set to skills_based_round_robin", [Skills, QueueId]),
                          'undefined'
                  end,
-    acdc_stats:call_waiting(AccountId, QueueId, Position
-                           ,kapps_call:call_id(Call1)
-                           ,CIDName
-                           ,CIDNumber
-                           ,Priority
-                           ,StatSkills
-                           ,kapps_call:kvs_fetch(?ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, Call1)
-                           ),
+    'ok' = acdc_stats:call_waiting(AccountId, QueueId, Position
+                                  ,kapps_call:call_id(Call1)
+                                  ,CIDName
+                                  ,CIDNumber
+                                  ,Priority
+                                  ,StatSkills
+                                  ,kapps_call:kvs_fetch(?ACDC_AVERAGE_WAIT_TIME_ESTIMATION_KEY, Call1)
+                                  ),
 
     publish_queue_member_add(AccountId, QueueId, Call1, Priority
                             ,kz_json:is_true(<<"Enter-As-Callback">>, JObj1)
