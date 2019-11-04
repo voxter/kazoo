@@ -49,7 +49,7 @@ DEPS = amqp_client \
 BUILD_DEPS = parse_trans
 IGNORE_DEPS = hamcrest
 
-ifeq ($(USER),travis)
+ifeq ($(CIRCLECI),true)
     DEPS += coveralls
     dep_coveralls = git https://github.com/markusn/coveralls-erl 1.4.0
     DEPS += proper

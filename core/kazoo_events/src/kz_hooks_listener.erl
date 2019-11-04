@@ -28,6 +28,7 @@
 -define(ALL_EVENTS, [<<"CHANNEL_CREATE">>
                     ,<<"CHANNEL_ANSWER">>
                     ,<<"CHANNEL_DESTROY">>
+                    ,<<"CHANNEL_DISCONNECTED">>
                     ,<<"CHANNEL_BRIDGE">>
                     ,<<"DTMF">>
                     ]).
