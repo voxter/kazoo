@@ -1535,7 +1535,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom variable to check for queue ID",
+                    "description": "CAV to check for queue ID",
                     "type": "string"
                 }
             },
@@ -1591,7 +1591,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom KV whose value to use instead of \"id\"",
+                    "description": "CAV whose value to use instead of \"id\"",
                     "type": "string"
                 },
                 "window": {
@@ -2041,7 +2041,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom variable to check for callflow ID",
+                    "description": "CAV to check for callflow ID",
                     "type": "string"
                 }
             },
@@ -2299,7 +2299,7 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": "Custom variable to check for device ID",
+                    "description": "CAV to check for device ID",
                     "type": "string"
                 }
             },
@@ -2907,7 +2907,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom variable to check for menu ID",
+                    "description": "CAV to check for menu ID",
                     "type": "string"
                 }
             },
@@ -3279,7 +3279,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom variable to check for pivot URL",
+                    "description": "CAV to check for pivot URL",
                     "type": "string"
                 },
                 "voice_url": {
@@ -3340,7 +3340,7 @@
                     "type": "array"
                 },
                 "var": {
-                    "description": "Custom variable to check for media ID",
+                    "description": "CAV to check for media ID",
                     "type": "string"
                 }
             },
@@ -4248,7 +4248,7 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": "Custom variable to check for user ID",
+                    "description": "CAV to check for user ID",
                     "type": "string"
                 }
             },
@@ -4302,7 +4302,7 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": "Custom variable to check for vmbox ID",
+                    "description": "CAV to check for vmbox ID",
                     "type": "string"
                 }
             },

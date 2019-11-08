@@ -55,7 +55,7 @@
             "type": "integer"
         },
         "var": {
-            "description": "Custom variable to check for user ID",
+            "description": "CAV to check for user ID",
             "type": "string"
         }
     },

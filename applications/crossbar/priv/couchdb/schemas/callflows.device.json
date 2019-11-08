@@ -52,7 +52,7 @@
             "type": "integer"
         },
         "var": {
-            "description": "Custom variable to check for device ID",
+            "description": "CAV to check for device ID",
             "type": "string"
         }
     },

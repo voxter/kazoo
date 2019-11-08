@@ -12,7 +12,7 @@
             "type": "boolean"
         },
         "var": {
-            "description": "Custom KV whose value to use instead of \"id\"",
+            "description": "CAV whose value to use instead of \"id\"",
             "type": "string"
         },
         "window": {

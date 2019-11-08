@@ -12,7 +12,7 @@ Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `id` | The Callflow ID to branch to | `string()` |   | `false` |  
 `skip_module` | When set to true this callflow action is skipped, advancing to the wildcard branch (if any) | `boolean()` |   | `false` |  
-`var` | Custom variable to check for callflow ID | `string()` |   | `false` |  
+`var` | CAV to check for callflow ID | `string()` |   | `false` |  
 
 
 

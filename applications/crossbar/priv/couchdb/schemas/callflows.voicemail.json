@@ -43,7 +43,7 @@
             "type": "boolean"
         },
         "var": {
-            "description": "Custom variable to check for vmbox ID",
+            "description": "CAV to check for vmbox ID",
             "type": "string"
         }
     },

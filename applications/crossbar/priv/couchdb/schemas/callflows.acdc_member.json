@@ -20,7 +20,7 @@
             "type": "boolean"
         },
         "var": {
-            "description": "Custom variable to check for queue ID",
+            "description": "CAV to check for queue ID",
             "type": "string"
         }
     },

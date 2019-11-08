@@ -23,7 +23,7 @@ Key | Description | Type | Default | Required | Support Level
 `strategy` | Ringing strategy for the endpoint(s) | `string('simultaneous' | 'single')` | `simultaneous` | `false` |  
 `suppress_clid` | Toggle whether to suppress caller ID | `boolean()` |   | `false` |  
 `timeout` | Timeout, in seconds, to wait for answer | `integer()` | `20` | `false` |  
-`var` | Custom variable to check for user ID | `string()` |   | `false` |  
+`var` | CAV to check for user ID | `string()` |   | `false` |  
 
 
 

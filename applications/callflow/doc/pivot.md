@@ -18,7 +18,7 @@ Key | Description | Type | Default | Required | Support Level
 `req_body_format` | What format should the request body have | `string('form' | 'json')` | `form` | `false` |  
 `req_format` | What format of Pivot will the your server respond with | `string('kazoo' | 'twiml')` | `kazoo` | `false` |  
 `skip_module` | When set to true this callflow action is skipped, advancing to the wildcard branch (if any) | `boolean()` |   | `false` |  
-`var` | Custom variable to check for pivot URL | `string()` |   | `false` |  
+`var` | CAV to check for pivot URL | `string()` |   | `false` |  
 `voice_url` | What URL to request the initial Pivot callflow | `string()` |   | `true` |  
 
 

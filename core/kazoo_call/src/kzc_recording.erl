@@ -544,8 +544,6 @@ store_recording_meta(#state{call=Call
                      ,{<<"content_type">>, kz_mime:from_extension(Ext)}
                      ,{<<"custom_application_vars">>, kz_call_event:custom_application_vars(EventJObj)}
                      ,{<<"custom_channel_vars">>, kz_call_event:custom_channel_vars(EventJObj)}
-                      %% custom_kvs to be deprecated
-                     ,{<<"custom_kvs">>, kz_call_event:custom_application_vars(EventJObj)}
                      ,{<<"description">>, <<"recording ", MediaName/binary>>}
                      ,{<<"direction">>, kapps_call:direction(Call)}
                      ,{<<"duration">>, Seconds}

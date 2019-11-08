@@ -2312,8 +2312,6 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"call_state">>, Key}
                ,{<<"custom_application_vars">>, kapps_call:custom_application_vars(MemberCall)}
                ,{<<"now">>, kz_time:current_tstamp()}
-                %% Custom-KVs to be deprecated
-               ,{<<"Custom-KVs">>, kapps_call:custom_application_vars(MemberCall)}
                ,{<<"agent_username">>, AgentName}
                ]),
     Headers = case Method of

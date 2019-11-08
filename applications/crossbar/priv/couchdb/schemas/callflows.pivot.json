@@ -47,7 +47,7 @@
             "type": "boolean"
         },
         "var": {
-            "description": "Custom variable to check for pivot URL",
+            "description": "CAV to check for pivot URL",
             "type": "string"
         },
         "voice_url": {

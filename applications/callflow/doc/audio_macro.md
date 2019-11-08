@@ -80,7 +80,7 @@ Key | Description | Type | Default | Required | Support Level
 `skip_module` | When set to true this callflow action is skipped, advancing to the wildcard branch (if any) | `boolean()` |   | `false` |  
 `terminators.[]` |   | `string()` |   | `false` |  
 `terminators` | What DTMF can terminate playback of the audio | `array(string())` | `["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"]` | `false` |  
-`var` | Custom variable to check for media ID | `string()` |   | `false` |  
+`var` | CAV to check for media ID | `string()` |   | `false` |  
 
 ### callflows.tts
 
