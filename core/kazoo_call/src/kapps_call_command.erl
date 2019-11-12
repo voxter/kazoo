@@ -806,6 +806,7 @@ recv_dtmf(DTMFs, Call) ->
 recv_dtmf_command(DTMFs) ->
     props:filter_undefined(
       [{<<"DTMFs">>, DTMFs}
+      ,{<<"Insert-At">>, <<"now">>}
       ,{<<"Application-Name">>, <<"recv_dtmf">>}
       ]).
 
@@ -3427,7 +3428,7 @@ transfer_command(TransferType, TransferTo, Call) ->
 transfer_command(TransferType, TransferTo, TransferLeg, Call) ->
     transfer_command(TransferType, TransferTo, TransferLeg, 'undefined', Call).
 
--spec transfer_command(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> 'ok'.
+-spec transfer_command(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_term:api_ne_binary(), kapps_call:call()) -> kz_term:api_terms().
 transfer_command(TransferType, TransferTo, TransferLeg, ForceTransferDialplan, Call) ->
     kz_json:from_list([{<<"Application-Name">>, <<"transfer">>}
                       ,{<<"Force-Transfer-Dialplan">>, ForceTransferDialplan}
