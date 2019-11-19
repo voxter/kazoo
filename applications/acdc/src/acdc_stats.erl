@@ -966,31 +966,45 @@ query_call_summary(Match, _Limit) ->
             lager:debug("no stats found, sorry"),
             [];
         Stats ->
-            QueryResult = lists:foldl(fun query_call_summary_fold/2, [], Stats),
-            JsonResult = lists:foldl(fun({QueueId, {TotalCalls, AbandonedCalls, TotalWaitTime}}, JObj) ->
-                                             QueueJObj = kz_json:set_values([{<<"total_calls">>, TotalCalls}
-                                                                            ,{<<"abandoned_calls">>, AbandonedCalls}
-                                                                            ,{<<"total_wait_time">>, TotalWaitTime}
-                                                                            ]
-                                                                           ,kz_json:new()),
-                                             kz_json:set_value(QueueId, QueueJObj, JObj)
-                                     end
-                                    ,kz_json:new()
-                                    ,QueryResult),
-            [{<<"Data">>, JsonResult}]
+            QueryResult = lists:foldl(fun query_call_summary_fold/2, #{}, Stats),
+            [{<<"Data">>, kz_json:from_map(QueryResult)}]
     end.
 
--spec query_call_summary_fold(call_summary_stat(), kz_term:proplist()) -> kz_term:proplist().
+-type call_summary_map() :: #{kz_term:ne_binary() => #{atom() => non_neg_integer()}}.
+-spec query_call_summary_fold(call_summary_stat(), call_summary_map()) -> call_summary_map().
 query_call_summary_fold(#call_summary_stat{queue_id=QueueId
-                                          ,status=Status
+                                          ,status= <<"abandoned">>
+                                          }, Map) ->
+    maps:update_with(
+      QueueId
+     ,fun(#{'total_calls' := TotalCalls
+           ,'abandoned_calls' := AbandonedCalls
+           }=QueueSummary
+         ) ->
+              QueueSummary#{'total_calls' := TotalCalls + 1
+                           ,'abandoned_calls' := AbandonedCalls + 1
+                           }
+      end
+     ,#{'total_calls' => 1, 'abandoned_calls' => 1, 'total_wait_time' => 0}
+     ,Map
+     );
+query_call_summary_fold(#call_summary_stat{queue_id=QueueId
+                                          ,status= <<"processed">>
                                           ,wait_time=WaitTime
-                                          }, Props) ->
-    {TotalCalls, AbandonedCalls, TotalWaitTime} = props:get_value(QueueId, Props, {0, 0, 0}),
-    {AbandonedCalls1, TotalWaitTime1} = case Status of
-                                            <<"processed">> -> {AbandonedCalls, TotalWaitTime + WaitTime};
-                                            <<"abandoned">> -> {AbandonedCalls + 1, TotalWaitTime}
-                                        end,
-    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1}, Props).
+                                          }, Map) ->
+    maps:update_with(
+      QueueId
+     ,fun(#{'total_calls' := TotalCalls
+           ,'total_wait_time' := TotalWaitTime
+           }=QueueSummary
+         ) ->
+              QueueSummary#{'total_calls' := TotalCalls + 1
+                           ,'total_wait_time' := TotalWaitTime
+                           }
+      end
+     ,#{'total_calls' => 1, 'abandoned_calls' => 0, 'total_wait_time' => WaitTime}
+     ,Map
+     ).
 
 -spec query_agent_calls(kz_term:ne_binary(), kz_term:ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
