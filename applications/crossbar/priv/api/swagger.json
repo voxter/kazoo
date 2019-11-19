@@ -52,6 +52,16 @@
             },
             "type": "object"
         },
+        "account_config.acdc": {
+            "description": "Schema for acdc account_config",
+            "properties": {
+                "pause_state_list": {
+                    "description": "list of custom pause states",
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "account_config.call_command": {
             "description": "Schema for call_command account_config",
             "properties": {

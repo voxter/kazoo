@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "account_config.acdc",
+    "description": "Schema for acdc account_config",
+    "properties": {
+        "pause_state_list": {
+            "description": "list of custom pause states",
+            "type": "array"
+        }
+    },
+    "type": "object"
+}
