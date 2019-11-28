@@ -81,7 +81,7 @@ build_and_run(From, To, Dimensions) ->
            ,{<<"TO">>, To}
            ,{<<"DIMENSIONS">>, Dimensions}
            ,{<<"DENSITY">>, lists:max(re:split(Dimensions, "x"))}],
-    Command = "convert -density $DENSITY $FROM -resize $DIMENSIONS $TO",
+    Command = "convert -background none -density $DENSITY $FROM -resize $DIMENSIONS $TO",
     run_command(Command, Args).
 
 -spec run_command(kz_term:ne_binary(), kz_term:proplist()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
