@@ -204,7 +204,7 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_agent" AS
   _rev AS _view_rev,
   kazoo_db_name AS _view_db_name,
   data->>'agent_id' AS _view_key_0,
-  (data->>'timestamp')::bigint AS _view_key_1
+  (data->>'timestamp')::float AS _view_key_1
  FROM public.status_stat
  ORDER BY _view_key_0, _view_key_1;
 ALTER TABLE public."agent_stats~most_recent_by_agent" OWNER TO kazoo;
@@ -214,7 +214,7 @@ CREATE OR REPLACE VIEW public."agent_stats~most_recent_by_timestamp" AS
   _id AS _view_id,
   _rev AS _view_rev,
   kazoo_db_name AS _view_db_name,
-  (data->>'timestamp')::bigint AS _view_key_0,
+  (data->>'timestamp')::float AS _view_key_0,
   data->>'agent_id' AS _view_key_1
  FROM public.status_stat
  ORDER BY _view_key_0, _view_key_1;
@@ -226,7 +226,7 @@ CREATE OR REPLACE VIEW public."agent_stats~status_log" AS
   _rev AS _view_rev,
   kazoo_db_name AS _view_db_name,
   data->>'agent_id' AS _view_key_0,
-  (data->>'timestamp')::bigint AS _view_key_1,
+  (data->>'timestamp')::float AS _view_key_1,
   data->>'status' AS _view_value
  FROM public.status_stat
  ORDER BY _view_key_0, _view_key_1;
@@ -247,7 +247,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_module" AS
   data->>'auth_module' AS _view_value_auth_module,
   data->>'status' AS _view_value_status,
   data->>'message' AS _view_value_message,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'client_ip' AS _view_value_client_ip
  FROM public.auth
  ORDER BY _view_key_0, _view_key_1;
@@ -265,7 +265,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_auth_type" AS
   data->>'auth_module' AS _view_value_auth_module,
   data->>'status' AS _view_value_status,
   data->>'message' AS _view_value_message,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'client_ip' AS _view_value_client_ip
  FROM public.auth
  ORDER BY _view_key_0, _view_key_1;
@@ -283,7 +283,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_status" AS
   data->>'auth_module' AS _view_value_auth_module,
   data->>'status' AS _view_value_status,
   data->>'message' AS _view_value_message,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'client_ip' AS _view_value_client_ip
  FROM public.auth
  ORDER BY _view_key_0, _view_key_1;
@@ -300,7 +300,7 @@ CREATE OR REPLACE VIEW public."auth~login_attempt_by_time" AS
   data->>'auth_module' AS _view_value_auth_module,
   data->>'status' AS _view_value_status,
   data->>'message' AS _view_value_message,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'client_ip' AS _view_value_client_ip
  FROM public.auth
  ORDER BY _view_key_0;
@@ -360,7 +360,7 @@ CREATE OR REPLACE VIEW public."cdrs~crossbar_listing" AS
   (data->>'duration_seconds')::bigint AS _view_value_duration_seconds,
   data->>'interaction_id' AS _view_value_interaction_id,
   (data->>'billing_seconds')::bigint AS _view_value_billing_seconds,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'hangup_cause' AS _view_value_hangup_cause,
   data->>'other_leg_call_id' AS _view_value_other_leg_call_id,
   data->'custom_channel_vars'->>'owner_id' AS _view_value_owner_id,
@@ -382,9 +382,9 @@ CREATE OR REPLACE VIEW public."cdrs~interaction_listing" AS
   kazoo_db_name AS _view_db_name,
   data->>'interaction_time' AS _view_key_0,
   data->>'interaction_key' AS _view_key_1,
-  COALESCE((data->>'channel_created_time')::bigint, ((data->>'timestamp')::bigint - (data->>'duration_seconds')::bigint)) AS _view_key_2,
+  COALESCE((data->>'channel_created_time')::bigint, ((data->>'timestamp')::float - (data->>'duration_seconds')::bigint)) AS _view_key_2,
   _id AS _view_value_id,
-  COALESCE((data->>'channel_created_time')::bigint, ((data->>'timestamp')::bigint - (data->>'duration_seconds')::bigint)) AS _view_value_channel_time,
+  COALESCE((data->>'channel_created_time')::bigint, ((data->>'timestamp')::float - (data->>'duration_seconds')::bigint)) AS _view_value_channel_time,
   COALESCE(data->>'channel_loopback_leg', '_') AS _view_value_leg
  FROM public.cdr
  ORDER BY _view_key_0, _view_key_1;
@@ -435,7 +435,7 @@ CREATE OR REPLACE VIEW public."cdrs~listing_by_owner" AS
   data->>'callee_id_number' AS _view_value_callee_id_number,
   (data->>'duration_seconds')::bigint AS _view_value_duration_seconds,
   (data->>'billing_seconds')::bigint AS _view_value_billing_seconds,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'hangup_cause' AS _view_value_hangup_cause,
   data->>'other_leg_call_id' AS _view_value_other_leg_call_id,
   data->>'call_direction' AS _view_value_call_direction,
@@ -462,7 +462,7 @@ CREATE OR REPLACE VIEW public."cdrs~offnet-calls" AS
   data->>'callee_id_name' AS _view_value_callee_id_name,
   data->>'callee_id_number' AS _view_value_callee_id_number,
   (data->>'duration_seconds')::bigint AS _view_value_duration_seconds,
-  (data->>'timestamp')::bigint AS _view_value_timestamp,
+  (data->>'timestamp')::float AS _view_value_timestamp,
   data->>'hangup_cause' AS _view_value_hangup_cause,
   data->>'other_leg_call_id' AS _view_value_other_leg_call_id,
   data->>'call_direction' AS _view_value_call_direction,

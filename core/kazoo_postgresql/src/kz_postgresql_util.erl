@@ -54,6 +54,7 @@ decode_query_value(Type, Value) ->
         'int4' when is_binary(Value) -> binary_to_integer(Value);
         'int8' when is_integer(Value) -> Value;
         'int8' when is_binary(Value) -> binary_to_integer(Value);
+        'float' -> Value;
         'varchar' when is_integer(Value) -> list_to_binary(integer_to_list(Value));
         'varchar' when is_binary(Value) -> Value;
         'text' when is_integer(Value) -> list_to_binary(integer_to_list(Value));
@@ -77,6 +78,8 @@ encode_query_value(<<"integer">>, Value) when is_integer(Value) -> Value;
 encode_query_value(<<"integer">>, Value) when is_binary(Value) -> binary_to_integer(Value);
 encode_query_value(<<"bigint">>, Value) when is_integer(Value) -> Value;
 encode_query_value(<<"bigint">>, Value) when is_binary(Value) -> binary_to_integer(Value);
+encode_query_value(<<"float">>, Value) when is_float(Value) -> Value;
+encode_query_value(<<"float">>, Value) when is_binary(Value) -> binary_to_float(Value);
 encode_query_value(<<"character varying">>, Value) when is_integer(Value) -> list_to_binary(integer_to_list(Value));
 encode_query_value(<<"character varying">>, Value) when is_binary(Value) -> Value;
 encode_query_value(<<"character varying">>, Value) when is_atom(Value) -> Value;
