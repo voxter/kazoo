@@ -324,9 +324,12 @@ where_value_to_iolist(Bin) when is_binary(Bin) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Run a simple postgresql query
+%% Do not log SELECT version kazoo data health check queries to save logs!
 %% @end
 %%------------------------------------------------------------------------------
 -spec do_simple_query(kz_postgresql:connection_pool(), kz_postgresql:query()) -> epgsql:reply().
+do_simple_query(ConnPool, [[[],<<"SELECT ">>,[<<"version()">>]],<<";">>] = Query) ->
+    pgapp:squery(ConnPool, Query);
 do_simple_query(ConnPool, Query) ->
     %% TODO Consider removing debug line in future for performance
     lager:debug("executing postgresql (ConnPool: ~p) simple query: ~p ", [ConnPool, iolist_to_binary(Query)]),
