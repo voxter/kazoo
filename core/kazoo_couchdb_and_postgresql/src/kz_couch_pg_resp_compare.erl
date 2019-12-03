@@ -145,6 +145,7 @@ clean_doc(Doc, Path) ->
     end.
 
 -spec filter_doc({kz_type:ne_binary(),kz_type:ne_binary()}) -> boolean().
+filter_doc({<<"pvt_type">>, _}) -> 'false';
 filter_doc({<<"rev">>, _}) -> 'false';
 filter_doc({<<"_rev">>, _}) -> 'false';
 filter_doc(_) -> 'true'.
