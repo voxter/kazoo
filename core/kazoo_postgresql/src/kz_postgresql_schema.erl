@@ -31,7 +31,7 @@ db_and_pvt_type_to_pg_table_name(_KazooDBName, _DocType) -> <<"other">>.
 %% @end
 %%------------------------------------------------------------------------------
 -spec pg_view_name_to_pg_table_name(kz_term:ne_binary()) -> kz_term:ne_binary().
-pg_view_name_to_pg_table_name(<<"agent_stats~",_>>) -> <<"status_stat">>;
+pg_view_name_to_pg_table_name(<<"agent_stats~",_/binary>>) -> <<"status_stat">>;
 pg_view_name_to_pg_table_name(ViewName) ->
     case binary:split(ViewName, <<"~">>) of
         [_NotAView] -> ViewName;
