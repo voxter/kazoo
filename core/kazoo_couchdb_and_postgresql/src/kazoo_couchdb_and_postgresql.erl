@@ -274,10 +274,11 @@ call_couch_and_pg_funs(Conn, Fun, Args) ->
                                     {{'ok', kz_json:object()} | kz_data:data_error()
                                     ,{'ok', kz_json:object()} | kz_data:data_error()}.
 call_couch_and_pg_funs(Conn, Fun, Args, 'true') ->
-    lager:debug("~p/~p called", [Fun, length(Args)]),
+    Arity = length(Args),
+    lager:debug("~p/~p called", [Fun, Arity]),
     {CouchResp, PGResp, CouchTime, PGTime} = do_call_couch_and_pg_funs(Conn, Fun, Args),
-    lager:debug("Function execute times, Fun: ~p, Couch: ~p, PG: ~p (Time in microseconds)", [Fun, CouchTime, PGTime]),
-    kz_couch_pg_resp_compare:compare_resp(CouchResp, PGResp),
+    ResponseMatch = kz_couch_pg_resp_compare:compare_resp(CouchResp, PGResp),
+    lager:debug("Function execute times, Fun: ~p/~p, Couch: ~p, PG: ~p (microseconds), Response match: ~p", [Fun, Arity, CouchTime, PGTime, ResponseMatch]),
     {CouchResp, PGResp};
 call_couch_and_pg_funs(Conn, Fun, Args, 'false') ->
     {CouchResp, PGResp, _CouchTime, _PGTime} = do_call_couch_and_pg_funs(Conn, Fun, Args),

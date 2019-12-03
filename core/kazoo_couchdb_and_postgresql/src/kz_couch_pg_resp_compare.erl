@@ -16,25 +16,29 @@
 -spec compare_resp({'ok', kz_json:object()} | boolean() | kz_data:data_error(), {'ok', kz_json:object()} | boolean() | kz_data:data_error()) ->
                           boolean().
 compare_resp({ErrorOrOk, Resp}, {ErrorOrOk, Resp}) ->
-    lager:debug("couch and pg both returned an ~p response", [ErrorOrOk]),
-    log_response_same(),
+    lager:debug("couch and pg returned the same response, Response result: ~p", [ErrorOrOk]),
     'true';
 compare_resp({ErrorOrOk, CouchBody}=CouchResp, {ErrorOrOk, PGBody}=PGResp) ->
-    lager:debug("couch and pg both returned an ~p response", [ErrorOrOk]),
-    lager:debug("comparing response body"),
+    lager:debug("couch and pg returned a response result: ~p, comparing response doc(s)", [ErrorOrOk]),
     case compare_resp_body(CouchBody, PGBody) of
         'true' ->
-            log_response_same(),
+            lager:debug("couch and pg returned the same response, Response result: ~p", [ErrorOrOk]),
             'true';
         'false' ->
-            log_response_diff(CouchResp, PGResp),
+            lager:error("couch and pg returned different responses, Response results are the same (~p) but doc contents differ", [ErrorOrOk]),
+            log_responses(CouchResp, PGResp),
             'false'
     end;
+compare_resp({CouchErrorOrOk, _}=CouchResp, {PGErrorOrOk, _}=PGResp) ->
+    lager:error("couch and pg returned different responses, Different response types (Couch: ~p, PG: ~p)", [CouchErrorOrOk, PGErrorOrOk]),
+    log_responses(CouchResp, PGResp),
+    'false';
 compare_resp(Resp, Resp) ->
-    log_response_same(),
+    lager:debug("couch and pg returned the same response, No response result returned"),
     'true';
 compare_resp(CouchResp, PGResp) ->
-    log_response_diff(CouchResp, PGResp),
+    lager:error("couch and pg returned different responses, Unknown difference"),
+    log_responses(CouchResp, PGResp),
     'false'.
 
 %%------------------------------------------------------------------------------
@@ -68,27 +72,26 @@ is_doc_or_docs(Doc) ->
 %%------------------------------------------------------------------------------
 -spec compare_docs(kz_json:object() | kz_json:objects(), kz_json:object() | kz_json:objects()) -> boolean().
 compare_docs([], []) ->
-    lager:debug("couch and pg doc response are the same (Both returned 0 docs)"),
     'true';
 compare_docs(CouchDoc, PGDoc) when not is_list(CouchDoc), not is_list(PGDoc) ->
     compare_doc(CouchDoc, PGDoc);
 compare_docs(CouchDocs, PGDoc) when is_list(CouchDocs), not is_list(PGDoc) ->
-    lager:error("couch and pg response differ, Couch returned a list (length: ~p), PG returned a single doc", [length(CouchDocs)]),
+    lager:error("couch and pg docs differ, Couch returned a list of size ~p, PG returned single doc", [length(CouchDocs)]),
     'false';
 compare_docs(CouchDoc, PGDocs) when not is_list(CouchDoc), is_list(PGDocs) ->
-    lager:error("couch and pg response differ, Couch returned a single doc, PG returned a list (length: ~p)", [length(PGDocs)]),
+    lager:error("couch and pg docs differ, Couch returned a single doc, PG returned a list of size ~p", [length(PGDocs)]),
     'false';
 compare_docs(CouchDocs, PGDocs) when is_list(CouchDocs), is_list(PGDocs) ->
     try lists:zip(CouchDocs, PGDocs) of
         DocsZiped ->
-            lager:debug("couch and pg response contain the same number of docs"),
+            lager:debug("couch and pg response contain the same number of docs: ~p", [length(CouchDocs)]),
             lists:foldl(fun({CouchDoc, PGDoc}, 'false') -> compare_docs(CouchDoc, PGDoc), 'false';
                            ({CouchDoc, PGDoc}, _) -> compare_docs(CouchDoc, PGDoc) end
                        ,'true'
                        ,DocsZiped)
     catch
         error:_Error ->
-            lager:error("couch and pg response contain diferent number of docs (Couch ~p, PG ~p)", [length(CouchDocs), length(PGDocs)]),
+            lager:error("couch and pg docs differ, Couch returned a list of size ~p, PG returned a list of size ~p", [length(CouchDocs), length(PGDocs)]),
             'false'
     end.
 
@@ -99,11 +102,10 @@ compare_docs(CouchDocs, PGDocs) when is_list(CouchDocs), is_list(PGDocs) ->
 %%------------------------------------------------------------------------------
 -spec compare_doc(kz_json:object(), kz_json:object()) -> boolean().
 compare_doc(CouchDoc, PGDoc) ->
-    lager:debug("comparing couch and pg doc....."),
     case kz_doc:id(CouchDoc) == kz_doc:id(PGDoc) of
         'true' -> compare_docs_are_equal(CouchDoc, PGDoc);
         'false' ->
-            lager:error("doc ids are not the same, Couch doc id: ~p, PG doc id: ~p", [kz_doc:id(CouchDoc), kz_doc:id(PGDoc)]),
+            lager:error("found issue when comparing couch and PG doc, doc ids are different (Couch doc id: ~p, PG doc id: ~p)", [kz_doc:id(CouchDoc), kz_doc:id(PGDoc)]),
             'false'
     end.
 
@@ -117,10 +119,9 @@ compare_docs_are_equal(CouchDoc, PGDoc) ->
     PGDocClean = clean_doc(PGDoc),
     case kz_json:are_equal(CouchDocClean, PGDocClean) of
         'true' ->
-            lager:debug("docs are the same"),
             'true';
         'false' ->
-            lager:error("docs are NOT the same"),
+            lager:error("found issue when comparing couch and PG doc, docs are NOT the same"),
             log_doc_diff(CouchDoc, PGDoc),
             'false'
     end.
@@ -148,13 +149,12 @@ filter_doc({<<"rev">>, _}) -> 'false';
 filter_doc({<<"_rev">>, _}) -> 'false';
 filter_doc(_) -> 'true'.
 
--spec log_response_same() -> 'ok'.
-log_response_same() ->
-    lager:debug("couch and pg doc response are the same").
-
--spec log_response_diff(any(), any()) -> 'ok'.
-log_response_diff(CouchResp, PGResp) ->
-    lager:error("couch and pg doc response are NOT the same"),
+%%------------------------------------------------------------------------------
+%% @doc Log both responses
+%% @end
+%%------------------------------------------------------------------------------
+-spec log_responses(any(), any()) -> 'ok'.
+log_responses(CouchResp, PGResp) ->
     lager:error("couch resp: ~p", [CouchResp]),
     lager:error("pg resp: ~p", [PGResp]).
 
@@ -168,5 +168,5 @@ log_doc_diff(CouchDoc, PGDoc) ->
     PGDocClean = clean_doc(PGDoc),
     CouchDocDiff = kz_json:diff(CouchDocClean, PGDocClean),
     PGDocDiff = kz_json:diff(PGDocClean, CouchDocClean),
-    lager:error("doc diff: in couch and not in pg: ~p", [CouchDocDiff]),
-    lager:error("doc diff: in pg and not in couch: ~p", [PGDocDiff]).
+    lager:error("doc diff: Data in couch and not in pg: ~p", [CouchDocDiff]),
+    lager:error("doc diff: Data in pg and not in couch: ~p", [PGDocDiff]).
