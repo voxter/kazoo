@@ -88,7 +88,7 @@ build_query_iolist(QueryRecord, Routines) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_add_insert_into(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
-maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = {}}) ->
+maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = 'undefined'}) ->
     Query;
 maybe_add_insert_into(Query, #kz_postgresql_query{'insert_into' = {TableName, ColumnsList}}) ->
     ColumnsIolist = lists:join(<<", ">>, ColumnsList),
@@ -164,7 +164,7 @@ maybe_add_delete_from(Query, #kz_postgresql_query{'delete_from' = DeleteTableNam
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_add_where(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
-maybe_add_where(Query, #kz_postgresql_query{'where' = {}}) ->
+maybe_add_where(Query, #kz_postgresql_query{'where' = 'undefined'}) ->
     Query;
 maybe_add_where(Query, #kz_postgresql_query{'where' = WhereClause}) ->
     WhereIolist = where_clause_to_iolist(WhereClause),
@@ -175,7 +175,7 @@ maybe_add_where(Query, #kz_postgresql_query{'where' = WhereClause}) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_add_inner_join(kz_postgresql:query(), kz_postgresql:query_record()) -> kz_postgresql:query().
-maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = {'undefined', []}}) ->
+maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = 'undefined'}) ->
     Query;
 maybe_add_inner_join(Query, #kz_postgresql_query{'inner_join' = {TableName, JoinList}}) ->
     JoinsIolist = lists:join(<<" AND ">>, JoinList),
@@ -247,7 +247,7 @@ add_end_of_query(Query, _QueryRecord) ->
 %% eg [[value1, value2, value3], [valueX, valueY]] would result in (value1, value2, value3), (valueX, valueY)
 %% @end
 %%------------------------------------------------------------------------------
--spec generate_values_iolist(list(kz_term:ne_binaries())) -> iolist().
+-spec generate_values_iolist(list(kz_postgresql:values())) -> iolist().
 generate_values_iolist(ValueLists) ->
     Values = lists:map(fun(ValueList) -> [<<"(">>, lists:join(<<", ">>, ValueList), <<")">>] end
                       ,ValueLists),
@@ -346,7 +346,7 @@ do_extended_query(ConnPool, Query, QueryValues) ->
 %% @doc Execute a multiple postgresql querys as a transaction with rollback if any query fails
 %% @end
 %%------------------------------------------------------------------------------
--spec execute_query_with_transaction(kz_postgresql:connection_pool(), fun((kz_postgresql:connection_pool()) -> epgsql:reply())) -> epgsql:reply().
+-spec execute_query_with_transaction(kz_postgresql:connection_pool(), fun(() -> epgsql:reply())) -> epgsql:reply().
 execute_query_with_transaction(ConnPool, EpgsqlFunctions) ->
     lager:debug("starting postgresql transaction (ConnPool: ~p)", [ConnPool]),
     case pgapp:with_transaction(ConnPool, EpgsqlFunctions) of

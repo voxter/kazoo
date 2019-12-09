@@ -34,9 +34,9 @@ server_info(ConnPool) ->
 %% @doc Convert Hex list to binary string
 %% @end
 %%------------------------------------------------------------------------------
--spec hex_to_binary(list()) -> kz_term:ne_binary().
-hex_to_binary(HexList) ->
-    list_to_binary([io_lib:format("~2.16.0B",[X]) || <<X:8>> <= HexList]).
+-spec hex_to_binary(binary()) -> binary().
+hex_to_binary(Digest) ->
+    list_to_binary([io_lib:format("~2.16.0B",[X]) || <<X:8>> <= Digest]).
 
 %%------------------------------------------------------------------------------
 %% @doc Decode postgresql query values to the type defined

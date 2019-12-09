@@ -102,15 +102,13 @@ add_options_to_query(_ConnPool, Query, []) ->
 %% limit kz_data:option()
 %% Add LIMIT Limit
 add_options_to_query(ConnPool, Query, [{'limit', Limit} | OtherOptions]) ->
-    LimitBinary = list_to_binary(integer_to_list(Limit)),
-    UpdatedQuery = Query#kz_postgresql_query{'limit' = LimitBinary},
+    UpdatedQuery = Query#kz_postgresql_query{'limit' = Limit},
     add_options_to_query(ConnPool, UpdatedQuery, OtherOptions);
 
 %% skip kz_data:option()
 %% Add OFFSET Skip
 add_options_to_query(ConnPool, Query, [{'skip', Skip} | OtherOptions]) ->
-    SkipBinary = list_to_binary(integer_to_list(Skip)),
-    UpdatedQuery = Query#kz_postgresql_query{'offset' = SkipBinary},
+    UpdatedQuery = Query#kz_postgresql_query{'offset' = Skip},
     add_options_to_query(ConnPool, UpdatedQuery, OtherOptions);
 
 %% ascending kz_data:option()
@@ -156,7 +154,7 @@ add_options_to_query(ConnPool
                                                    ,get_order(OtherOptions)) of
                        {} ->
                            Query;
-                       KeyWhereClause when Where =:= {} ->
+                       KeyWhereClause when Where =:= 'undefined' ->
                            Query#kz_postgresql_query{'where' = KeyWhereClause};
                        KeyWhereClause ->
                            UpdatedWhere = {<<"AND">>, [Where, KeyWhereClause]},
@@ -175,7 +173,7 @@ add_options_to_query(ConnPool
                                                    ,get_order(OtherOptions)) of
                        {} ->
                            Query;
-                       KeyWhereClause when Where =:= {} ->
+                       KeyWhereClause when Where =:= 'undefined' ->
                            Query#kz_postgresql_query{'where' = KeyWhereClause};
                        KeyWhereClause ->
                            UpdatedWhere = {<<"AND">>, [Where, KeyWhereClause]},
@@ -186,14 +184,14 @@ add_options_to_query(ConnPool
 %% doc_type kz_data:option()
 %% Add WHERE pvt_type=DocType, Dependent on pvt_type column being defined for every table
 add_options_to_query(ConnPool
-                    ,#kz_postgresql_query{'where'={}, 'parameters'=ParametersList}=Query
+                    ,#kz_postgresql_query{'where'='undefined', 'parameters'=ParametersList}=Query
                     ,[{'doc_type', DocType} | OtherOptions]) ->
     NextParamCount = integer_to_binary(length(ParametersList)+1),
-    UpdatedWhereClause = {<<"=">>, [<<"data->>'pvt_type'">>
-                                   ,<<"$",NextParamCount/binary>>
-                                   ]
-                         },
-    UpdatedQuery = Query#kz_postgresql_query{'where' = UpdatedWhereClause
+    NewWhereClause = {<<"=">>, [<<"data->>'pvt_type'">>
+                               ,<<"$",NextParamCount/binary>>
+                               ]
+                     },
+    UpdatedQuery = Query#kz_postgresql_query{'where' = NewWhereClause
                                             ,'parameters' = lists:append(ParametersList, [DocType])},
     add_options_to_query(ConnPool, UpdatedQuery, OtherOptions);
 add_options_to_query(ConnPool
@@ -272,8 +270,8 @@ generate_order_by_list(ConnPool, View, Operator) ->
 %% http://guide.couchdb.org/draft/views.html#reversed
 %% @end
 %%------------------------------------------------------------------------------
--spec key_options_to_where_clause(list(), list(), 'asscending' | 'descending') -> kz_postgresql:where_clause().
-key_options_to_where_clause(StartKeys, EndKeys, 'asscending') ->
+-spec key_options_to_where_clause(list(), list(), 'ascending' | 'descending') -> kz_postgresql:where_clause().
+key_options_to_where_clause(StartKeys, EndKeys, 'ascending') ->
     generate_key_bounds_exp(filter_out_wildcard_keys(StartKeys)
                            ,filter_out_wildcard_keys(EndKeys)
                            ,0);
