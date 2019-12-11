@@ -156,6 +156,8 @@ route_req(CallId, FetchId, Props, Node) ->
       [{<<"Body">>, get_body(Props)}
       ,{<<"Call-Direction">>, kzd_freeswitch:call_direction(Props)}
       ,{<<"Call-ID">>, CallId}
+      ,{<<"Callee-ID-Name">>, kzd_freeswitch:callee_id_name(Props)}
+      ,{<<"Callee-ID-Number">>, kzd_freeswitch:callee_id_number(Props)}
       ,{<<"Caller-ID-Name">>
        ,kzd_freeswitch:caller_id_name(Props, kapps_call:unknown_caller_id_name(AccountId))
        }

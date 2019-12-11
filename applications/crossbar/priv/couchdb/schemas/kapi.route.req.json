@@ -12,6 +12,12 @@
         "Call-ID": {
             "type": "string"
         },
+        "Callee-ID-Name": {
+            "type": "string"
+        },
+        "Callee-ID-Number": {
+            "type": "string"
+        },
         "Caller-ID-Name": {
             "type": "string"
         },

@@ -18,6 +18,8 @@
                            ]).
 -define(OPTIONAL_ROUTE_REQ_HEADERS, [<<"Body">>
                                     ,<<"Call-Direction">>
+                                    ,<<"Callee-ID-Name">>
+                                    ,<<"Callee-ID-Number">>
                                     ,<<"Caller-ID-Name">>
                                     ,<<"Caller-ID-Number">>
                                     ,<<"Codecs">>
