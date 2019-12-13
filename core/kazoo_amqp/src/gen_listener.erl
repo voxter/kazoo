@@ -845,6 +845,8 @@ handle_callback_info(Message
     try Module:handle_info(Message, ModuleState) of
         {'noreply', ModuleState1} ->
             {'noreply', State#state{module_state=ModuleState1}};
+        {'noreply', ModuleState1, 'hibernate'} ->
+            {'noreply', State#state{module_state=ModuleState1}, 'hibernate'};
         {'noreply', ModuleState1, Timeout} ->
             Ref = start_timer(Timeout),
             {'noreply', State#state{module_state=ModuleState1
@@ -1139,6 +1141,11 @@ handle_module_call(Request, From, #state{module=Module
                         ,module_timeout_ref='undefined'
                         }
             };
+        {'reply', Reply, ModuleState1, 'hibernate'} ->
+            {'reply', Reply
+            ,State#state{module_state=ModuleState1}
+            ,'hibernate'
+            };
         {'reply', Reply, ModuleState1, Timeout} ->
             {'reply', Reply
             ,State#state{module_state=ModuleState1
@@ -1147,6 +1154,8 @@ handle_module_call(Request, From, #state{module=Module
             };
         {'noreply', ModuleState1} ->
             {'noreply', State#state{module_state=ModuleState1}};
+        {'noreply', ModuleState1, 'hibernate'} ->
+            {'noreply', State#state{module_state=ModuleState1}, 'hibernate'};
         {'noreply', ModuleState1, Timeout} ->
             {'noreply'
             ,State#state{module_state=ModuleState1
@@ -1174,6 +1183,8 @@ handle_module_cast(Msg, #state{module=Module
     try Module:handle_cast(Msg, ModuleState) of
         {'noreply', ModuleState1} ->
             {'noreply', State#state{module_state=ModuleState1}};
+        {'noreply', ModuleState1, 'hibernate'} ->
+            {'noreply', State#state{module_state=ModuleState1}, 'hibernate'};
         {'noreply', ModuleState1, Timeout} ->
             Ref = start_timer(Timeout),
             {'noreply', State#state{module_state=ModuleState1
