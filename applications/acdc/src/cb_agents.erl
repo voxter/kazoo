@@ -379,11 +379,12 @@ fetch_current_status(Context, AgentId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Limit">>, 1}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kz_amqp_worker:call(Req
-                            ,fun kapi_acdc_stats:publish_agent_cur_status_req/1
-                            ,fun kapi_acdc_stats:agent_cur_status_resp_v/1
+                            ,fun kapi_acdc_stats:publish_status_req/1
+                            ,fun kapi_acdc_stats:status_resp_v/1
                             )
     of
         {'error', E} ->
@@ -395,8 +396,13 @@ fetch_current_status(Context, AgentId) ->
                                   );
         {'ok', Resp} ->
             Agents = kz_json:get_value(<<"Agents">>, Resp, kz_json:new()),
-            crossbar_util:response(Agents, Context)
+            Agents1 = kz_json:map(fun(K, AgentStats) -> {K, remove_timestamps(AgentStats)} end, Agents),
+            crossbar_util:response(Agents1, Context)
     end.
+
+remove_timestamps(AgentStats) ->
+    [Key|_] = kz_json:get_keys(AgentStats),
+    kz_json:get_json_value(Key, AgentStats).
 
 -spec fetch_all_current_statuses(cb_context:context(), kz_term:api_binary(), kz_term:api_binary()) ->
                                         cb_context:context().

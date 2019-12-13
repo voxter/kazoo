@@ -339,7 +339,7 @@ manual_cleanup_statuses(Window) ->
 
     Past = kz_time:current_tstamp() - Window,
 
-    StatusMatch = [{#status_stat{timestamp='$1', _='_'}
+    StatusMatch = [{#status_stat{key=#status_stat_key{timestamp='$1'}, _='_'}
                    ,[{'=<', '$1', Past}]
                    ,['$_']
                    }],
@@ -448,9 +448,6 @@ call_summary_table_opts() ->
                      }
                     ,{{'acdc_agent_stats', 'handle_status_query'}
                      ,[{<<"acdc_stat">>, <<"status_req">>}]
-                     }
-                    ,{{'acdc_agent_stats', 'handle_agent_cur_status_req'}
-                     ,[{<<"acdc_stat">>, <<"agent_cur_status_req">>}]
                      }
                     ]).
 -define(QUEUE_NAME, <<>>).
@@ -611,24 +608,15 @@ handle_cast({'create_call', JObj}, State) ->
                      },
     ets:insert_new(call_table_id(), Stat),
     {'noreply', State};
-handle_cast({'create_status', #status_stat{id=_Id
-                                          ,agent_id=AgentId
-                                          ,status=_Status
-                                          }=Stat}, State) ->
+handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State) ->
     lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
     case ets:insert_new(acdc_agent_stats:status_table_id(), Stat) of
-        'true' -> 'ok';
+        'true' -> {'noreply', State};
         'false' ->
             lager:debug("stat ~s already exists, updating", [_Id]),
-            ets:insert(acdc_agent_stats:status_table_id(), Stat)
-    end,
-    %% Only set the agent's current status if the timestamp of this
-    %% stat is newer than the current one
-    case ets:lookup(acdc_agent_stats:agent_cur_status_table_id(), AgentId) of
-        [] -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
-        [OldStat] -> maybe_insert_agent_cur_status(OldStat, Stat)
-    end,
-    {'noreply', State};
+            ets:insert(acdc_agent_stats:status_table_id(), Stat),
+            {'noreply', State}
+    end;
 handle_cast({'update_call', Id, Updates}, State) ->
     lager:debug("updating call stat ~s: ~p", [Id, Updates]),
     ets:update_element(call_table_id(), Id, Updates),
@@ -1123,7 +1111,7 @@ cleanup_data(Srv) ->
                  }],
     gen_listener:cast(Srv, {'remove_call', CallMatch}),
 
-    StatusMatch = [{#status_stat{timestamp='$1', _='_'}
+    StatusMatch = [{#status_stat{key=#status_stat_key{timestamp='$1'}, _='_'}
                    ,[{'=<', '$1', Past}]
                    ,['$_']
                    }],
@@ -1564,23 +1552,6 @@ maybe_add_summary_stat(#call_stat{status=Status}=Stat)
        orelse Status =:= <<"abandoned">> ->
     ets:insert(call_summary_table_id(), call_stat_to_summary_stat(Stat));
 maybe_add_summary_stat(_) -> 'false'.
-
--spec maybe_insert_agent_cur_status(status_stat(), status_stat()) -> boolean().
-maybe_insert_agent_cur_status(#status_stat{status= <<"logged_out">>, timestamp=Timestamp}
-                             ,#status_stat{status= <<"pending_logged_out">>, timestamp=Timestamp1}=Stat
-                             ) ->
-    %% Note the timestamp must be GREATER if new stat is pending (fix logout bug)
-    case Timestamp1 > Timestamp of
-        'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
-        'false' -> 'false'
-    end;
-maybe_insert_agent_cur_status(#status_stat{timestamp=Timestamp}
-                             ,#status_stat{timestamp=Timestamp1}=Stat
-                             ) ->
-    case Timestamp1 >= Timestamp of
-        'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
-        'false' -> 'false'
-    end.
 
 -spec call_stat_to_summary_stat(call_stat()) -> call_summary_stat().
 call_stat_to_summary_stat(#call_stat{id=Id

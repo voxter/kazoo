@@ -26,8 +26,7 @@
                                          ]).
 -define(CHILDREN, [?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_call', [?ETSMGR_OPTS(acdc_stats:call_table_id(), acdc_stats:call_table_opts())])
                   ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_call_summary', [?ETSMGR_OPTS(acdc_stats:call_summary_table_id(), acdc_stats:call_summary_table_opts())])
-                  ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_agent_status', [?ETSMGR_OPTS(acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts())])
-                  ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_agent_cur_status', [?ETSMGR_OPTS(acdc_agent_stats:agent_cur_status_table_id(), acdc_agent_stats:agent_cur_status_table_opts())])
+                  ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_status', [?ETSMGR_OPTS(acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts())])
                   ,?WORKER('acdc_stats')
                   ]).
 

@@ -42,10 +42,6 @@
         ,status_err/1, status_err_v/1
         ,status_resp/1, status_resp_v/1
 
-        ,agent_cur_status_req/1, agent_cur_status_req_v/1
-        ,agent_cur_status_err/1, agent_cur_status_err_v/1
-        ,agent_cur_status_resp/1, agent_cur_status_resp_v/1
-
         ,status_ready/1, status_ready_v/1
         ,status_logged_in/1, status_logged_in_v/1
         ,status_logged_out/1, status_logged_out_v/1
@@ -95,10 +91,6 @@
         ,publish_status_req/1, publish_status_req/2
         ,publish_status_err/2, publish_status_err/3
         ,publish_status_resp/2, publish_status_resp/3
-
-        ,publish_agent_cur_status_req/1, publish_agent_cur_status_req/2
-        ,publish_agent_cur_status_err/2, publish_agent_cur_status_err/3
-        ,publish_agent_cur_status_resp/2, publish_agent_cur_status_resp/3
 
         ,publish_status_ready/1, publish_status_ready/2
         ,publish_status_logged_in/1, publish_status_logged_in/2
@@ -695,78 +687,6 @@ status_resp_v(Prop) when is_list(Prop) ->
 status_resp_v(JObj) ->
     status_resp_v(kz_json:to_proplist(JObj)).
 
--define(AGENT_CUR_STATUS_REQ_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_AGENT_CUR_STATUS_REQ_HEADERS, [<<"Agent-ID">>]).
--define(AGENT_CUR_STATUS_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
-                                     ,{<<"Event-Name">>, <<"agent_cur_status_req">>}
-                                     ]).
--define(AGENT_CUR_STATUS_REQ_TYPES, []).
-
--spec agent_cur_status_req(kz_term:api_terms()) ->
-                                  {'ok', iolist()} |
-                                  {'error', string()}.
-agent_cur_status_req(Props) when is_list(Props) ->
-    case agent_cur_status_req_v(Props) of
-        'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_REQ_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_REQ_HEADERS);
-        'false' -> {'error', "Proplist failed validation for agent_cur_status_req"}
-    end;
-agent_cur_status_req(JObj) ->
-    agent_cur_status_req(kz_json:to_proplist(JObj)).
-
--spec agent_cur_status_req_v(kz_term:api_terms()) -> boolean().
-agent_cur_status_req_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?AGENT_CUR_STATUS_REQ_HEADERS, ?AGENT_CUR_STATUS_REQ_VALUES, ?AGENT_CUR_STATUS_REQ_TYPES);
-agent_cur_status_req_v(JObj) ->
-    agent_cur_status_req_v(kz_json:to_proplist(JObj)).
-
--define(AGENT_CUR_STATUS_ERR_HEADERS, [<<"Error-Reason">>]).
--define(OPTIONAL_AGENT_CUR_STATUS_ERR_HEADERS, []).
--define(AGENT_CUR_STATUS_ERR_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
-                                     ,{<<"Event-Name">>, <<"agent_cur_status_err">>}
-                                     ]).
--define(AGENT_CUR_STATUS_ERR_TYPES, []).
-
--spec agent_cur_status_err(kz_term:api_terms()) ->
-                                  {'ok', iolist()} |
-                                  {'error', string()}.
-agent_cur_status_err(Props) when is_list(Props) ->
-    case agent_cur_status_err_v(Props) of
-        'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_ERR_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_ERR_HEADERS);
-        'false' -> {'error', "Proplist failed validation for agent_cur_status_err"}
-    end;
-agent_cur_status_err(JObj) ->
-    agent_cur_status_err(kz_json:to_proplist(JObj)).
-
--spec agent_cur_status_err_v(kz_term:api_terms()) -> boolean().
-agent_cur_status_err_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?AGENT_CUR_STATUS_ERR_HEADERS, ?AGENT_CUR_STATUS_ERR_VALUES, ?AGENT_CUR_STATUS_ERR_TYPES);
-agent_cur_status_err_v(JObj) ->
-    agent_cur_status_err_v(kz_json:to_proplist(JObj)).
-
--define(AGENT_CUR_STATUS_RESP_HEADERS, [<<"Agents">>]).
--define(OPTIONAL_AGENT_CUR_STATUS_RESP_HEADERS, []).
--define(AGENT_CUR_STATUS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
-                                      ,{<<"Event-Name">>, <<"agent_cur_status_resp">>}
-                                      ]).
--define(AGENT_CUR_STATUS_RESP_TYPES, []).
-
--spec agent_cur_status_resp(kz_term:api_terms()) ->
-                                   {'ok', iolist()} |
-                                   {'error', string()}.
-agent_cur_status_resp(Props) when is_list(Props) ->
-    case agent_cur_status_resp_v(Props) of
-        'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_RESP_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_RESP_HEADERS);
-        'false' -> {'error', "Proplist failed validation for agent_cur_status_resp"}
-    end;
-agent_cur_status_resp(JObj) ->
-    agent_cur_status_resp(kz_json:to_proplist(JObj)).
-
--spec agent_cur_status_resp_v(kz_term:api_terms()) -> boolean().
-agent_cur_status_resp_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?AGENT_CUR_STATUS_RESP_HEADERS, ?AGENT_CUR_STATUS_RESP_VALUES, ?AGENT_CUR_STATUS_RESP_TYPES);
-agent_cur_status_resp_v(JObj) ->
-    agent_cur_status_resp_v(kz_json:to_proplist(JObj)).
-
 -define(STATUS_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Timestamp">>]).
 -define(STATUS_OPTIONAL_HEADERS, [<<"Wait-Time">>, <<"Pause-Time">>, <<"Pause-Alias">>, <<"Call-ID">>
                                  ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
@@ -1319,33 +1239,6 @@ publish_status_resp(RespQ, JObj) ->
 -spec publish_status_resp(kz_term:ne_binary(), kz_term:api_terms(), binary()) -> 'ok'.
 publish_status_resp(RespQ, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?STATUS_RESP_VALUES, fun status_resp/1),
-    kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
-
--spec publish_agent_cur_status_req(kz_term:api_terms()) -> 'ok'.
-publish_agent_cur_status_req(JObj) ->
-    publish_agent_cur_status_req(JObj, ?DEFAULT_CONTENT_TYPE).
-
--spec publish_agent_cur_status_req(kz_term:api_terms(), binary()) -> 'ok'.
-publish_agent_cur_status_req(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_REQ_VALUES, fun agent_cur_status_req/1),
-    kz_amqp_util:kapps_publish(query_status_stat_routing_key(API), Payload, ContentType).
-
--spec publish_agent_cur_status_err(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
-publish_agent_cur_status_err(RespQ, JObj) ->
-    publish_agent_cur_status_err(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
-
--spec publish_agent_cur_status_err(kz_term:ne_binary(), kz_term:api_terms(), binary()) -> 'ok'.
-publish_agent_cur_status_err(RespQ, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_ERR_VALUES, fun agent_cur_status_err/1),
-    kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
-
--spec publish_agent_cur_status_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
-publish_agent_cur_status_resp(RespQ, JObj) ->
-    publish_agent_cur_status_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
-
--spec publish_agent_cur_status_resp(kz_term:ne_binary(), kz_term:api_terms(), binary()) -> 'ok'.
-publish_agent_cur_status_resp(RespQ, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_RESP_VALUES, fun agent_cur_status_resp/1),
     kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 call_stat_routing_key(Prop) when is_list(Prop) ->
