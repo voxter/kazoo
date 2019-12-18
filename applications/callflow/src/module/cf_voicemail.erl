@@ -2209,7 +2209,7 @@ get_new_attachment_url(AttachmentName, MediaId, #mailbox{owner_id=OwnerId}, Call
     Opts = props:filter_undefined([{'doc_owner', OwnerId}]),
     kz_media_url:store(AccountDb, {<<"media">>, MediaId}, AttachmentName, Opts).
 
--spec maybe_remove_attachments(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+-spec maybe_remove_attachments(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> {'error',_} | {'ok',_}.
 maybe_remove_attachments(AccountDb, MediaId, JObj) ->
     JObj1 = case kz_doc:maybe_remove_attachments(JObj) of
                 {'false', _} -> JObj;
