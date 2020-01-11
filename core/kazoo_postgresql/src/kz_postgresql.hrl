@@ -41,6 +41,7 @@
 -type order_by() :: {column_name(), sort_operator()}.                                       %% {Column Name, sort_operator()}
 -type inner_join() :: {table_name(), nonempty_list(kz_term:ne_binary())}.                   %% {Table Name, JoinString(s)}
 -type insert_into() :: {table_name(), column_names()}.                                      %% {Table Name, List of Columns}
+-type query_operator() :: kz_term:ne_binary().                                              %% <<"INSERT">> | <<"UPDATE">> | <<"DELETE">>
 
 -record(kz_postgresql_connection, {id = kz_time:current_tstamp() :: kz_time:gregorian_seconds()
                                   ,host = ?DEFAULT_HOST :: string()

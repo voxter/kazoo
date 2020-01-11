@@ -32,7 +32,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_results(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binary(), kz_data:options()) ->
-                         {'ok', kz_json:objects()} | kz_data:data_error().
+          {'ok', kz_json:objects()} | kz_data:data_error().
 get_results(ConnPool, KazooDBName, DesignDoc, ViewOptions) ->
     lager:debug("get_results called with args, KazooDBName: ~p, DesignDoc: ~p, ViewOptions: ~p", [KazooDBName, DesignDoc, ViewOptions]),
     do_view_query(ConnPool, KazooDBName, DesignDoc, ViewOptions).
@@ -47,7 +47,7 @@ get_results(ConnPool, KazooDBName, DesignDoc, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec do_view_query(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:doc(), kz_data:options()) ->
-                           {'ok', kz_json:objects()} | kz_data:data_error().
+          {'ok', kz_json:objects()} | kz_data:data_error().
 do_view_query(ConnPool, KazooDBName, DesignDoc, ViewOptions) when is_binary(DesignDoc) ->
     [DesignName, ViewName|_] = binary:split(DesignDoc, <<"/">>, ['global']),
     do_view_query(ConnPool, KazooDBName, {DesignName, ViewName}, ViewOptions);
@@ -62,7 +62,7 @@ do_view_query(ConnPool, KazooDBName,{DesignName, ViewName}, ViewOptions) ->
                                 ,'parameters' = [KazooDBName]
                                 },
     PGResp = kz_postgresql_query:execute_query(ConnPool, Query, ViewOptions),
-    kz_postgresql_response:parse_response_to_view_doc(PGResp).
+    kz_postgresql_response:parse_response_to_view_doc(View, PGResp).
 
 %%------------------------------------------------------------------------------
 %% @doc Load all docs for a given couch db from the PG DB and return a couch view like response
@@ -80,7 +80,7 @@ do_view_query(ConnPool, KazooDBName,{DesignName, ViewName}, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec all_docs(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_data:options()) ->
-                      {'ok', kz_json:objects()} | kz_data:data_error().
+          {'ok', kz_json:objects()} | kz_data:data_error().
 all_docs(ConnPool, KazooDBName, ViewOptions) ->
     lager:debug("loading all_docs view for KazooDBName: ~p with ViewOptions: ~p (ConnPool: ~p)", [KazooDBName, ViewOptions, ConnPool]),
     %% Extract keys from the options if defined so we can work out what PG tables to query
@@ -106,7 +106,7 @@ all_docs(ConnPool, KazooDBName, ViewOptions) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_postgresql_table_names(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name(), kz_term:ne_binaries(), kz_data:options()) ->
-                                        {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
+          {'ok', list({kz_postgresql:table_name(), kz_term:ne_binaries()})} | kz_data:data_error().
 get_postgresql_table_names(ConnPool, KazooDBName, DocIds, ViewOptions) ->
     lager:debug("calculating tables that contain rows for KazooDBName ~p", [KazooDBName]),
     case kz_postgresql_options:get_doc_type(ViewOptions) of
@@ -130,13 +130,13 @@ get_postgresql_table_names(ConnPool, KazooDBName, DocIds, ViewOptions) ->
 %%------------------------------------------------------------------------------
 -spec do_all_doc_query(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), kz_data:options()) ->
-                              {'ok', kz_json:objects()} |  kz_data:data_error().
+          {'ok', kz_json:objects()} |  kz_data:data_error().
 do_all_doc_query(ConnPool, KazooDBName, PgTablesAndDocIds, ViewOptions) ->
     do_all_doc_query(ConnPool, KazooDBName, PgTablesAndDocIds, ViewOptions, []).
 
 -spec do_all_doc_query(kz_postgresql:connection_pool(), kz_postgresql:kazoo_db_name()
                       ,list({kz_postgresql:table_name(), kz_term:ne_binaries()}), boolean(), kz_data:options()) ->
-                              {'ok', kz_json:objects()} | kz_data:data_error().
+          {'ok', kz_json:objects()} | kz_data:data_error().
 do_all_doc_query(_ConnPool, _KazooDBName, [], ViewOptions, JObjs) ->
     case kz_postgresql_options:get_order(ViewOptions, 'undefined') of
         'ascending' ->
@@ -164,7 +164,7 @@ do_all_doc_query(ConnPool, KazooDBName, [{TableName, DocIds} | OtherTables], Vie
                          'false' -> []
                      end,
     PGResp = kz_postgresql_query:execute_query(ConnPool, Query, ReducedOptions),
-    case kz_postgresql_response:parse_response_to_view_doc(PGResp) of
+    case kz_postgresql_response:parse_response_to_view_doc(TableName, PGResp) of
         {'ok', NewJObjs} when is_list(NewJObjs) ->
             do_all_doc_query(ConnPool, KazooDBName, OtherTables, ViewOptions, JObjs ++ NewJObjs);
         {'ok', NewJObj} ->
@@ -177,7 +177,7 @@ do_all_doc_query(ConnPool, KazooDBName, [{TableName, DocIds} | OtherTables], Vie
 %% @end
 %%------------------------------------------------------------------------------
 -spec generate_all_docs_table_query(kz_postgresql:kazoo_db_name(), kz_postgresql:table_name(), kz_term:ne_binaries()) ->
-                                           kz_postgresql:query_record().
+          kz_postgresql:query_record().
 generate_all_docs_table_query(KazooDBName, TableName, []) ->
     #kz_postgresql_query{'select' = [<<"\"",TableName/binary,"\"._id AS _view_id">>
                                     ,<<"\"",TableName/binary,"\"._id  AS _view_key_0">>

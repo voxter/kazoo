@@ -6,10 +6,21 @@
 %%%-----------------------------------------------------------------------------
 -module(kz_postgresql_schema).
 -include("kz_postgresql.hrl").
--export([db_and_pvt_type_to_pg_table_name/2
+-export([pg_table_and_column_to_doc_key_path/2
+        ,db_and_pvt_type_to_pg_table_name/2
         ,pg_view_name_to_pg_table_name/1
         ,get_schema/2
         ]).
+
+%%------------------------------------------------------------------------------
+%% @doc Map PostgreSQL Table names and Columns to kz_doc key path
+%% (POSTGRESQL_TABLE, POSTGRESQL_COLUMN) -> [JSON_KEY_LIST]
+%% EG. pg_table_and_column_to_doc_key_path(cdr, owner_id) -> [custom_channel_vars, owner_id];
+%% Default assumes column name == json key value
+%% @end
+%%------------------------------------------------------------------------------
+-spec pg_table_and_column_to_doc_key_path(kz_postgresql:table_name(), kz_postgresql:column_name()) -> list(kz_term:ne_binary()).
+pg_table_and_column_to_doc_key_path(_AnyTable, Column) -> [Column].
 
 %%------------------------------------------------------------------------------
 %% @doc Define the postgreSQL table to use for an couch like KazooDBName and Doc Type
@@ -45,7 +56,7 @@ pg_view_name_to_pg_table_name(ViewName) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_schema(kz_postgresql:connection_pool(), kz_postgresql:table_name() | kz_postgresql:view_name()) ->
-                        kz_postgresql:table_schema().
+          kz_postgresql:table_schema().
 get_schema(ConnPool, TableOrViewName) ->
     case fetch_cache_table_schema(TableOrViewName) of
         {'error', 'not_found'} ->
@@ -83,6 +94,6 @@ cache_table_schema(TableName, Schema) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec fetch_cache_table_schema(kz_postgresql:table_name())-> {'ok', list(tuple())} |
-                                                             {'error', 'not_found'}.
+          {'error', 'not_found'}.
 fetch_cache_table_schema(TableName) ->
     kz_cache:fetch_local(?KAZOO_POSTGRESQL_SCHEMA_CACHE, TableName).
