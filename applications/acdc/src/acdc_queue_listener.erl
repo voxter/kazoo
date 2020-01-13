@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc The queue process manages two queues
 %%%   1. a private one that Agents will send member_connect_* messages
 %%%      and such
@@ -182,7 +182,7 @@ send_sync_req(Srv, Type) ->
     gen_listener:cast(Srv, {'send_sync_req', Type}).
 
 -spec config(pid()) ->
-                    {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 config(Srv) ->
     gen_listener:call(Srv, 'config').
 
@@ -594,7 +594,7 @@ publish_sync_resp(Strategy, StrategyState, ReqJObj, Id) ->
     publish(kz_json:get_value(<<"Server-ID">>, ReqJObj), Resp, fun kapi_acdc_queue:publish_sync_resp/2).
 
 -spec apply_callback_details(kapps_call:call(), kz_term:proplist()) ->
-                                    kapps_call:call().
+          kapps_call:call().
 apply_callback_details(Call, Props) ->
     case props:get_value(<<"Callback-Details">>, Props) of
         'undefined' -> Call;

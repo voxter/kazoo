@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -14,9 +14,9 @@
 
 %% Handle a payload sent as an AMI command
 -spec handle(binary(), kz_term:ne_binary(), pos_integer(), kz_term:api_ne_binary()) ->
-                    {'ok', {kz_term:proplist(), 'n'}}
-                        | {'logoff', 'ok'} | kz_term:proplist()
-                        | {'error', 'no_action'}.
+          {'ok', {kz_term:proplist(), 'n'}}
+              | {'logoff', 'ok'} | kz_term:proplist()
+              | {'error', 'no_action'}.
 handle(Payload, AccountId, 'undefined', ServerId) ->
     Props = amimulator_util:parse_payload(Payload),
     handle_event(update_props(Props, AccountId, ServerId));
@@ -45,9 +45,9 @@ handle_event(Props) ->
 
                                                 % TODO: add AMI username lookup db initialization
 -spec handle_event(string(), kz_term:proplist()) ->
-                          {'ok', {kz_term:proplist(), 'n'}}
-                              | {'logoff', 'ok'} | kz_term:proplist()
-                              | {'error', 'no_action'}.
+          {'ok', {kz_term:proplist(), 'n'}}
+              | {'logoff', 'ok'} | kz_term:proplist()
+              | {'error', 'no_action'}.
 handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
     Secret = proplists:get_value(<<"Secret">>, Props),
@@ -323,7 +323,7 @@ login_md5(Username, Md5, Challenge, ActionId) ->
     end.
 
 -spec check_login(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                         {'ok', {kz_term:proplist(), 'broken' | 'n'}}.
+          {'ok', {kz_term:proplist(), 'broken' | 'n'}}.
 check_login(SuccessCredentials, SuccessCredentials, AccountId, ActionId) ->
     login_success(AccountId, ActionId);
 check_login(_, _, _, ActionId) ->

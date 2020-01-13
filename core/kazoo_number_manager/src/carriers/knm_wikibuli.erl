@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2020, 2600Hz
 %%% @doc Handle client requests for phone_number documents
 %%%
 %%%
@@ -32,7 +32,7 @@ is_local() -> 'true'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_numbers(kz_term:ne_binary(), pos_integer(), knm_carriers:options()) ->
-                          {'error', 'not_available'}.
+          {'error', 'not_available'}.
 find_numbers(Number, Quanity, Opts) when size(Number) < 5 ->
     find_numbers(<<"+1", Number/binary>>, Quanity, Opts);
 find_numbers(_Number, _Quanity, _Opts) ->

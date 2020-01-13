@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc Used to send push notification requests from other apps to navi.
 %%%
 %%% @author Ben Partridge
@@ -50,8 +50,8 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec push_device(kz_term:api_terms()) ->
-                         {'ok', iolist()} |
-                         {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 push_device(Prop) when is_list(Prop) ->
     case push_v_device(Prop) of
         'true' -> kz_api:build_message(Prop, ?NAVI_PUSH_DEVICE_HEADERS, ?OPTIONAL_NAVI_PUSH_DEVICE_HEADERS);

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @author Sponsored by GTNetwork LLC, Implemented by SIPLABS LLC
@@ -84,8 +84,8 @@
                            ]).
 
 -spec member_call(kz_term:api_terms()) ->
-                         {'ok', iolist()} |
-                         {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_call(Props) when is_list(Props) ->
     case member_call_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALL_HEADERS, ?OPTIONAL_MEMBER_CALL_HEADERS);
@@ -126,8 +126,8 @@ member_call_routing_key(AcctId, QueueId) ->
 -define(MEMBER_CALL_FAIL_TYPES, []).
 
 -spec member_call_failure(kz_term:api_terms()) ->
-                                 {'ok', iolist()} |
-                                 {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_call_failure(Props) when is_list(Props) ->
     case member_call_failure_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALL_FAIL_HEADERS, ?OPTIONAL_MEMBER_CALL_FAIL_HEADERS);
@@ -153,8 +153,8 @@ member_call_failure_v(JObj) ->
 -define(MEMBER_CALL_SUCCESS_TYPES, []).
 
 -spec member_call_success(kz_term:api_terms()) ->
-                                 {'ok', iolist()} |
-                                 {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_call_success(Props) when is_list(Props) ->
     case member_call_success_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALL_SUCCESS_HEADERS, ?OPTIONAL_MEMBER_CALL_SUCCESS_HEADERS);
@@ -181,8 +181,8 @@ member_call_success_v(JObj) ->
 -define(MEMBER_CALL_CANCEL_TYPES, []).
 
 -spec member_call_cancel(kz_term:api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_call_cancel(Props) when is_list(Props) ->
     case member_call_cancel_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALL_CANCEL_HEADERS, ?OPTIONAL_MEMBER_CALL_CANCEL_HEADERS);
@@ -224,8 +224,8 @@ member_call_result_routing_key(AcctId, QueueId, CallId) ->
 -define(MEMBER_CONNECT_REQ_TYPES, []).
 
 -spec member_connect_req(kz_term:api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_connect_req(Props) when is_list(Props) ->
     case member_connect_req_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CONNECT_REQ_HEADERS, ?OPTIONAL_MEMBER_CONNECT_REQ_HEADERS);
@@ -265,8 +265,8 @@ member_connect_req_routing_key(AcctId, QID) ->
 -define(MEMBER_CONNECT_RESP_TYPES, []).
 
 -spec member_connect_resp(kz_term:api_terms()) ->
-                                 {'ok', iolist()} |
-                                 {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_connect_resp(Props) when is_list(Props) ->
     case member_connect_resp_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CONNECT_RESP_HEADERS, ?OPTIONAL_MEMBER_CONNECT_RESP_HEADERS);
@@ -297,8 +297,8 @@ member_connect_resp_v(JObj) ->
 -define(MEMBER_CONNECT_WIN_TYPES, [{<<"Record-Caller">>, fun kz_term:is_boolean/1}]).
 
 -spec member_connect_win(kz_term:api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_connect_win(Props) when is_list(Props) ->
     case member_connect_win_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CONNECT_WIN_HEADERS, ?OPTIONAL_MEMBER_CONNECT_WIN_HEADERS);
@@ -334,8 +334,8 @@ member_connect_win_routing_key(JObj) ->
 -define(AGENT_TIMEOUT_TYPES, []).
 
 -spec agent_timeout(kz_term:api_terms()) ->
-                           {'ok', iolist()} |
-                           {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 agent_timeout(Props) when is_list(Props) ->
     case agent_timeout_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_TIMEOUT_HEADERS, ?OPTIONAL_AGENT_TIMEOUT_HEADERS);
@@ -360,8 +360,8 @@ agent_timeout_v(JObj) ->
 -define(MEMBER_CONNECT_ACCEPTED_TYPES, []).
 
 -spec member_connect_accepted(kz_term:api_terms()) ->
-                                     {'ok', iolist()} |
-                                     {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_connect_accepted(Props) when is_list(Props) ->
     case member_connect_accepted_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CONNECT_ACCEPTED_HEADERS, ?OPTIONAL_MEMBER_CONNECT_ACCEPTED_HEADERS);
@@ -387,8 +387,8 @@ member_connect_accepted_v(JObj) ->
 -define(MEMBER_CALLBACK_ACCEPTED_TYPES, []).
 
 -spec member_callback_accepted(kz_term:api_terms()) ->
-                                      {'ok', iolist()} |
-                                      {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_callback_accepted(Props) when is_list(Props) ->
     case member_callback_accepted_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALLBACK_ACCEPTED_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_ACCEPTED_HEADERS);
@@ -416,8 +416,8 @@ member_callback_accepted_v(JObj) ->
 -define(MEMBER_CONNECT_RETRY_TYPES, []).
 
 -spec member_connect_retry(kz_term:api_terms()) ->
-                                  {'ok', iolist()} |
-                                  {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_connect_retry(Props) when is_list(Props) ->
     case member_connect_retry_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CONNECT_RETRY_HEADERS, ?OPTIONAL_MEMBER_CONNECT_RETRY_HEADERS);
@@ -446,8 +446,8 @@ member_connect_retry_v(JObj) ->
 -define(MEMBER_HUNGUP_TYPES, []).
 
 -spec member_hungup(kz_term:api_terms()) ->
-                           {'ok', iolist()} |
-                           {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_hungup(Props) when is_list(Props) ->
     case member_hungup_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_HUNGUP_HEADERS, ?OPTIONAL_MEMBER_HUNGUP_HEADERS);
@@ -489,8 +489,8 @@ sync_req_routing_key(AcctId, QID) ->
 -define(SYNC_REQ_TYPES, []).
 
 -spec sync_req(kz_term:api_terms()) ->
-                      {'ok', iolist()} |
-                      {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 sync_req(Props) when is_list(Props) ->
     case sync_req_v(Props) of
         'true' -> kz_api:build_message(Props, ?SYNC_REQ_HEADERS, ?OPTIONAL_SYNC_REQ_HEADERS);
@@ -515,8 +515,8 @@ sync_req_v(JObj) ->
 -define(SYNC_RESP_TYPES, []).
 
 -spec sync_resp(kz_term:api_terms()) ->
-                       {'ok', iolist()} |
-                       {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 sync_resp(Props) when is_list(Props) ->
     case sync_resp_v(Props) of
         'true' -> kz_api:build_message(Props, ?SYNC_RESP_HEADERS, ?OPTIONAL_SYNC_RESP_HEADERS);
@@ -581,8 +581,8 @@ agent_change_unavailable() -> ?AGENT_CHANGE_UNAVAILABLE.
 -define(AGENT_CHANGE_TYPES, []).
 
 -spec agent_change(kz_term:api_terms()) ->
-                          {'ok', iolist()} |
-                          {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 agent_change(Prop) when is_list(Prop) ->
     case agent_change_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?AGENT_CHANGE_HEADERS, ?OPTIONAL_AGENT_CHANGE_HEADERS);
@@ -620,8 +620,8 @@ agents_availability_routing_key(AccountId, QueueId) ->
 -define(AGENTS_AVAILABLE_REQ_TYPES, [{<<"Skills">>, fun kz_term:is_ne_binaries/1}]).
 
 -spec agents_available_req(kz_term:api_terms()) ->
-                                  {'ok', iolist()} |
-                                  {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 agents_available_req(Prop) when is_list(Prop) ->
     case agents_available_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?AGENTS_AVAILABLE_REQ_HEADERS, ?OPTIONAL_AGENTS_AVAILABLE_REQ_HEADERS);
@@ -642,8 +642,8 @@ agents_available_req_v(JObj) -> agents_available_req_v(kz_json:to_proplist(JObj)
 -define(AGENTS_AVAILABLE_RESP_TYPES, []).
 
 -spec agents_available_resp(kz_term:api_terms()) ->
-                                   {'ok', iolist()} |
-                                   {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 agents_available_resp(Prop) when is_list(Prop) ->
     case agents_available_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?AGENTS_AVAILABLE_RESP_HEADERS, ?OPTIONAL_AGENTS_AVAILABLE_RESP_HEADERS);
@@ -685,8 +685,8 @@ queue_member_routing_key(AcctId, QID) ->
                                 ]).
 
 -spec queue_member_add(kz_term:api_terms()) ->
-                              {'ok', iolist()} |
-                              {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 queue_member_add(Prop) when is_list(Prop) ->
     case queue_member_add_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUEUE_MEMBER_ADD_HEADERS, ?OPTIONAL_QUEUE_MEMBER_ADD_HEADERS);
@@ -707,8 +707,8 @@ queue_member_add_v(JObj) -> queue_member_add_v(kz_json:to_proplist(JObj)).
 -define(QUEUE_MEMBER_REMOVE_TYPES, []).
 
 -spec queue_member_remove(kz_term:api_terms()) ->
-                                 {'ok', iolist()} |
-                                 {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 queue_member_remove(Prop) when is_list(Prop) ->
     case queue_member_remove_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUEUE_MEMBER_REMOVE_HEADERS, ?OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS);
@@ -749,8 +749,8 @@ member_callback_reg_routing_key(AcctId, QueueId, CallId) ->
 -define(MEMBER_CALLBACK_TYPES, []).
 
 -spec member_callback_reg(kz_term:api_terms()) ->
-                                 {'ok', iolist()} |
-                                 {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 member_callback_reg(Props) when is_list(Props) ->
     case member_callback_reg_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALLBACK_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_HEADERS);

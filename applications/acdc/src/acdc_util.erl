@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @end
@@ -106,7 +106,7 @@ agent_devices(AcctDb, AgentId) ->
     end.
 
 -spec get_endpoints(kapps_call:call(), kz_term:ne_binary() | kazoo_data:get_results_return()) ->
-                           kz_json:objects().
+          kz_json:objects().
 get_endpoints(Call, ?NE_BINARY = AgentId) ->
     Params = kz_json:from_list([{<<"source">>, kz_term:to_binary(?MODULE)}
                                ,{<<"can_call_self">>, 'true'}

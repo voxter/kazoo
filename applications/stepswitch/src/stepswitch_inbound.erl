@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2020, 2600Hz
 %%% @doc Handle route requests from carrier resources
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ maybe_relay_request(JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_id(knm_number_options:extra_options(), kz_json:object()) ->
-                            kz_json:object().
+          kz_json:object().
 set_account_id(NumberProps, JObj) ->
     AccountId = knm_number_options:account_id(NumberProps),
     kz_json:set_value(?CCV(<<"Account-ID">>), AccountId, JObj).
@@ -77,7 +77,7 @@ set_account_id(NumberProps, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_ignore_display_updates(knm_number_options:extra_options(), kz_json:object()) ->
-                                        kz_json:object().
+          kz_json:object().
 set_ignore_display_updates(_, JObj) ->
     kz_json:set_value(?CCV(<<"Ignore-Display-Updates">>), <<"true">>, JObj).
 
@@ -86,7 +86,7 @@ set_ignore_display_updates(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_inception(knm_number_options:extra_options(), kz_json:object()) ->
-                           kz_json:object().
+          kz_json:object().
 set_inception(_, JObj) ->
     Request = kz_json:get_value(<<"Request">>, JObj),
     kz_json:set_value(?CCV(<<"Inception">>), Request, JObj).
@@ -96,7 +96,7 @@ set_inception(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_e164_destination(knm_number_options:extra_options(), kz_json:object()) ->
-                                  kz_json:object().
+          kz_json:object().
 set_e164_destination(_, JObj) ->
     Number = stepswitch_util:get_inbound_destination(JObj),
     kz_json:set_value(?CCV(<<"E164-Destination">>), Number, JObj).
@@ -106,7 +106,7 @@ set_e164_destination(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_e164_origination(knm_number_options:extra_options(), kz_json:object()) ->
-                                  kz_json:object().
+          kz_json:object().
 set_e164_origination(_, JObj) ->
     Number = stepswitch_util:get_inbound_origination(JObj),
     kz_json:set_value(?CCV(<<"E164-Origination">>), Number, JObj).
@@ -116,7 +116,7 @@ set_e164_origination(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_did_classifier(knm_number_options:extra_options(), kz_json:object()) ->
-                                kz_json:object().
+          kz_json:object().
 set_did_classifier(_, JObj) ->
     Number = stepswitch_util:get_inbound_destination(JObj),
     kz_json:set_value(?CCV(<<"DID-Classifier">>), knm_converters:classify(Number), JObj).
@@ -126,7 +126,7 @@ set_did_classifier(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_resource_type(knm_number_options:extra_options(), kz_json:object()) ->
-                               kz_json:object().
+          kz_json:object().
 set_resource_type(_, JObj) ->
     kz_json:set_value(?CCV(<<"Resource-Type">>), <<"offnet-origination">>, JObj).
 
@@ -135,7 +135,7 @@ set_resource_type(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_find_resource(knm_number_options:extra_options(), kz_json:object()) ->
-                                 kz_json:object().
+          kz_json:object().
 maybe_find_resource(_, JObj) ->
     case stepswitch_resources:reverse_lookup(JObj) of
         {'error', 'not_found'} -> JObj;
@@ -181,7 +181,7 @@ maybe_add_t38_settings(JObj, ResourceProps) ->
     end.
 
 -spec maybe_format_destination(knm_number_options:extra_options(), kz_json:object()) ->
-                                      kz_json:object().
+          kz_json:object().
 maybe_format_destination(_, JObj) ->
     case kz_json:get_value(?CCV(<<"Resource-ID">>), JObj) of
         'undefined' -> JObj;
@@ -199,7 +199,7 @@ maybe_format_destination(_, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_set_ringback(knm_number_options:extra_options(), kz_json:object()) ->
-                                kz_json:object().
+          kz_json:object().
 maybe_set_ringback(NumberProps, JObj) ->
     case knm_number_options:ringback_media_id(NumberProps) of
         'undefined' -> JObj;
@@ -212,7 +212,7 @@ maybe_set_ringback(NumberProps, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_set_transfer_media(knm_number_options:extra_options(), kz_json:object()) ->
-                                      kz_json:object().
+          kz_json:object().
 maybe_set_transfer_media(NumberProps, JObj) ->
     case knm_number_options:transfer_media_id(NumberProps) of
         'undefined' -> JObj;
@@ -226,7 +226,7 @@ maybe_set_transfer_media(NumberProps, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_lookup_cnam(knm_number_options:extra_options(), kz_json:object()) ->
-                               kz_json:object().
+          kz_json:object().
 maybe_lookup_cnam(NumberProps, JObj) ->
     case knm_number_options:inbound_cnam_enabled(NumberProps) of
         'false' -> JObj;
@@ -238,7 +238,7 @@ maybe_lookup_cnam(NumberProps, JObj) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_add_prepend(knm_number_options:extra_options(), kz_json:object()) ->
-                               kz_json:object().
+          kz_json:object().
 maybe_add_prepend(NumberProps, JObj) ->
     case knm_number_options:prepend(NumberProps) of
         'undefined' -> JObj;
@@ -334,8 +334,8 @@ is_number_blacklisted(Blacklist, JObj) ->
     end.
 
 -spec get_blacklists(kz_term:ne_binary()) ->
-                            {'ok', kz_term:ne_binaries()} |
-                            {'error', any()}.
+          {'ok', kz_term:ne_binaries()} |
+          {'error', any()}.
 get_blacklists(AccountId) ->
     case kzd_accounts:fetch(AccountId) of
         {'error', _R}=E ->

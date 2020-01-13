@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc Helpers for manipulating the `#cb_context{}' record.
 %%% @author James Aimonetti
 %%% @end
@@ -30,6 +30,7 @@
 
          %% Getters / Setters
         ,setters/2
+        ,validators/2
         ,new/0
 
         ,account_id/1, set_account_id/2
@@ -456,11 +457,28 @@ setters(#cb_context{}=Context, [_|_]=Setters) ->
     lists:foldl(fun setters_fold/2, Context, Setters).
 
 -spec setters_fold(setter_kv(), context() | kz_json:object()) ->
-                          context() | kz_json:object().
+          context() | kz_json:object().
 setters_fold({F, V}, C) -> F(C, V);
 setters_fold({F, K, V}, C) -> F(C, K, V);
 setters_fold(F, C) when is_function(F, 1) -> F(C).
 
+%%------------------------------------------------------------------------------
+%% @doc Loop over a list of functions and values to validate `cb_context()'.
+%% @end
+%%------------------------------------------------------------------------------
+-spec validators(context(), setters()) -> context().
+validators(#cb_context{}=Context, []) -> Context;
+validators(#cb_context{}=Context, [_|_]=Setters) ->
+    validators_fold(Context, Setters).
+
+-spec validators_fold(context(), setters()) -> context().
+validators_fold(Context, []) -> Context;
+validators_fold(Context, [Setter | Setters]) ->
+    NewContext = setters_fold(Setter, Context),
+    case resp_status(NewContext) of
+        'success' -> validators_fold(NewContext, Setters);
+        'error' -> NewContext
+    end.
 
 -spec set_account_id(context(), kz_term:ne_binary()) -> context().
 set_account_id(#cb_context{}=Context, AcctId) ->
@@ -701,14 +719,14 @@ update_doc(#cb_context{doc=Doc}=Context, Updater) ->
 %% % Helpers
 
 -spec add_content_types_provided(context(), crossbar_content_handler() | crossbar_content_handlers()) ->
-                                        context().
+          context().
 add_content_types_provided(#cb_context{content_types_provided=CTPs}=Context, [_|_]=NewCTPs) ->
     Context#cb_context{content_types_provided = NewCTPs ++ CTPs};
 add_content_types_provided(#cb_context{}=Context, {_, _}=NewCTP) ->
     add_content_types_provided(Context,[NewCTP]).
 
 -spec add_content_types_accepted(context(), crossbar_content_handler() | crossbar_content_handlers()) ->
-                                        context().
+          context().
 add_content_types_accepted(#cb_context{content_types_accepted=CTAs}=Context, [_|_]=NewCTAs) ->
     Context#cb_context{content_types_accepted = NewCTAs ++ CTAs};
 add_content_types_accepted(#cb_context{}=Context, {_, _}=NewCTA) ->
@@ -785,7 +803,7 @@ import_errors(#cb_context{}=Context) ->
     end.
 
 -spec response(context()) -> {'ok', kz_json:object()} |
-                             {'error', {pos_integer(), kz_term:ne_binary(), kz_json:object()}}.
+          {'error', {pos_integer(), kz_term:ne_binary(), kz_json:object()}}.
 response(#cb_context{resp_status='success'
                     ,resp_data=JObj
                     }) ->
@@ -817,23 +835,23 @@ response(#cb_context{resp_error_code=Code
 %% @end
 %%------------------------------------------------------------------------------
 -spec validate_request_data(kz_term:ne_binary() | kz_term:api_object(), context()) ->
-                                   context().
+          context().
 validate_request_data(SchemaId, Context) ->
     validate_request_data(SchemaId, Context, 'undefined').
 
 -spec validate_request_data(kz_term:ne_binary() | kz_term:api_object(), context(), after_fun()) ->
-                                   context().
+          context().
 validate_request_data(SchemaId, Context, OnSuccess) ->
     validate_request_data(SchemaId, Context, OnSuccess, 'undefined').
 
 -spec validate_request_data(kz_term:ne_binary() | kz_term:api_object(), context(), after_fun(), after_fun()) ->
-                                   context().
+          context().
 validate_request_data(SchemaId, Context, OnSuccess, OnFailure) ->
     SchemaRequired = fetch(Context, 'ensure_valid_schema', ?SHOULD_ENSURE_SCHEMA_IS_VALID),
     validate_request_data(SchemaId, Context, OnSuccess, OnFailure, SchemaRequired).
 
 -spec validate_request_data(kz_term:ne_binary() | kz_term:api_object(), context(), after_fun(), after_fun(), boolean()) ->
-                                   context().
+          context().
 validate_request_data('undefined', Context, OnSuccess, _OnFailure, 'false') ->
     lager:error("schema id or schema JSON not defined, continuing anyway"),
     validate_passed(Context, OnSuccess);
@@ -1055,7 +1073,7 @@ build_system_error(Code, Error, JObj, Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_validation_error(kz_json:get_key(), kz_term:ne_binary(), kz_term:ne_binary() | kz_json:object(), context()) ->
-                                  context().
+          context().
 add_validation_error(<<_/binary>> = Property, Code, Message, Context) ->
     add_validation_error([Property], Code, Message, Context);
 add_validation_error(Property, Code, <<_/binary>> = Message, Context) ->
@@ -1102,7 +1120,7 @@ maybe_fix_js_type({'data_invalid', SchemaJObj, 'wrong_type', Value, Key}, JObj) 
 maybe_fix_js_type(_, JObj) -> JObj.
 
 -spec maybe_fix_js_integer(kz_json:path(), kz_json:json_term(), kz_json:object()) ->
-                                  kz_json:object().
+          kz_json:object().
 maybe_fix_js_integer(Key, Value, JObj) ->
     try kz_term:to_integer(Value) of
         V -> kz_json:set_value(maybe_fix_index(Key), V, JObj)
@@ -1113,7 +1131,7 @@ maybe_fix_js_integer(Key, Value, JObj) ->
     end.
 
 -spec maybe_fix_js_boolean(kz_json:path(), kz_json:json_term(), kz_json:object()) ->
-                                  kz_json:object().
+          kz_json:object().
 maybe_fix_js_boolean(Key, Value, JObj) ->
     try kz_term:to_boolean(Value) of
         V -> kz_json:set_value(maybe_fix_index(Key), V, JObj)

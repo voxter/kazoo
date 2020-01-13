@@ -80,6 +80,7 @@
 -define(FEATURE_PREPEND, <<"prepend">>).
 -define(FEATURE_RENAME_CARRIER, <<"carrier_name">>).
 -define(FEATURE_RINGBACK, <<"ringback">>).
+-define(FEATURE_IM, <<"im">>).
 
 -define(PROVIDER_RENAME_CARRIER, <<"knm_rename_carrier">>).
 -define(PROVIDER_FORCE_OUTBOUND, <<"knm_", (?FEATURE_FORCE_OUTBOUND)/binary>>).
@@ -99,6 +100,7 @@
                                   ,?FEATURE_CNAM_OUTBOUND
                                   ,?FEATURE_E911
                                   ,?FEATURE_PORT
+                                  ,?FEATURE_IM
                                   ]).
 
 -define(ADMIN_ONLY_FEATURES, [?FEATURE_RENAME_CARRIER
@@ -116,6 +118,7 @@
                             ,?FEATURE_PREPEND
                             ,?FEATURE_RENAME_CARRIER
                             ,?FEATURE_RINGBACK
+                            ,?FEATURE_IM
                             ]).
 
 -define(CNAM_DISPLAY_NAME, <<"display_name">>).
@@ -138,6 +141,8 @@
 
 -define(FAILOVER_E164, <<"e164">>).
 -define(FAILOVER_SIP, <<"sip">>).
+
+-define(FEATURE_ENABLED, <<"enabled">>).
 
 -define(KNM_NUMBER_MANAGER_HRL, 'true').
 -endif.

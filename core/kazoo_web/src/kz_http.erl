@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2020, 2600Hz
 %%% @doc Kazoo HTTP client
 %%% @author Hesaam Farhang
 %%% @end
@@ -30,7 +30,7 @@
                   'trace'.
 
 -type field() :: string().
--type value() :: string().
+-type value() :: string() | integer().
 -type header() :: {field(), value()}.
 -type headers() :: [header()].
 

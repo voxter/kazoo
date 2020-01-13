@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -246,7 +246,7 @@ load_bindings(Props, [Mod|Mods], {Bindings, Responders}=Acc) ->
     end.
 
 -spec maybe_start_prune_timer(non_neg_integer(), kz_term:ne_binary()) ->
-                                     timer:tref() | 'undefined'.
+          timer:tref() | 'undefined'.
 maybe_start_prune_timer(0, AccountId) ->
     case timer:apply_after(?PRUNE_TIMEOUT, 'amimulator_sup', 'stop_event_listener', [AccountId, 'pruned']) of
         {'ok', PruneRef} ->

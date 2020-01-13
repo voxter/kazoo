@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
+%%% @copyright (C) 2010-2020, 2600Hz
 %%% @doc Helpers for bridging in FreeSWITCH
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -14,7 +14,7 @@
 -include("ecallmgr.hrl").
 
 -spec attended(atom(), kz_term:ne_binary(), kz_json:object()) ->
-                      {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), atom(), kz_term:proplist()}.
+          {kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist(), atom(), kz_term:proplist()}.
 attended(Node, UUID, JObj) ->
     TransferTo = kz_json:get_ne_binary_value(<<"Transfer-To">>, JObj),
     CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
@@ -51,7 +51,7 @@ attended(Node, UUID, JObj) ->
     }.
 
 -spec blind(atom(), kz_term:ne_binary(), kz_json:object()) ->
-                   [{kz_term:ne_binary(), kz_term:ne_binary()}].
+          [{kz_term:ne_binary(), kz_term:ne_binary()}].
 blind(Node, UUID, JObj) ->
     TransferTo = kz_json:get_ne_binary_value(<<"Transfer-To">>, JObj),
 
@@ -74,7 +74,7 @@ add_transfer_ccvs_to_vars(CCVs, Vars) ->
     kz_json:foldl(fun add_transfer_ccv_to_vars/3, Vars, CCVs).
 
 -spec add_transfer_ccv_to_vars(kz_json:key(), kz_json:json_term(), kz_term:proplist()) ->
-                                      kz_term:proplist().
+          kz_term:proplist().
 add_transfer_ccv_to_vars(<<"Account-ID">>=K, V, Vars) -> [{K, V} | Vars];
 add_transfer_ccv_to_vars(<<"Authorizing-ID">>=K, V, Vars) -> [{K, V} | Vars];
 add_transfer_ccv_to_vars(<<"Authorizing-Type">>=K, V, Vars) -> [{K, V} | Vars];

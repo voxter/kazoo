@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2015-2019, 2600Hz
+%%% @copyright (C) 2015-2020, 2600Hz
 %%% @doc Asterisk queue_log translator for Kazoo
 %%%
 %%% @author Lucas Bussey
@@ -84,7 +84,7 @@ start_agent_fsm(AccountId, AgentId) ->
                                                  )).
 
 -spec retrieve_agent_fsm(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                {'ok', pid()} | {'error', 'not_found'}.
+          {'ok', pid()} | {'error', 'not_found'}.
 retrieve_agent_fsm(AccountId, AgentId) ->
     Fsms = [Pid || {Name, Pid, 'worker', ['quilt_agent_fsm']} <- supervisor:which_children(?MODULE), Name == erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId])],
     case length(Fsms) of

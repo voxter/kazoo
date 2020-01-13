@@ -1,12 +1,17 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
-%%% @doc
+%%% @copyright (C) 2010-2020, 2600Hz
+%%% @doc This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kazoo_asr_ispeech).
 -behaviour(gen_asr_provider).
 
--export([freeform/4
+-export([preferred_content_type/0
+        ,accepted_content_types/0
+        ,freeform/4
         ,commands/5
         ]).
 
@@ -14,6 +19,22 @@
 
 -define(DEFAULT_ASR_CONTENT_TYPE, <<"application/wav">>).
 -define(SUPPORTED_CONTENT_TYPES, [<<"application/wav">>]).
+
+%%%-----------------------------------------------------------------------------
+%%% @doc Return or set the preferred asr content type for the ASR provider
+%%% @end
+%%%-----------------------------------------------------------------------------
+-spec preferred_content_type() -> kz_term:ne_binary().
+preferred_content_type() ->
+    ?DEFAULT_ASR_CONTENT_TYPE.
+
+%%%-----------------------------------------------------------------------------
+%%% @doc Return list of supported Content Types by ASR provider
+%%% @end
+%%%-----------------------------------------------------------------------------
+-spec accepted_content_types() -> kz_term:ne_binaries().
+accepted_content_types() ->
+    ?SUPPORTED_CONTENT_TYPES.
 
 -spec default_url() -> kz_term:ne_binary().
 default_url() ->
@@ -25,15 +46,15 @@ default_api_key() ->
 
 -spec freeform(binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) -> asr_resp().
 freeform(Content, ContentType, Locale, Options) ->
-    case kazoo_asr_util:maybe_convert_content(Content, ContentType, ?SUPPORTED_CONTENT_TYPES, ?DEFAULT_ASR_CONTENT_TYPE) of
+    case kazoo_asr_util:maybe_convert_content(Content, ContentType, accepted_content_types(), preferred_content_type()) of
         {'error', _}=E -> E;
         {Content1, ContentType1} -> exec_freeform(Content1, ContentType1, Locale, Options)
     end.
 
 -spec commands(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
-                      provider_return().
+          provider_return().
 commands(Content, Commands, ContentType, Locale, Options) ->
-    case kazoo_asr_util:maybe_convert_content(Content, ContentType, ?SUPPORTED_CONTENT_TYPES, ?DEFAULT_ASR_CONTENT_TYPE) of
+    case kazoo_asr_util:maybe_convert_content(Content, ContentType, accepted_content_types(), preferred_content_type()) of
         {'error', _}=E -> E;
         {Content1, ContentType1} -> exec_commands(Content1, Commands, ContentType1, Locale, Options)
     end.
@@ -70,7 +91,7 @@ handle_response({'ok', _Code, _Hdrs, Content2}) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec exec_freeform(binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
-                           asr_resp().
+          asr_resp().
 exec_freeform(Content, ContentType, Locale, Options) ->
     BaseUrl = default_url(),
     lager:debug("sending request to ~s", [BaseUrl]),
@@ -93,7 +114,7 @@ exec_freeform(Content, ContentType, Locale, Options) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec exec_commands(kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
-                           provider_return().
+          provider_return().
 exec_commands(Bin, Commands, ContentType, Locale, Opts) ->
     BaseUrl = default_url(),
 

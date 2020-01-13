@@ -1,6 +1,9 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2019, 2600Hz
-%%% @doc
+%%% @copyright (C) 2010-2020, 2600Hz
+%%% @doc This Source Code Form is subject to the terms of the Mozilla Public
+%%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%%
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kazoo_asr_util).
@@ -9,6 +12,10 @@
 
 -include("kazoo_speech.hrl").
 
+%%------------------------------------------------------------------------------
+%% @doc Convert audio file/content-type if initial format not supported
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_convert_content(binary(), kz_term:ne_binary(), kz_term:ne_binaries(), kz_term:ne_binary()) -> conversion_return().
 maybe_convert_content(Content, ContentType, SupportedContentTypes, DefaultContentType) ->
     case lists:member(ContentType, SupportedContentTypes) of
@@ -23,10 +30,7 @@ maybe_convert_content(Content, ContentType, SupportedContentTypes, DefaultConten
 
 -spec default_preferred_content_type(kz_term:ne_binaries(), kz_term:ne_binary()) -> kz_term:ne_binary().
 default_preferred_content_type(SupportedContentTypes, DefaultContentType) ->
-    PreferredContentType = kapps_config:get_binary(?MOD_CONFIG_CAT
-                                                  ,<<"asr_preferred_content_type">>
-                                                  ,DefaultContentType
-                                                  ),
+    PreferredContentType = kazoo_asr:preferred_content_type(),
     validate_content_type(PreferredContentType, SupportedContentTypes, DefaultContentType).
 
 -spec validate_content_type(binary(), kz_term:ne_binaries(), kz_term:ne_binary()) -> kz_term:ne_binary().

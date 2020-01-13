@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc Tracks the agent's state, responds to messages from the corresponding
 %%% acdc_agent gen_listener process.
 %%%
@@ -1351,7 +1351,7 @@ awaiting_callback('info', Evt, State) ->
     handle_info(Evt, 'awaiting_callback', State).
 
 -spec maybe_member_no_answer(kz_term:ne_binary(), kz_term:ne_binary(), state()) ->
-                                    {'next_state', atom(), state()}.
+          {'next_state', atom(), state()}.
 maybe_member_no_answer(CallId, Cause, #state{agent_listener=AgentListener
                                             ,member_call=MemberCall
                                             ,member_callback_candidates=Candidates
@@ -1945,7 +1945,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec cancel_if_failed_originate(kz_term:ne_binary(), kz_term:ne_binary(), atom(), state()) ->
-                                        {'next_state', atom(), state()}.
+          {'next_state', atom(), state()}.
 cancel_if_failed_originate(CallId, MemberCallId, StateName, #state{agent_listener=AgentListener
                                                                   ,member_call_id=MemberCallId1
                                                                   }=State) when MemberCallId =/= MemberCallId1 ->
@@ -2044,7 +2044,7 @@ clear_call(#state{statem_call_id=StateMCallId
                }.
 
 -spec current_call(kapps_call:call() | 'undefined', atom(), kz_term:ne_binary(), 'undefined' | kz_time:now()) ->
-                          kz_term:api_object().
+          kz_term:api_object().
 current_call('undefined', _, _, _) -> 'undefined';
 current_call(Call, AgentState, QueueId, Start) ->
     kz_json:from_list([{<<"call_id">>, kapps_call:call_id(Call)}
@@ -2213,8 +2213,8 @@ convert_to_endpoint(EPDoc) ->
     end.
 
 -spec get_endpoints(kz_json:objects(), kapps_call:call(), kz_term:api_binary(), kz_term:api_binary()) ->
-                           {'ok', kz_json:objects()} |
-                           {'error', any()}.
+          {'ok', kz_json:objects()} |
+          {'error', any()}.
 get_endpoints(OrigEPs, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
         [] ->

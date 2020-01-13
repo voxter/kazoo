@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%% @author Daniel Finke
@@ -244,7 +244,7 @@ bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
 
 -spec monitor_call(pid(), kapps_call:call(), kz_json:object(), kz_term:api_binary()) ->
-                          'ok'.
+          'ok'.
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
 
@@ -1177,7 +1177,7 @@ idle_time('undefined') -> 'undefined';
 idle_time(T) -> kz_time:elapsed_s(T).
 
 -spec call_id(kapps_call:call() | kz_term:api_object()) ->
-                     kz_term:api_binary().
+          kz_term:api_binary().
 call_id('undefined') -> 'undefined';
 call_id(Call) ->
     case kapps_call:is_call(Call) of
@@ -1193,7 +1193,7 @@ call_id(Call) ->
     end.
 
 -spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()) ->
-                                    kz_term:proplist().
+          kz_term:proplist().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     MCallId = kapps_call:call_id(Call),
     kz_util:put_callid(MCallId),
@@ -1259,7 +1259,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
 
 -spec maybe_originate_callback(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()
                               ,kz_json:object()) ->
-                                      kz_term:proplist().
+          kz_term:proplist().
 maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
@@ -1406,7 +1406,7 @@ create_call_id() ->
     <<"callback-", (kz_binary:rand_hex(4))/binary>>.
 
 -spec add_queue_binding(kz_term:ne_binary(), fsm_state_name(), state()) ->
-                               'ok'.
+          'ok'.
 add_queue_binding(QueueId, StateName, #state{agent_id=AgentId
                                             ,acct_id=AcctId
                                             }=State) ->
@@ -1496,7 +1496,7 @@ update_my_queues_of_change(AcctId, AgentId, Qs) ->
     'ok'.
 
 -spec is_prio_or_skills_updated(agent_priority(), kz_term:ne_binaries(), agent_priority(), kz_term:ne_binaries()) ->
-                                       boolean().
+          boolean().
 is_prio_or_skills_updated(Priority0, Skills0, Priority, Skills) ->
     Priority0 =/= Priority
         orelse Skills0 =/= Skills.

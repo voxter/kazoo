@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2020, 2600Hz
 %%% @doc Utilities shared by a subset of `kapps'.
 %%% @author James Aimonetti
 %%% @author Karl Anderson
@@ -114,7 +114,7 @@ replicate_from_accounts(TargetDb, FilterDoc) when is_binary(FilterDoc) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec replicate_from_account(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                                    'ok' | {'error', 'matching_dbs'}.
+          'ok' | {'error', 'matching_dbs'}.
 replicate_from_account(AccountDb, AccountDb, _) ->
     lager:debug("requested to replicate from db ~s to self, skipping", [AccountDb]),
     {'error', 'matching_dbs'};
@@ -140,7 +140,7 @@ replicate_from_account(AccountDb, TargetDb, FilterDoc) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_master_account_id() -> {'ok', kz_term:ne_binary()} |
-                                 {'error', atom()}.
+          {'error', atom()}.
 get_master_account_id() ->
     case kapps_config:get_ne_binary(?KZ_ACCOUNTS_DB, <<"master_account_id">>) of
         'undefined' ->
@@ -166,7 +166,7 @@ find_master_account_id({'ok', Accounts}) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_master_account_db() -> {'ok', kz_term:ne_binary()} |
-                                 {'error', any()}.
+          {'error', any()}.
 get_master_account_db() ->
     case get_master_account_id() of
         {'error', _}=E -> E;
@@ -226,8 +226,8 @@ account_has_descendants(Account) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec find_oldest_doc(kz_json:objects()) ->
-                             {'ok', kz_term:ne_binary()} |
-                             {'error', 'no_docs'}.
+          {'ok', kz_term:ne_binary()} |
+          {'error', 'no_docs'}.
 find_oldest_doc([]) -> {'error', 'no_docs'};
 find_oldest_doc([First|Docs]) ->
     {_, OldestDocID} =
@@ -414,8 +414,8 @@ account_ccvs_from_ip_auth(Doc) ->
     end.
 
 -spec are_all_enabled(kz_term:proplist()) ->
-                             'true' |
-                             {'false', {not_enabled_error(), kz_term:ne_binary()}}.
+          'true' |
+          {'false', {not_enabled_error(), kz_term:ne_binary()}}.
 are_all_enabled(Things) ->
     ?MATCH_ACCOUNT_RAW(AccountId) = props:get_value(<<"account">>, Things),
     try lists:all(fun(Thing) -> is_enabled(AccountId, Thing) end, Things)
@@ -567,7 +567,7 @@ rm_aggregate_device(Db, Device) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_destination(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                             {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_destination(JObj, Cat, Key) ->
     case kapps_config:get(Cat, Key, <<"Request">>) of
         <<"To">> ->
@@ -577,7 +577,7 @@ get_destination(JObj, Cat, Key) ->
     end.
 
 -spec get_destination(kz_json:object(), kz_term:ne_binaries()) ->
-                             {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_destination(JObj, [Key|Keys]) ->
     case maybe_split(Key, JObj) of
         [User,Realm] -> {User,Realm};
@@ -594,7 +594,7 @@ get_destination(JObj, []) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_origination(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                             {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_origination(JObj, Cat, Key) ->
     case kapps_config:get(Cat, Key, <<"From">>) of
         <<"From">> ->
@@ -604,7 +604,7 @@ get_origination(JObj, Cat, Key) ->
     end.
 
 -spec get_origination(kz_json:object(), kz_term:ne_binaries()) ->
-                             {kz_term:ne_binary(), kz_term:ne_binary()}.
+          {kz_term:ne_binary(), kz_term:ne_binary()}.
 get_origination(JObj, [Key|Keys]) ->
     case maybe_split(Key, JObj) of
         [User,Realm] ->
@@ -623,8 +623,8 @@ maybe_split(Key, JObj) ->
     end.
 
 -spec write_tts_file(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                            'ok' |
-                            {'error', file:posix() | 'badarg' | 'terminated'}.
+          'ok' |
+          {'error', file:posix() | 'badarg' | 'terminated'}.
 write_tts_file(Path, Say) ->
     lager:debug("trying to save TTS media to ~s", [Path]),
     {'ok', _, Wav} = kazoo_tts:create(Say),

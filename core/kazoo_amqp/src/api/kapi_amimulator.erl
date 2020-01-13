@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -43,8 +43,8 @@
 
 %%------------------------------------------------------------------------------
 -spec control_queue_req(kz_json:object() | kz_term:proplist()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 control_queue_req(Prop) when is_list(Prop) ->
     case control_queue_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?OPTIONAL_CONTROL_QUEUE_REQ_HEADERS);
@@ -61,8 +61,8 @@ control_queue_req_v(JObj) -> control_queue_req_v(kz_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 -spec control_queue_resp(kz_json:object() | kz_term:proplist()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+          {'ok', iolist()} |
+          {'error', string()}.
 control_queue_resp(Prop) when is_list(Prop) ->
     case control_queue_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?OPTIONAL_CONTROL_QUEUE_RESP_HEADERS);

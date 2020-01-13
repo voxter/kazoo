@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2019, 2600Hz
+%%% @copyright (C) 2011-2020, 2600Hz
 %%% @doc Controls and picks Callflows based rules.
 %%%
 %%% <h4>Data options:</h4>
@@ -75,7 +75,7 @@ handle(Data, Call) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec process_rules(temporal(), rules(), kapps_call:call(), rules()) ->
-                           'default' | binary().
+          'default' | binary().
 process_rules(Temporal
              ,[#rule{enabled='false'
                     ,id=Id
@@ -129,7 +129,7 @@ remove_unforced_rules(Rules) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec update_candidates(temporal(), rules(), kapps_call:call(), rules()) ->
-                               'default' | binary().
+          'default' | binary().
 update_candidates(T, Rules, Call, []) ->
     replace_candidates(T, Rules, Call, []);
 update_candidates(T
@@ -151,7 +151,7 @@ update_candidates(T
     end.
 
 -spec replace_candidates(temporal(), rules(), kapps_call:call(), rules()) ->
-                                'default' | binary().
+          'default' | binary().
 replace_candidates(#temporal{local_sec=LSec}=T
                   ,[#rule{id=Id
                          ,name=Name

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -13,7 +13,7 @@
 
 %% @equiv fax(FromFormat, ToFormat, Content, [])
 -spec fax(kz_term:api_ne_binary(), kz_term:api_ne_binary(), binary()|{'file', filename:name()}) ->
-                 gen_kz_converter:converted().
+          gen_kz_converter:converted().
 fax(FromFormat, ToFormat, Content) ->
     fax(FromFormat, ToFormat, Content, []).
 
@@ -38,7 +38,7 @@ fax(FromFormat, ToFormat, Content) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec fax(kz_term:api_binary(), kz_term:api_binary(), binary()|{'file', filename:name()}, kz_term:proplist()) ->
-                 gen_kz_converter:converted().
+          gen_kz_converter:converted().
 fax('undefined', _ToFormat, <<>>, _Options) ->
     {'error', <<"undefined from format">>};
 fax(_FromFormat, 'undefined', <<>>, _Options) ->
@@ -57,12 +57,12 @@ convert_to_module(Conversion) ->
     kz_term:to_atom(<<"kz_", Conversion/binary>>, 'true').
 
 -spec resize_image(iodata(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
-                          {'ok', kz_term:api_binary()} | {'error', atom()}.
+          {'ok', kz_term:api_binary()} | {'error', atom()}.
 resize_image(ImageData, FileName, Dimensions) ->
     resize_image(ImageData, FileName, "post_" ++ FileName, Dimensions).
 
 -spec resize_image(iodata(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
-                          {'ok', kz_term:api_binary()} | {'error', atom()}.
+          {'ok', kz_term:api_binary()} | {'error', atom()}.
 resize_image(ImageData, FileName, DestinationFileName, Dimensions) ->
     OgTempFile = "/tmp/pre_" ++ FileName,
     DestinationWithPath = "/tmp/" ++ DestinationFileName,
@@ -70,7 +70,7 @@ resize_image(ImageData, FileName, DestinationFileName, Dimensions) ->
     build_and_run(OgTempFile, DestinationWithPath, Dimensions).
 
 -spec build_and_run(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_ne_binary()) ->
-                           {'ok', kz_term:api_binary()} | {'error', atom()}.
+          {'ok', kz_term:api_binary()} | {'error', atom()}.
 build_and_run(From, To, 'undefined') ->
     Args = [{<<"FROM">>, From}
            ,{<<"TO">>, To}],

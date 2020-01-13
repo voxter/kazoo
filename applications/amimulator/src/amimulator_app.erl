@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2015-2019, 2600Hz
+%%% @copyright (C) 2015-2020, 2600Hz
 %%% @doc
 %%% @author Daniel Finke
 %%% @end
@@ -17,8 +17,8 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec start(term(), term()) ->
-                   {'ok', pid()} |
-                   {'error', kz_types:startlink_err()}.
+          {'ok', pid()} |
+          {'error', kz_types:startlink_err()}.
 start(_Type, _Args) ->
     amimulator:start_link().
 

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -72,7 +72,7 @@ handle_specific_event({<<"presence">>, <<"update">>}, EventJObj, Props) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_presence_update(kz_json:object(), kz_term:ne_binary(), kz_term:proplist()) ->
-                                    'ok'.
+          'ok'.
 handle_presence_update(EventJObj, <<"early">>, Props) ->
     PresenceUser = presence_user(EventJObj),
     FeatureCodes = props:get_value(<<"Presence-Feature-Codes">>, Props),
@@ -141,7 +141,7 @@ presence_user_match(PresenceUser, [{Pattern, _}|FeatureCodes]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec presence_feature_codes(kz_term:ne_binary() | kz_json:objects()) ->
-                                    kz_term:proplist().
+          kz_term:proplist().
 presence_feature_codes(AccountId) when is_binary(AccountId) ->
     case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded')
                                ,<<"callflows/listing_by_pattern">>
@@ -155,7 +155,7 @@ presence_feature_codes(JObjs) ->
     lists:foldl(fun add_featurecode/2, [], JObjs).
 
 -spec add_featurecode(kz_json:object(), kz_term:proplist()) ->
-                             kz_term:proplist().
+          kz_term:proplist().
 add_featurecode(JObj, FeatureCodes) ->
     Doc = kz_json:get_value(<<"doc">>, JObj),
     FeatureCode = kz_json:get_value(<<"featurecode">>, Doc),
@@ -164,7 +164,7 @@ add_featurecode(JObj, FeatureCodes) ->
                          ,FeatureCodes).
 
 -spec maybe_add_featurecode(kz_term:api_binary(), kz_term:ne_binary(), kz_term:proplist()) ->
-                                   kz_term:proplist().
+          kz_term:proplist().
 maybe_add_featurecode(<<"park_and_retrieve">>, Pattern, FeatureCodes) ->
     [{Pattern, <<"park_and_retrieve">>} | FeatureCodes];
 maybe_add_featurecode(_, _, FeatureCodes) -> FeatureCodes.
@@ -223,7 +223,7 @@ pattern_acc_append_all(Acc, Chars) ->
     pattern_acc_append_all(Acc, Chars, []).
 
 -spec pattern_acc_append_all(kz_term:ne_binaries(), kz_term:ne_binaries(), kz_term:ne_binaries()) ->
-                                    kz_term:ne_binaries().
+          kz_term:ne_binaries().
 pattern_acc_append_all(_, [], Appended) -> Appended;
 pattern_acc_append_all(OriginalAcc, [Char|Chars], Appended) ->
     Appended1 = Appended ++ pattern_acc_append(OriginalAcc, Char),
@@ -234,7 +234,7 @@ pattern_acc_last_optional(Binaries) ->
     pattern_acc_last_optional(Binaries, []).
 
 -spec pattern_acc_last_optional(kz_term:ne_binaries(), kz_term:ne_binaries()) ->
-                                       kz_term:ne_binaries().
+          kz_term:ne_binaries().
 pattern_acc_last_optional([], Acc) -> Acc;
 pattern_acc_last_optional([Binary|Binaries], Acc) ->
     Acc1 = [Binary, binary:part(Binary, 0, byte_size(Binary)-1) | Acc],
@@ -251,7 +251,7 @@ expand_character_class(Pattern) ->
     expand_character_class(Pattern, []).
 
 -spec expand_character_class(kz_term:ne_binary(), kz_term:ne_binaries()) ->
-                                    {binary(), kz_term:ne_binaries()}.
+          {binary(), kz_term:ne_binaries()}.
 expand_character_class(<<"[", Pattern/binary>>, Acc) ->
     expand_character_class(Pattern, Acc);
 expand_character_class(<<"]", Pattern/binary>>, Acc) -> {Pattern, Acc};
@@ -266,7 +266,7 @@ expand_character_class(<<Char:1/binary, Pattern/binary>>, Acc) ->
 
 -spec character_range(kz_term:ne_binary() | non_neg_integer()
                      ,kz_term:ne_binary() | non_neg_integer()) ->
-                             kz_term:ne_binaries().
+          kz_term:ne_binaries().
 character_range(<<StartValue>>, End) ->
     character_range(StartValue, End);
 character_range(Start, <<EndValue>>) ->
@@ -277,7 +277,7 @@ character_range(Start, End) ->
     character_range(Start, End, []).
 
 -spec character_range(non_neg_integer(), non_neg_integer(), kz_term:ne_binaries()) ->
-                             kz_term:ne_binaries().
+          kz_term:ne_binaries().
 character_range(Start, End, Acc) when Start > End -> Acc;
 character_range(Start, End, Acc) ->
     character_range(Start+1, End, [<<Start>> | Acc]).

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2017-2019, 2600Hz
+%%% @copyright (C) 2017-2020, 2600Hz
 %%% @doc Handle e911 provisioning
 %%%
 %%%
@@ -133,7 +133,7 @@ maybe_update_e911(Number, 'false') ->
     end.
 
 -spec update_e911(knm_number:knm_number(), kz_json:object()) ->
-                         'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 update_e911(Number, E911) ->
     PN = knm_number:phone_number(Number),
     DID = knm_phone_number:number(PN),
@@ -144,7 +144,7 @@ update_e911(Number, E911) ->
     end.
 
 -spec update_e911(knm_phone_number:knm_phone_number(), kz_json:object(), kz_term:ne_binary()) ->
-                         'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 update_e911(PN, E911, NPAN) ->
     AccountId = knm_phone_number:assigned_to(PN),
 
@@ -155,7 +155,7 @@ update_e911(PN, E911, NPAN) ->
     end.
 
 -spec do_update_e911(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                            'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 do_update_e911(E911, AccountId, NPAN, Stamp, Signature) ->
     try
         Props = [{<<"action">>, <<"update">>}
@@ -199,7 +199,7 @@ handle_update_resp_error(<<"error">>, Error, _) ->
     {'error', Error}.
 
 -spec handle_update_resp_alternatives(kz_term:proplist(), non_neg_integer()) ->
-                                             {'error', kz_json:object()}.
+          {'error', kz_json:object()}.
 handle_update_resp_alternatives(Props, Count) ->
     Alternatives = handle_update_resp_alternatives(Props, Count, []),
     {'error', <<"Invalid address, did you mean \""
@@ -208,7 +208,7 @@ handle_update_resp_alternatives(Props, Count) ->
               >>}.
 
 -spec handle_update_resp_alternatives(kz_term:proplist(), non_neg_integer(), kz_term:binaries()) ->
-                                             kz_term:binaries().
+          kz_term:binaries().
 handle_update_resp_alternatives(_, 0, Alternatives) -> Alternatives;
 handle_update_resp_alternatives(Props, Count, Alternatives) ->
     Prefix = <<"alternative", (kz_term:to_binary(Count-1))/binary>>,
@@ -248,7 +248,7 @@ remove_number(Number) ->
     end.
 
 -spec remove_number(knm_phone_number:knm_phone_number(), kz_term:ne_binary()) ->
-                           'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 remove_number(PN, NPAN) ->
     AccountId = knm_phone_number:assigned_to(PN),
 
@@ -259,7 +259,7 @@ remove_number(PN, NPAN) ->
     end.
 
 -spec do_remove_number(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-                              'ok' | {'error', any()}.
+          'ok' | {'error', any()}.
 do_remove_number(AccountId, NPAN, Stamp, Signature) ->
     Props = [{<<"action">>, <<"delete">>}
             ,{<<"dn">>, NPAN}
@@ -430,8 +430,8 @@ supported_classification(DID) ->
     end.
 
 -spec stamp_and_signature(kz_term:ne_binary(), kz_term:api_binary()) ->
-                                 {kz_term:ne_binary(), kz_term:ne_binary()} |
-                                 'undefined'.
+          {kz_term:ne_binary(), kz_term:ne_binary()} |
+          'undefined'.
 stamp_and_signature(_, 'undefined') ->
     lager:error("no api key found in configuration"),
     'undefined';
@@ -466,7 +466,7 @@ pad_time(Time) ->
     kz_term:to_binary(Time).
 
 -spec date_string(pos_integer(), pos_integer(), pos_integer(), non_neg_integer(), non_neg_integer()) ->
-                         kz_term:ne_binary().
+          kz_term:ne_binary().
 date_string(Year, Month, Day, Hour, Minute) ->
     <<(kz_term:to_binary(Year))/binary
      ,(pad_time(Month))/binary

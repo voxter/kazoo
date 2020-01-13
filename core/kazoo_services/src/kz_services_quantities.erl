@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -259,7 +259,7 @@ cascade_item(Services, CategoryName, ItemName) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec calculate_updates(kz_services:services(), billable() | billables(), billable() | billables()) ->
-                               kz_json:object().
+          kz_json:object().
 calculate_updates(Services, 'undefined', ProposedJObjs) ->
     lager:debug("calculating service updates for addition(s)", []),
     calculate_updates(Services, [], ProposedJObjs);
@@ -552,8 +552,21 @@ calculate_vmbox_updates(JObj, Updates) ->
     case kz_doc:type(JObj) =:= <<"vmbox">> of
         'false' -> Updates;
         'true' ->
-            Key = [<<"voicemails">>, <<"mailbox">>],
-            [{Key, 1} | Updates]
+            Keys = [<<"mailbox">>, <<"transcription">>],
+            Fun = calculate_vmbox_updates_foldl(JObj),
+            lists:foldl(Fun, Updates, Keys)
+    end.
+
+-spec calculate_vmbox_updates_foldl(kz_json:object()) -> fun((kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist()).
+calculate_vmbox_updates_foldl(JObj) ->
+    fun(<<"transcription">> = Key, Updates) ->
+            case kz_json:get_boolean_value(<<"transcribe">>, JObj, 'false') of
+                'true' ->
+                    [{[<<"voicemails">>, Key], 1} | Updates];
+                _ -> Updates
+            end;
+       (Key, Updates) ->
+            [{[<<"voicemails">>, Key], 1} | Updates]
     end.
 
 -spec calculate_faxbox_updates(kz_json:object(), kz_term:proplist()) -> kz_term:proplist().

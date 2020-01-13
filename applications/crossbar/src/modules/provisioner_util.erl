@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc Common functions for the provisioner modules
 %%% @author Karl Anderson
 %%% @end
@@ -339,7 +339,7 @@ is_mac_address_in_use(Context, MacAddress) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec mac_in_use_by(cb_context:context(), kz_term:ne_binary()) ->
-                           kz_term:api_object() | {'error', 'unsupported'}.
+          kz_term:api_object() | {'error', 'unsupported'}.
 mac_in_use_by(Context, MacAddress) ->
     case cb_context:is_context(Context)
         andalso get_provisioning_type()
@@ -508,13 +508,13 @@ do_awesome_provision(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_merged_device(kz_term:ne_binary(), cb_context:context()) ->
-                               {'ok', cb_context:context()}.
+          {'ok', cb_context:context()}.
 get_merged_device(MACAddress, Context) ->
     {'ok', Data} = merge_device(MACAddress, Context),
     {'ok', cb_context:set_doc(Context, Data)}.
 
 -spec merge_device(kz_term:ne_binary(), cb_context:context()) ->
-                          {'ok', kz_json:object()}.
+          {'ok', kz_json:object()}.
 merge_device(MACAddress, Context) ->
     JObj = cb_context:doc(Context),
     AccountId = cb_context:account_id(Context),
@@ -576,8 +576,8 @@ send_provisioning_template(JObj, Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_template(cb_context:context()) ->
-                          {'ok', kz_json:object()} |
-                          {'error', any()}.
+          {'ok', kz_json:object()} |
+          {'error', any()}.
 get_template(Context) ->
     DocId = kz_json:get_value([<<"provision">>, <<"id">>], cb_context:doc(Context)),
     case is_binary(DocId)
@@ -598,7 +598,7 @@ get_template(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_id(cb_context:context()) ->
-                            [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_id(Context) ->
     AccountId = cb_context:auth_account_id(Context),
     [fun(J) -> kz_json:set_value(<<"account_id">>, AccountId, J) end].
@@ -609,7 +609,7 @@ set_account_id(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_line_defaults(cb_context:context()) ->
-                                       [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_line_defaults(Context) ->
     Account = case kzd_accounts:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
@@ -635,7 +635,7 @@ set_account_line_defaults(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_device_line_defaults(cb_context:context()) ->
-                                      [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_device_line_defaults(Context) ->
     Device = cb_context:doc(Context),
     [fun(J) ->
@@ -675,7 +675,7 @@ set_device_line_defaults(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_global_overrides(cb_context:context()) ->
-                                  [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_global_overrides(_) ->
     GlobalDefaults = case kz_datamgr:open_cache_doc(?KZ_PROVISIONER_DB, <<"base_properties">>) of
                          {'ok', JObj} -> JObj;
@@ -694,7 +694,7 @@ set_global_overrides(_) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_account_overrides(cb_context:context()) ->
-                                   [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_account_overrides(Context) ->
     Account = case kzd_accounts:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
@@ -713,7 +713,7 @@ set_account_overrides(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_user_overrides(cb_context:context()) ->
-                                [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_user_overrides(Context) ->
     OwnerId = kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context)),
     User = case is_binary(OwnerId)
@@ -735,7 +735,7 @@ set_user_overrides(Context) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec set_device_overrides(cb_context:context()) ->
-                                  [fun((kz_json:object()) -> kz_json:object()),...].
+          [fun((kz_json:object()) -> kz_json:object()),...].
 set_device_overrides(Context) ->
     Device = cb_context:doc(Context),
     [fun(J) ->

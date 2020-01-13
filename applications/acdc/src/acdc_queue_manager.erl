@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc Manages queue processes:
 %%%   starting when a queue is created
 %%%   stopping when a queue is deleted
@@ -317,8 +317,8 @@ next_winner(Srv, Call) -> gen_listener:call(Srv, {'next_winner', Call}).
 agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
 
 -spec pick_winner(pid(), kapps_call:call(), kz_json:objects()) ->
-                         'undefined' |
-                         {kz_json:objects(), kz_json:objects()}.
+          'undefined' |
+          {kz_json:objects(), kz_json:objects()}.
 pick_winner(Srv, Call, Resps) -> pick_winner_(Resps, strategy(Srv), next_winner(Srv, Call)).
 
 -spec callback_details(pid(), kz_term:ne_binary()) -> kz_term:api_binary().
@@ -849,12 +849,12 @@ queue_member_position(CallId, Calls) ->
     end.
 
 -spec queue_member_lookup(kz_term:ne_binary(), list()) ->
-                                 {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
+          {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
 queue_member_lookup(CallId, Calls) ->
     queue_member_lookup(CallId, Calls, 1).
 
 -spec queue_member_lookup(kz_term:ne_binary(), list(), pos_integer()) ->
-                                 {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
+          {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
 queue_member_lookup(_, [], _) -> 'undefined';
 queue_member_lookup(CallId, [{Priority, Call}|Calls], Position) ->
     case kapps_call:call_id(Call) of
@@ -945,7 +945,7 @@ publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason) ->
 
 %% Really sophisticated selection algorithm
 -spec pick_winner_(kz_json:objects(), queue_strategy(), kz_term:api_binary()) ->
-                          {kz_json:objects(), kz_json:objects()}.
+          {kz_json:objects(), kz_json:objects()}.
 pick_winner_(CRs, 'rr', AgentId) ->
     case split_agents(AgentId, CRs) of
         {[], _O} ->
@@ -965,7 +965,7 @@ pick_winner_(CRs, 'sbrr', AgentId) ->
     pick_winner_(CRs, 'rr', AgentId).
 
 -spec update_strategy_with_agent(mgr_state(), kz_term:ne_binary(), agent_priority(), kz_term:ne_binaries(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
-                                        strategy_state().
+          strategy_state().
 update_strategy_with_agent(#state{strategy='rr'
                                  ,strategy_state=SS
                                  }, AgentId, Priority, _, Action, Flag) ->
@@ -981,7 +981,7 @@ update_strategy_with_agent(#state{strategy='sbrr'
     update_sbrrss_with_agent(AgentId, Priority, Skills, Action, Flag, SS, Calls).
 
 -spec update_rr_strategy_with_agent(strategy_state(), kz_term:ne_binary(), agent_priority(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
-                                           strategy_state().
+          strategy_state().
 update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue
                                              ,details=Details
                                              }=SS
@@ -1012,7 +1012,7 @@ update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue}=SS, AgentId, _P
     set_flag(AgentId, Flag, SS1).
 
 -spec update_mi_strategy_with_agent(strategy_state(), kz_term:ne_binary(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
-                                           strategy_state().
+          strategy_state().
 update_mi_strategy_with_agent(#strategy_state{agents=AgentL
                                              ,details=Details
                                              }=SS
@@ -1044,7 +1044,7 @@ update_sbrrss_with_agent(JObj, SS) ->
     update_sbrrss_with_agent(AgentId, Priority, Skills, 'add', 'undefined', SS, []).
 
 -spec update_sbrrss_with_agent(kz_term:ne_binary(), agent_priority(), kz_term:ne_binaries(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined', strategy_state(), list()) ->
-                                      strategy_state().
+          strategy_state().
 update_sbrrss_with_agent(AgentId, Priority, Skills, 'add', Flag, #strategy_state{agents=#{rr_queue := RRQueue
                                                                                          ,skill_map := SkillMap
                                                                                          }=SBRRSS
@@ -1141,12 +1141,12 @@ remove_agent('sbrr', AgentId, #strategy_state{agents=#{rr_queue := RRQueue
     end.
 
 -spec incr_agent(kz_term:ne_binary(), dict:dict(kz_term:ne_binary(), ss_details())) ->
-                        dict:dict(kz_term:ne_binary(), ss_details()).
+          dict:dict(kz_term:ne_binary(), ss_details()).
 incr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Flag}) -> {Count + 1, Flag} end, {1, 'undefined'}, Details).
 
 -spec decr_agent(kz_term:ne_binary(), dict:dict(kz_term:ne_binary(), ss_details())) ->
-                        dict:dict(kz_term:ne_binary(), ss_details()).
+          dict:dict(kz_term:ne_binary(), ss_details()).
 decr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Flag}) when Count > 1 -> {Count - 1, Flag};
                             ({_, Flag}) -> {0, Flag} end
@@ -1270,7 +1270,7 @@ do_reseed_sbrrss_maps(#{skill_map := SkillMap}=SBRRSS, AssignedAgentIds, MaxAssi
     end.
 
 -spec sbrrss_maybe_assign_agent(sbrr_strategy_state(), sets:set(), kapps_call:call(), list()) ->
-                                       {sbrr_strategy_state(), kz_term:api_ne_binary()}.
+          {sbrr_strategy_state(), kz_term:api_ne_binary()}.
 sbrrss_maybe_assign_agent(#{agent_id_map := AgentIdMap
                            ,call_id_map := CallIdMap
                            }=SBRRSS, Candidates, Call, OtherCalls) ->
@@ -1350,7 +1350,7 @@ sort_agent2(_, 'undefined') -> 'false';
 sort_agent2(A, B) -> A > B.
 
 -spec split_agents(kz_term:ne_binary(), kz_json:objects()) ->
-                          {kz_json:objects(), kz_json:objects()}.
+          {kz_json:objects(), kz_json:objects()}.
 split_agents(AgentId, Rest) ->
     lists:partition(fun(R) ->
                             AgentId =:= kz_json:get_value(<<"Agent-ID">>, R)
@@ -1508,7 +1508,7 @@ maybe_schedule_position_announcements(JObj, Call, #state{announcements_config=An
     end.
 
 -spec cancel_position_announcements(kapps_call:call() | 'undefined', map()) ->
-                                           map().
+          map().
 cancel_position_announcements('undefined', Pids) -> Pids;
 cancel_position_announcements(Call, Pids) ->
     CallId = kapps_call:call_id(Call),
@@ -1573,7 +1573,7 @@ maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
 %% @end
 %%------------------------------------------------------------------------------
 -spec callback_flag(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call(), kz_term:ne_binary()) ->
-                           kapps_call:call().
+          kapps_call:call().
 callback_flag(AccountId, QueueId, Call, CallbackNumber) ->
     Call1 = prepend_cid_name(<<"CB:">>, Call),
     {_, CIDName} = acdc_util:caller_id(Call1),

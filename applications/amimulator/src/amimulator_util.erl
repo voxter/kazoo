@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2018-2019, 2600Hz
+%%% @copyright (C) 2018-2020, 2600Hz
 %%% @doc
 %%% @end
 %%%-----------------------------------------------------------------------------
@@ -279,7 +279,7 @@ find_agent_call_ids(Call) ->
     end.
 
 -spec fork_agent_call_leg1(amimulator_call:call(), amimulator_call:call()) ->
-                                  amimulator_call:call().
+          amimulator_call:call().
 fork_agent_call_leg1(SipAgentCall, Call) ->
     fork_agent_call_leg1(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
 
@@ -309,7 +309,7 @@ fork_agent_call_leg1(_, SipAgentCall, Call) ->
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters).
 
 -spec fork_agent_call_leg2(amimulator_call:call(), amimulator_call:call()) ->
-                                  amimulator_call:call().
+          amimulator_call:call().
 fork_agent_call_leg2(SipAgentCall, Call) ->
     fork_agent_call_leg2(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
 
@@ -909,7 +909,7 @@ recurse_to_child_callflow(Id, Flow) ->
 
 
 -spec queue_for_number(kz_term:ne_binary(), kz_term:ne_binary()) ->
-                              {'ok', kz_json:object()} | {'error', atom()}.
+          {'ok', kz_json:object()} | {'error', atom()}.
 queue_for_number(Number, AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
         {ok, []} ->

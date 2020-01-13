@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2019, 2600Hz
+%%% @copyright (C) 2012-2020, 2600Hz
 %%% @doc Controls how a queue process progresses a member_call
 %%% @author James Aimonetti
 %%% @end
@@ -704,8 +704,8 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_sync_event(any(), From :: pid(), StateName :: atom(), state()) ->
-                               {'next_state', StateName :: atom(), state()
-                               ,{'reply', From :: pid(), any()}}.
+          {'next_state', StateName :: atom(), state()
+          ,{'reply', From :: pid(), any()}}.
 handle_sync_event('cdr_url', From, StateName, #state{cdr_url=Url}=State) ->
     {'next_state', StateName, State
     ,{'reply', From, Url}
@@ -870,7 +870,7 @@ maybe_abort_connect_req(OnContinue, CallbackArgs, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_delay_connect_req(kz_json:object(), gen_listener:basic_deliver(), state()) ->
-                                     {'next_state', 'ready' | 'connect_req', state()}.
+          {'next_state', 'ready' | 'connect_req', state()}.
 maybe_delay_connect_req(CallJObj, Delivery, #state{listener_proc=ListenerSrv
                                                   ,manager_proc=MgrSrv
                                                   ,connection_timeout=ConnTimeout
