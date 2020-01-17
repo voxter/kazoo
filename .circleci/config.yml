@@ -118,6 +118,10 @@ jobs:
           fingerprints:
             - "c4:fe:42:a8:44:a2:2f:68:ba:48:de:f9:5d:65:ee:60"
       - run:
+          name: "Add GitLab to known hosts"
+          command: |
+            ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts
+      - run:
           name: "Pull Submodules"
           command: |
             git submodule update --init --recursive
@@ -324,6 +328,13 @@ jobs:
       APP_DIR: "/home/circleci/2600hz/kazoo"
     steps:
       - checkout
+      - add_ssh_keys:
+          fingerprints:
+          - "c4:fe:42:a8:44:a2:2f:68:ba:48:de:f9:5d:65:ee:60"
+      - run:
+          name: "Add GitLab to known hosts"
+          command: |
+            ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts
       - run:
           name: "Pull Submodules"
           command: |
