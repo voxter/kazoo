@@ -14,7 +14,7 @@
 %% @end
 %%------------------------------------------------------------------------------
 -spec compare_resp({'ok', kz_json:object()} | boolean() | kz_data:data_error(), {'ok', kz_json:object()} | boolean() | kz_data:data_error()) ->
-                          boolean().
+          boolean().
 compare_resp({ErrorOrOk, Resp}, {ErrorOrOk, Resp}) ->
     lager:debug("couch and pg returned the same response, Response result: ~p", [ErrorOrOk]),
     'true';
