@@ -230,6 +230,10 @@ add_postgresql_value_to_jobj(_TableOrViewName, <<"data">>, Value, 'jsonb'=Type, 
 add_postgresql_value_to_jobj(_TableOrViewName, <<"kazoo_db_name">>, _Value, _Type, JObj, _PrePath) ->
     JObj;
 
+%% Ignore kazoo_account_id
+add_postgresql_value_to_jobj(_TableOrViewName, <<"kazoo_account_id">>, _Value, _Type, JObj, _PrePath) ->
+    JObj;
+
 %% Ignore any column with the value set to null
 add_postgresql_value_to_jobj(_TableOrViewName, _ColumnName, ?PG_NULL, _Type, JObj, _PrePath) ->
     JObj;

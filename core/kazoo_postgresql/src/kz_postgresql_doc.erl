@@ -328,8 +328,15 @@ doc_to_query_parameters(KazooDBName, Doc, TableName, [{<<"data">>, ColType}| []]
     Value = kz_postgresql_util:encode_query_value(ColType, Doc),
     doc_to_query_parameters(KazooDBName, kz_json:from_list([]), TableName, [], [Value | Acc]);
 
+%% Store the KazooDbName into a predefined column kazoo_db_name
 doc_to_query_parameters(KazooDBName, Doc, TableName, [{<<"kazoo_db_name">>, ColType}|Columns], Acc) ->
     Acc1 = [kz_postgresql_util:encode_query_value(ColType, KazooDBName) | Acc],
+    doc_to_query_parameters(KazooDBName, Doc, TableName, Columns, Acc1);
+
+%% Extract the Account id from the DB name and store in kazoo_account_id column if defined
+doc_to_query_parameters(KazooDBName, Doc, TableName, [{<<"kazoo_account_id">>, ColType}|Columns], Acc) ->
+    KazooAccountId = kz_util:format_account_id(KazooDBName),
+    Acc1 = [kz_postgresql_util:encode_query_value(ColType, KazooAccountId) | Acc],
     doc_to_query_parameters(KazooDBName, Doc, TableName, Columns, Acc1);
 
 %% Go through the db columns and find the json element for each and add it to a list

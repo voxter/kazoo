@@ -24,6 +24,11 @@
 --    data jsonb,
 --    PRIMARY KEY(_id, _rev, kazoo_db_name)
 
+--   Optionally a data table can also define the column kazoo_account_id that will be populated with the kazoo_account id if possible.
+--   The account id is derived from the kazoo_db_name where possible. Because of this it would not be applicable for system db tables
+--   or number db tables that do not have an account id. The column should be defined as below:
+--    kazoo_account_id character varying(255) NOT NULL
+
 --   All archive tables must contain the same columns as the corresponding data table with the following leading columns in the order:
 --    _deleted boolean NOT NULL
 --    _changed_on TIMESTAMP(6) NOT NULL,
@@ -66,6 +71,7 @@ CREATE TABLE IF NOT EXISTS public.status_stat (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -77,6 +83,7 @@ CREATE TABLE IF NOT EXISTS public.status_stat_archive (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -90,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.auth (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -101,6 +109,7 @@ CREATE TABLE IF NOT EXISTS public.auth_archive (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -114,6 +123,7 @@ CREATE TABLE IF NOT EXISTS public.call_stat (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -125,6 +135,7 @@ CREATE TABLE IF NOT EXISTS public.call_stat_archive (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -138,6 +149,7 @@ CREATE TABLE IF NOT EXISTS public.cdr (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -149,6 +161,7 @@ CREATE TABLE IF NOT EXISTS public.cdr_archive (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -174,6 +187,7 @@ CREATE TABLE IF NOT EXISTS public.other (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -185,6 +199,7 @@ CREATE TABLE IF NOT EXISTS public.other_archive (
  _id character varying(255) NOT NULL,
  _rev integer NOT NULL,
  kazoo_db_name character varying(255) NOT NULL,
+ kazoo_account_id character varying(255) NOT NULL,
  data jsonb,
  PRIMARY KEY(_id, _rev, kazoo_db_name)
 );
@@ -539,7 +554,7 @@ CREATE OR REPLACE FUNCTION data_table_changes()
   DECLARE
     archive_table_name VARCHAR := TG_TABLE_NAME || '_archive';
   BEGIN
-    -- Verify _id, pvt_account_db are set for INSERT and UPDATES
+    -- Verify _id, kazoo_db_name are set for INSERT and UPDATES
     IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
       IF NEW._id IS NULL THEN
         RAISE EXCEPTION '_id cannot be null';
