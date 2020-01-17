@@ -139,9 +139,10 @@ clean_doc(Doc) ->
 
 -spec clean_doc(kz_json:object(), kz_json:path()) -> kz_json:object().
 clean_doc(Doc, Path) ->
-    case kz_json:is_defined(Path, Doc) of
-        'false' -> Doc;
-        'true' -> kz_json:filter(fun filter_doc/1, Doc, Path)
+    case kz_json:get_value(Path, Doc) of
+        'undefined' -> Doc;
+        'null' -> Doc;
+        _Exists -> kz_json:filter(fun filter_doc/1, Doc, Path)
     end.
 
 -spec filter_doc({kz_type:ne_binary(),kz_type:ne_binary()}) -> boolean().
