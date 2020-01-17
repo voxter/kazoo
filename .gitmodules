@@ -1,3 +1,3 @@
 [submodule "applications/ooma_services"]
 	path = applications/ooma_services
-	url = git@bitbucket.org:voxter/kazoo-ooma-services.git
+	url = git@gitlab.com:oomaforbin/enterprise/kazoo-ooma-services.git
