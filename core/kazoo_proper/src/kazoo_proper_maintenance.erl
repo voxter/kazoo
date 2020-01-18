@@ -46,6 +46,8 @@ run_seq_modules() ->
     'no_return'.
 
 -spec run_seq_module(atom() | kz_term:ne_binary()) -> 'no_return'.
+run_seq_module('pqc_cb_cdrs') ->
+    'no_return';
 run_seq_module(Module) when is_atom(Module) ->
     _ = [Module:Function()
          || Function <- ['seq'],
