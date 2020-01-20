@@ -424,15 +424,24 @@ compose_voicemail(Box, _IsOwner, Call) ->
     maybe_hunt(Box, Call).
 
 -spec start_composing_voicemail(mailbox(), kapps_call:call()) -> compose_return().
-start_composing_voicemail(#mailbox{media_extension=Ext}=Box, Call) ->
+start_composing_voicemail(#mailbox{interdigit_timeout=Interdigit
+                                  ,media_extension=Ext
+                                  }=Box, Call) ->
     _ = play_instructions(Box, Call),
-    _NoopId = kapps_call_command:noop(Call),
-    %% timeout after 5 min for safety, so this process cant hang around forever
-    case kapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
-        {'ok', _} ->
+    NoopId = kapps_call_command:noop(Call),
+    case kapps_call_command:collect_digits(?KEY_LENGTH
+                                          ,0
+                                          ,Interdigit
+                                          ,NoopId
+                                          ,[]
+                                          ,kapps_call_command:default_application_timeout()
+                                          ,Call
+                                          )
+    of
+        {'ok', <<>>} ->
             lager:info("played greeting and instructions to caller, recording new message"),
             record_voicemail(tmp_file(Ext), Box, Call);
-        {'dtmf', Digit} ->
+        {'ok', Digit} ->
             _ = kapps_call_command:b_flush(Call),
             handle_compose_dtmf(Box, Call, Digit);
         {'error', R} ->
@@ -550,10 +559,18 @@ play_instructions(#mailbox{skip_instructions='false'}, Call) ->
           {'error', 'channel_hungup'}.
 maybe_hunt(#mailbox{hunt='false'}=Mailbox, Call) ->
     start_composing_voicemail(Mailbox, Call);
-maybe_hunt(Mailbox, Call) ->
+maybe_hunt(#mailbox{interdigit_timeout=Interdigit}=Mailbox, Call) ->
     lager:debug("offering opportunity to dial another extension before recording"),
     NoopId = kapps_call_command:prompt(<<"vm-hunt">>, Call),
-    case kapps_call_command:wait_for_playback_timeout_or_dtmf(NoopId, 5000) of
+    case kapps_call_command:collect_digits(20
+                                          ,0
+                                          ,Interdigit
+                                          ,NoopId
+                                          ,[]
+                                          ,kapps_call_command:default_application_timeout()
+                                          ,Call
+                                          )
+    of
         {'ok', <<>>} -> start_composing_voicemail(Mailbox, Call);
         {'ok', Digits} -> do_hunt(Mailbox, Call, Digits);
         {'error', 'channel_hungup'}=E -> E

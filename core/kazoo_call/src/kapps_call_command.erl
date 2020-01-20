@@ -176,10 +176,9 @@
         ,wait_for_unbridge/0, wait_for_unbridge/1
         ]).
 -export([wait_for_application_or_dtmf/2]).
--export([wait_for_playback_timeout_or_dtmf/2]).
 -export([collect_digits/2, collect_digits/3
         ,collect_digits/4, collect_digits/5
-        ,collect_digits/6
+        ,collect_digits/6, collect_digits/7
         ]).
 -export([send_command/2]).
 
@@ -2424,6 +2423,18 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
                                          ,after_timeout=kz_term:to_integer(Timeout)
                                          }).
 
+-spec collect_digits(integer() | kz_term:ne_binary(), integer() | kz_term:ne_binary(), integer() | kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_object(), integer() | kz_term:ne_binary(), kapps_call:call()) ->
+          collect_digits_return().
+collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, AfterTimeout, Call) ->
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
+                                         ,interdigit=kz_term:to_integer(Interdigit)
+                                         ,noop_id=NoopId
+                                         ,terminators=Terminators
+                                         ,call=Call
+                                         ,after_timeout=kz_term:to_integer(AfterTimeout)
+                                         }).
+
 -spec do_collect_digits(wcc_collect_digits()) -> collect_digits_return().
 do_collect_digits(#wcc_collect_digits{max_digits=MaxDigits
                                      ,timeout=Timeout
@@ -2918,42 +2929,6 @@ wait_for_application_or_dtmf(Application, Timeout) ->
                 _ ->
                     wait_for_application_or_dtmf(Application, kz_time:decr_timeout(Timeout, Start))
             end
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Waits for the length of a media file + timeout seconds, or dtmf
-%% @end
-%%------------------------------------------------------------------------------
--spec wait_for_playback_timeout_or_dtmf(kz_term:api_binary(), timeout()) ->
-          {'error', 'channel_hungup'} | {'ok', binary()}.
-wait_for_playback_timeout_or_dtmf(NoopId, Timeout) ->
-    wait_for_playback_timeout_or_dtmf(NoopId, 300000, Timeout, <<>>).
-
--spec wait_for_playback_timeout_or_dtmf(kz_term:api_binary(), timeout(), timeout(), binary()) ->
-          {'error', 'channel_hungup'} | {'ok', binary()}.
-wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits) ->
-    Start = os:timestamp(),
-    case receive_event(RecvTimeout) of
-        {'ok', JObj} ->
-            case get_event_type(JObj) of
-                {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"noop">>} ->
-                    case kz_json:get_value(<<"Application-Response">>, JObj) of
-                        NoopId when is_binary(NoopId), NoopId =/= <<>> ->
-                            lager:debug("noop received, starting timeout"),
-                            wait_for_playback_timeout_or_dtmf('undefined', Timeout, 1500, Digits);
-                        _ -> wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits)
-                    end;
-                {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
-                    lager:debug("channel was destroyed while waiting for playback timeout or DTMF"),
-                    {'error', 'channel_hungup'};
-                {<<"call_event">>, <<"DTMF">>, _} ->
-                    Digit = kz_json:get_value(<<"DTMF-Digit">>, JObj),
-                    wait_for_playback_timeout_or_dtmf(NoopId, 1500, 1500, <<Digits/binary, Digit/binary>>);
-                _ -> wait_for_playback_timeout_or_dtmf(NoopId, kz_time:decr_timeout(RecvTimeout, Start), Timeout, Digits)
-            end;
-        {'error', 'timeout'} ->
-            lager:debug("timeout, got digits ~s", [Digits]),
-            {'ok', Digits}
     end.
 
 -type wait_for_fax_ret() :: {'ok', kz_json:object()} |
