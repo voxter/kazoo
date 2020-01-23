@@ -22,9 +22,6 @@
 -export([master_content_types/1]).
 -endif.
 
--type macro() :: {kz_term:ne_binary(), kz_term:ne_binary() | number() | macros()}.
--type macros() :: [macro()].
-
 -define(TEMPLATE_FAILURE_KEY(TemplateId, AccountId)
        ,{?MODULE, TemplateId, AccountId}
        ).

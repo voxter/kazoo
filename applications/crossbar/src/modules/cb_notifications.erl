@@ -36,6 +36,7 @@
 -define(PREVIEW, <<"preview">>).
 -define(SMTP_LOG, <<"smtplog">>).
 -define(CUSTOMER_UPDATE, <<"customer_update">>).
+-define(HERO_NEW_RELEASE, <<"hero_new_release">>).
 -define(MESSAGE, <<"message">>).
 -define(CB_LIST_SMTP_LOG, <<"notifications/smtp_log">>).
 -define(ACC_CHILDREN_LIST, <<"accounts/listing_by_children">>).
@@ -94,6 +95,8 @@ allowed_methods(_NotificationId, ?PREVIEW) ->
 allowed_methods(?SMTP_LOG, _SMTPLogId) ->
     [?HTTP_GET];
 allowed_methods(?CUSTOMER_UPDATE, ?MESSAGE) ->
+    [?HTTP_POST];
+allowed_methods(?HERO_NEW_RELEASE, ?MESSAGE) ->
     [?HTTP_POST].
 
 -spec authorize(cb_context:context()) -> boolean().
@@ -104,7 +107,7 @@ authorize(Context) ->
 authorize(Context, _Id) ->
     authorize(Context, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
 
--spec authorize(cb_context:context(), http_method(), req_nouns()) -> boolean().
+-spec authorize(cb_context:context(), http_method(), req_nouns()) -> boolean() | {'stop', cb_context:context()}.
 authorize(_Context, ?HTTP_GET, [{<<"notifications">>, _}]) ->
     'true';
 authorize(Context, _, [{<<"notifications">>, _}]) ->
@@ -112,6 +115,9 @@ authorize(Context, _, [{<<"notifications">>, _}]) ->
     cb_context:is_superduper_admin(Context);
 authorize(_Context, _, [{<<"notifications">>, _}, {<<"accounts">>, [?NE_BINARY=_AccountId]}]) ->
     'true';
+authorize(Context, _, [{<<"notifications">>, [?HERO_NEW_RELEASE, ?MESSAGE]}, {<<"accounts">>, _}]) ->
+    cb_context:is_superduper_admin(Context)
+        orelse {'stop', Context};
 authorize(_Context, _, _Nouns) ->
     'false'.
 
@@ -137,7 +143,8 @@ resource_exists(_Id) -> 'true'.
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_Id, ?PREVIEW) -> 'true';
 resource_exists(?SMTP_LOG, _Id) -> 'true';
-resource_exists(?CUSTOMER_UPDATE, ?MESSAGE) -> 'true'.
+resource_exists(?CUSTOMER_UPDATE, ?MESSAGE) -> 'true';
+resource_exists(?HERO_NEW_RELEASE, ?MESSAGE) -> 'true'.
 
 %%------------------------------------------------------------------------------
 %% @doc Add content types accepted and provided by this module
@@ -248,7 +255,11 @@ validate(Context, Id, ?PREVIEW) ->
 validate(Context, ?SMTP_LOG, Id) ->
     load_smtp_log_doc(Id, Context);
 validate(Context, ?CUSTOMER_UPDATE, ?MESSAGE) ->
-    may_be_validate_recipient_id(Context).
+    may_be_validate_recipient_id(Context);
+validate(Context, ?HERO_NEW_RELEASE=Id, ?MESSAGE) ->
+    DbId = kz_notification:db_id(Id),
+    Context1 = update_notification(maybe_update_db(Context), DbId, <<"notifications.hero_new_release">>),
+    cb_context:set_resp_etag(Context1, 'undefined').
 
 -spec validate_notifications(cb_context:context(), http_method()) -> cb_context:context().
 validate_notifications(Context, ?HTTP_GET) ->
@@ -432,6 +443,20 @@ post(Context, Id, ?PREVIEW) ->
         {'error', _E} ->
             lager:debug("failed to publish preview for ~s: ~p", [Id, _E]),
             crossbar_util:response('error', <<"Failed to process notification preview">>, Context)
+    end;
+
+post(Context, ?HERO_NEW_RELEASE, ?MESSAGE) ->
+    case kz_amqp_worker:call(build_hero_new_release_payload(Context)
+                            ,fun kapi_notifications:publish_hero_new_release/1
+                            ,fun kapi_notifications:notify_update_v/1
+                            )
+    of
+        {'ok', Resp} ->
+            lager:debug("published hero_new_release notification"),
+            handle_message_response(Context, Resp);
+        {'error', _E} ->
+            lager:debug("failed to publish hero_new_release notification: ~p", [_E]),
+            crossbar_util:response('error', <<"Failed to send message">>, Context)
     end.
 
 -spec build_customer_update_payload(cb_context:context()) -> kz_term:proplist().
@@ -472,6 +497,15 @@ build_preview_payload(Context, Notification) ->
        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).
 
+-spec build_hero_new_release_payload(cb_context:context()) -> kz_term:proplist().
+build_hero_new_release_payload(Context) ->
+    props:filter_empty(
+      [{<<"Account-ID">>, cb_context:account_id(Context)}
+      ,{<<"Asset-URL">>, cb_context:req_value(Context, <<"asset_url">>)}
+      ,{<<"Hero-Version">>, cb_context:req_value(Context, <<"hero_version">>)}
+       | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+      ]).
+
 -spec handle_preview_response(cb_context:context(), kz_json:object()) -> cb_context:context().
 handle_preview_response(Context, Resp) ->
     case kz_json:get_value(<<"Status">>, Resp) of
@@ -483,6 +517,23 @@ handle_preview_response(Context, Resp) ->
             lager:debug("notification preview status :~s", [_Status]),
             crossbar_util:response_202(<<"Notification processing">>, Context)
     end.
+
+-spec handle_message_response(cb_context:context(), kz_json:object()) -> cb_context:context().
+handle_message_response(Context, Resp) ->
+    case kz_json:get_ne_binary_value(<<"Status">>, Resp) of
+        <<"completed">> ->
+            crossbar_util:response_202(<<"Notification processing">>, Context);
+        <<"failed">> ->
+            FailureMessage = kz_json:get_ne_binary_value(<<"Failure-Message">>, Resp),
+            message_failure_response(Context, Resp, FailureMessage);
+        Status ->
+            message_failure_response(Context, Resp, Status)
+    end.
+
+-spec message_failure_response(cb_context:context(), kz_json:object(), kz_term:ne_binary()) -> cb_context:context().
+message_failure_response(Context, Resp, Msg) ->
+    lager:debug("failed to send message: ~p", [Resp]),
+    crossbar_util:response('error', Msg, Context).
 
 -spec headers(kz_term:ne_binary()) -> kz_term:ne_binaries().
 headers(<<"voicemail_to_email">>) ->
@@ -1092,6 +1143,10 @@ maybe_update(Context, Id) ->
 
 -spec update_notification(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
 update_notification(Context, Id) ->
+    update_notification(Context, Id, <<"notifications">>).
+
+-spec update_notification(cb_context:context(), kz_term:ne_binary(), kz_term:ne_binary()) -> cb_context:context().
+update_notification(Context, Id, Schema) ->
     Context1 = read(Context, Id),
     IsPreview = is_preview(cb_context:req_nouns(Context)),
     case {cb_context:resp_error_code(Context1)
@@ -1101,10 +1156,10 @@ update_notification(Context, Id) ->
         {_, 'success'} ->
             Context2 = maybe_inherit_defaults(Context, cb_context:doc(Context1)),
             OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
-            cb_context:validate_request_data(<<"notifications">>, Context2, OnSuccess);
+            cb_context:validate_request_data(Schema, Context2, OnSuccess);
         {404, 'error'} when IsPreview ->
             OnSuccess = fun(C) -> on_successful_validation(Id, C) end,
-            cb_context:validate_request_data(<<"notifications">>, Context1, OnSuccess);
+            cb_context:validate_request_data(Schema, Context1, OnSuccess);
         {_Code, _Status} -> Context1
     end.
 

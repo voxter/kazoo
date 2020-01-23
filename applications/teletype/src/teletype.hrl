@@ -49,6 +49,9 @@
                              {'failed', kz_term:ne_binary(), any()}.
 -type template_responses() :: [template_response()].
 
+-type macro() :: {kz_term:ne_binary(), kz_term:ne_binary() | number() | macros()}.
+-type macros() :: [macro()].
+
 -define(TEXT_PLAIN, <<"text/plain">>).
 -define(TEXT_HTML, <<"text/html">>).
 

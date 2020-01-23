@@ -105,6 +105,16 @@ curl -v -X GET \
 
 ## Change
 
+> POST /v2/accounts/{ACCOUNT_ID}/notifications/hero_new_release/message
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/notifications/hero_new_release/message
+```
+
+## Change
+
 > POST /v2/accounts/{ACCOUNT_ID}/notifications/customer_update/message
 
 ```shell

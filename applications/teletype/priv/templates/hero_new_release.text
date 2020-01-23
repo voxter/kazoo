@@ -1,0 +1,17 @@
+				Dear {{user.first_name}} {{user.last_name}}.
+
+
+{{hero.app_name}} version {{hero.version}} is now available.
+
+Download: {{hero.asset_url}}
+
+
+Account Information
+
+    Account ID: {{account.id}}
+    Account Name: {{account.name}}
+    Account Realm: {{account.realm}}
+
+
+
+Sent from {{system.encoded_node}}

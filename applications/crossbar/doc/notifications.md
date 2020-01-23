@@ -635,6 +635,29 @@ curl -v -X GET \
 }
 ```
 
+## Notify Hero release contact email of new release
+
+> POST /v2/accounts/{ACCOUNT_ID}/notifications/hero_new_release/message
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data": {"asset_url": "http://download.myapp.com/download/flavor/default/1.1.0", "hero_version": "1.1.0"}}'
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/notifications/hero_new_release/message
+```
+
+```json
+{
+  "data": "Notification processing",
+  "timestamp": "{TIMESTAMP}",
+  "version": "{VERSION}",
+  "node": "{NODE_HASH}",
+  "request_id": "{REQUEST_ID}",
+  "status": "success",
+  "auth_token": "{AUTH_TOKEN}"
+}
+```
+
 ## Customer update
 
 You can use the special Customer Update notification to send a message to all reseller's children users or to a particular account's users.

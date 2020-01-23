@@ -18585,6 +18585,73 @@
             ],
             "type": "object"
         },
+        "kapi.notifications.hero_new_release": {
+            "description": "AMQP API for notifications.hero_new_release",
+            "properties": {
+                "Account-DB": {
+                    "type": "string"
+                },
+                "Account-ID": {
+                    "type": "string"
+                },
+                "Asset-URL": {
+                    "description": "URL to download release asset",
+                    "type": "string"
+                },
+                "Attachment-URL": {
+                    "type": "string"
+                },
+                "Bcc": {
+                    "type": "string"
+                },
+                "Cc": {
+                    "type": "string"
+                },
+                "Event-Category": {
+                    "enum": [
+                        "notification"
+                    ],
+                    "type": "string"
+                },
+                "Event-Name": {
+                    "enum": [
+                        "hero_new_release"
+                    ],
+                    "type": "string"
+                },
+                "From": {
+                    "type": "string"
+                },
+                "HTML": {
+                    "type": "string"
+                },
+                "Hero-Version": {
+                    "description": "Semver-compliant version number of new release",
+                    "type": "string"
+                },
+                "Preview": {
+                    "type": "string"
+                },
+                "Reply-To": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "Text": {
+                    "type": "string"
+                },
+                "To": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "Account-ID",
+                "Asset-URL",
+                "Hero-Version"
+            ],
+            "type": "object"
+        },
         "kapi.notifications.inbound_fax": {
             "description": "AMQP API for notifications.inbound_fax",
             "properties": {
@@ -27274,6 +27341,29 @@
                 "from",
                 "subject",
                 "to"
+            ],
+            "type": "object"
+        },
+        "notifications.hero_new_release": {
+            "allOf": [
+                {
+                    "$ref": "notifications"
+                }
+            ],
+            "description": "Notifications templates",
+            "properties": {
+                "asset_url": {
+                    "description": "URL to download release asset",
+                    "type": "string"
+                },
+                "hero_version": {
+                    "description": "Semver-compliant version number of new release",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "asset_url",
+                "hero_version"
             ],
             "type": "object"
         },
@@ -44571,6 +44661,43 @@
                 "responses": {
                     "200": {
                         "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/notifications/hero_new_release/message": {
+            "post": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "notifications",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/notifications"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    },
+                    "202": {
+                        "description": "notification is processing"
+                    },
+                    "400": {
+                        "description": "validation failed"
+                    },
+                    "404": {
+                        "description": "notification template was not found"
+                    },
+                    "500": {
+                        "description": "failed to send email"
                     }
                 }
             }

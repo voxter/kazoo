@@ -33,6 +33,9 @@
         ,fax_outbound_error/1, fax_outbound_error_v/1
         ,fax_outbound_smtp_error/1, fax_outbound_smtp_error_v/1
 
+         %% Hero notifications
+        ,hero_new_release/1, hero_new_release_v/1
+
          %% Number and Port notifications
         ,cnam_request/1, cnam_request_v/1
         ,port_cancel/1, port_cancel_v/1
@@ -92,6 +95,9 @@
         ,publish_fax_outbound/1, publish_fax_outbound/2
         ,publish_fax_outbound_error/1, publish_fax_outbound_error/2
         ,publish_fax_outbound_smtp_error/1, publish_fax_outbound_smtp_error/2
+
+         %% Hero notifications
+        ,publish_hero_new_release/1, publish_hero_new_release/2
 
          %% Number and Port notifications
         ,publish_cnam_request/1, publish_cnam_request/2
@@ -577,6 +583,35 @@ outbound_smtp_fax_error_definition() ->
                               }
                              ]
                     }.
+
+
+%%%=============================================================================
+%%% Hero Notifications Definitions
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Get Hero New Release Notification API definition.
+%% @end
+%%------------------------------------------------------------------------------
+-spec hero_new_release_definition() -> kapi_definition:api().
+hero_new_release_definition() ->
+    #kapi_definition{name = <<"hero_new_release">>
+                    ,friendly_name = <<"New Hero release built">>
+                    ,description = <<"This event is triggered when a new whitelabelled Hero release is built">>
+                    ,build_fun = fun hero_new_release/1
+                    ,validate_fun = fun hero_new_release_v/1
+                    ,publish_fun = fun publish_hero_new_release/1
+                    ,binding = ?BINDING_STRING(<<"hero">>, <<"new_release">>)
+                    ,restrict_to = 'hero_new_release'
+                    ,required_headers = [<<"Account-ID">>
+                                        ,<<"Asset-URL">>
+                                        ,<<"Hero-Version">>
+                                        ]
+                    ,optional_headers = ?DEFAULT_OPTIONAL_HEADERS
+                    ,values = ?NOTIFY_VALUES(<<"hero_new_release">>)
+                    ,types = []
+                    }.
+
 
 %%%=============================================================================
 %%% Number and Port Notifications Definitions
@@ -1905,6 +1940,36 @@ publish_fax_outbound_smtp_error(API, ContentType) ->
                     ,values = Values
                     } = outbound_smtp_fax_error_definition(),
     {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun fax_outbound_smtp_error/1),
+    kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
+
+
+%%%=============================================================================
+%%% Hero Notifications Functions
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Takes prop-list, creates JSON string and publish it on AMQP.
+%% @end
+%%------------------------------------------------------------------------------
+-spec hero_new_release(kz_term:api_terms()) -> api_formatter_return().
+hero_new_release(Prop) ->
+    build_message(Prop, hero_new_release_definition()).
+
+-spec hero_new_release_v(kz_term:api_terms()) -> boolean().
+hero_new_release_v(Prop) ->
+    validate(Prop, hero_new_release_definition()).
+
+-spec publish_hero_new_release(kz_term:api_terms()) -> 'ok'.
+publish_hero_new_release(JObj) ->
+    publish_hero_new_release(JObj, ?DEFAULT_CONTENT_TYPE).
+
+-spec publish_hero_new_release(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
+publish_hero_new_release(API, ContentType) ->
+    #kapi_definition{binding = Binding
+                    ,values = Values
+                    } = hero_new_release_definition(),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, Values, fun hero_new_release/1),
     kz_amqp_util:notifications_publish(Binding, Payload, ContentType).
 
 

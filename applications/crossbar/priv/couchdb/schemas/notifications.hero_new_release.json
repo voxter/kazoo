@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "notifications.hero_new_release",
+    "allOf": [
+        {
+            "$ref": "notifications"
+        }
+    ],
+    "description": "Notifications templates",
+    "properties": {
+        "asset_url": {
+            "description": "URL to download release asset",
+            "type": "string"
+        },
+        "hero_version": {
+            "description": "Semver-compliant version number of new release",
+            "type": "string"
+        }
+    },
+    "required": [
+        "asset_url",
+        "hero_version"
+    ],
+    "type": "object"
+}
