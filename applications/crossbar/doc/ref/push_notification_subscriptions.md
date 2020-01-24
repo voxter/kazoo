@@ -4,56 +4,56 @@
 
 #### Schema
 
-Schema for a push notification subscription
+Schema for push notification subscriptions
 
 
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`notification_preferences.[]` |   | `string('new_unowned_voicemail' | 'new_voicemail' | 'chat')` |   | `true` |  
-`notification_preferences` | The types of notifications that the user wants to receive | `array(string('new_unowned_voicemail' | 'new_voicemail' | 'chat'))` | `["new_voicemail", "chat"]` | `true` |  
-`notification_registration_id` | The registration id for the mobile device | `string()` |   | `true` |  
-`notification_type` | The type of notification service to use | `string('apns' | 'fcm')` |   | `true` |  
+`app_name` | The identifier for the app that will be sending push notifications | `string()` |   | `false` |  
+`mobile_device_id` | An identifier provided by the mobile device | `string()` |   | `true` |  
+`notification_registration_ids` | Notification configuration per push notification registration id | `object()` |   | `true` |  
+`platform` | The platform that the push notification subscriptions are for | `string('android' | 'ios')` |   | `true` |  
 
 
 
 ## Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+> GET /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 ```
 
 ## Create
 
-> PUT /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+> PUT /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 ```
 
 ## Change
 
-> POST /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+> POST /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 ```
 
 ## Remove
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 
 ```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 ```
 

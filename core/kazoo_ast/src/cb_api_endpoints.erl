@@ -889,7 +889,6 @@ def_path_param(<<"{LIST_ENTRY_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{LIST_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MEDIA_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MENU_ID}">>=P) -> generic_id_path_param(P);
-def_path_param(<<"{MOBILE_DEVICE_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{NOTIFICATION_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{PORT_REQUEST_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{QUEUE_ID}">>=P) -> generic_id_path_param(P);

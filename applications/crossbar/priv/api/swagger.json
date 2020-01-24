@@ -5680,6 +5680,10 @@
                     },
                     "type": "object"
                 },
+                "push_notification_subscriptions": {
+                    "$ref": "#/definitions/push_notification_subscriptions",
+                    "description": "Active push notification subscriptions for the device"
+                },
                 "register_overwrite_notify": {
                     "default": false,
                     "description": "When true enables overwrite notifications",
@@ -28400,73 +28404,69 @@
             "type": "object"
         },
         "push_notification_subscriptions": {
-            "description": "Schema for a push notification subscription",
-            "oneOf": [
-                {
-                    "properties": {
-                        "notification_type": {
-                            "enum": [
-                                "apns"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "properties": {
-                        "notification_type": {
-                            "enum": [
-                                "fcm"
-                            ]
-                        },
-                        "platform": {
-                            "default": "android",
-                            "description": "The platform that the push notification subscription is for. Used only by fcm",
-                            "enum": [
-                                "android",
-                                "ios"
-                            ],
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "platform"
-                    ]
-                }
-            ],
+            "description": "Schema for push notification subscriptions",
             "properties": {
-                "notification_preferences": {
-                    "default": [
-                        "new_voicemail",
-                        "chat"
-                    ],
-                    "description": "The types of notifications that the user wants to receive",
-                    "items": {
-                        "enum": [
-                            "new_unowned_voicemail",
-                            "new_voicemail",
-                            "chat"
-                        ],
-                        "type": "string"
-                    },
-                    "type": "array"
-                },
-                "notification_registration_id": {
-                    "description": "The registration id for the mobile device",
+                "app_name": {
+                    "description": "The identifier for the app that will be sending push notifications",
                     "type": "string"
                 },
-                "notification_type": {
-                    "description": "The type of notification service to use",
+                "mobile_device_id": {
+                    "description": "An identifier provided by the mobile device",
+                    "type": "string"
+                },
+                "notification_registration_ids": {
+                    "additionalProperties": {
+                        "description": "Each property key is the registration id for the mobile device",
+                        "properties": {
+                            "notification_preferences": {
+                                "default": [
+                                    "chat",
+                                    "incoming_call",
+                                    "new_voicemail"
+                                ],
+                                "description": "The types of notifications that the user wants to receive. The values must be unique amongst all notification registration ids in the subscription",
+                                "items": {
+                                    "enum": [
+                                        "chat",
+                                        "incoming_call",
+                                        "new_unowned_voicemail",
+                                        "new_voicemail"
+                                    ],
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            "notification_type": {
+                                "description": "The type of notification service to use",
+                                "enum": [
+                                    "apns",
+                                    "fcm"
+                                ],
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "notification_preferences",
+                            "notification_type"
+                        ],
+                        "type": "object"
+                    },
+                    "description": "Notification configuration per push notification registration id",
+                    "type": "object"
+                },
+                "platform": {
+                    "description": "The platform that the push notification subscriptions are for",
                     "enum": [
-                        "apns",
-                        "fcm"
+                        "android",
+                        "ios"
                     ],
                     "type": "string"
                 }
             },
             "required": [
-                "notification_preferences",
-                "notification_registration_id",
-                "notification_type"
+                "mobile_device_id",
+                "notification_registration_ids",
+                "platform"
             ],
             "type": "object"
         },
@@ -39079,12 +39079,6 @@
             "required": true,
             "type": "string"
         },
-        "MOBILE_DEVICE_ID": {
-            "in": "path",
-            "name": "MOBILE_DEVICE_ID",
-            "required": true,
-            "type": "string"
-        },
         "MODB_SUFFIX": {
             "in": "path",
             "maxLength": 6,
@@ -45957,14 +45951,14 @@
                 }
             }
         },
-        "/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{MOBILE_DEVICE_ID}": {
+        "/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}": {
             "delete": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
-                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                        "$ref": "#/parameters/DEVICE_ID"
                     },
                     {
                         "$ref": "#/parameters/APP"
@@ -45985,7 +45979,7 @@
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
-                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                        "$ref": "#/parameters/DEVICE_ID"
                     },
                     {
                         "$ref": "#/parameters/APP"
@@ -46014,7 +46008,7 @@
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
-                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                        "$ref": "#/parameters/DEVICE_ID"
                     },
                     {
                         "$ref": "#/parameters/APP"
@@ -46043,7 +46037,7 @@
                         "$ref": "#/parameters/auth_token_header"
                     },
                     {
-                        "$ref": "#/parameters/MOBILE_DEVICE_ID"
+                        "$ref": "#/parameters/DEVICE_ID"
                     },
                     {
                         "$ref": "#/parameters/APP"
