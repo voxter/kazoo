@@ -9,6 +9,15 @@
     },
     "language": "javascript",
     "views": {
+        "by_mobile_device": {
+            "map": [
+                "function(doc) {",
+                "  var subscriptions = doc.push_notification_subscriptions;",
+                "  if (doc.pvt_type != 'device' || doc.pvt_deleted || !subscriptions) return;",
+                "  emit(subscriptions.mobile_device_id, doc);",
+                "}"
+            ]
+        },
         "by_reg_by_subscription": {
             "map": [
                 "function(doc) {",

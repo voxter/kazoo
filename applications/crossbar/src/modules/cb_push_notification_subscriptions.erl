@@ -22,6 +22,8 @@
 
 -define(PUSH_NOTIFICATION_SUBSCRIPTIONS, <<"push_notification_subscriptions">>).
 
+-define(BY_MOBILE_DEVICE, <<"push_notification_subscriptions/by_mobile_device">>).
+
 %%%=============================================================================
 %%% API
 %%%=============================================================================
@@ -108,8 +110,9 @@ put(Context, App, DeviceId) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
-post(Context, _App, _DeviceId) ->
-    save_subscriptions(Context, fun subs_response/1).
+post(Context, _App, DeviceId) ->
+    OnPurgeSuccess = fun() -> save_subscriptions(Context, fun subs_response/1) end,
+    purge_existing_subscriptions_for_mobile_device(Context, DeviceId, OnPurgeSuccess).
 
 %%------------------------------------------------------------------------------
 %% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
@@ -201,6 +204,58 @@ save_subscriptions(DeviceContext, OnSaveSuccess) ->
         'true' -> DeviceContext1;
         'false' -> OnSaveSuccess(DeviceContext1)
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Purge existing subscriptions for the mobile device from Kazoo device
+%% docs.
+%% @end
+%%------------------------------------------------------------------------------
+-type on_purge_success_callback() :: fun(() -> cb_context:context()).
+
+-spec purge_existing_subscriptions_for_mobile_device(cb_context:context(), kz_term:ne_binary(), on_purge_success_callback()) ->
+          cb_context:context().
+purge_existing_subscriptions_for_mobile_device(Context, DeviceId, OnPurgeSuccess) ->
+    MobileDeviceId = kz_json:get_ne_binary_value([?PUSH_NOTIFICATION_SUBSCRIPTIONS, <<"mobile_device_id">>]
+                                                ,cb_context:doc(Context)
+                                                ),
+    ViewContext = crossbar_doc:load_view(?BY_MOBILE_DEVICE, [{'key', MobileDeviceId}], Context, fun normalize_view_results/2),
+    case cb_context:has_errors(ViewContext) of
+        'true' -> ViewContext;
+        'false' ->
+            OtherDeviceDocs = cb_context:doc(ViewContext),
+            purge_existing_subscriptions(Context, DeviceId, OtherDeviceDocs, OnPurgeSuccess)
+    end.
+
+-spec purge_existing_subscriptions(cb_context:context(), kz_term:ne_binary(), [kzd_devices:doc()], on_purge_success_callback()) ->
+          cb_context:context().
+purge_existing_subscriptions(_, _, [], OnPurgeSuccess) -> OnPurgeSuccess();
+purge_existing_subscriptions(Context, DeviceId, [OtherDeviceDoc|OtherDeviceDocs], OnPurgeSuccess) ->
+    OtherDeviceId = kz_doc:id(OtherDeviceDoc),
+    OnSuccess = fun() -> purge_existing_subscriptions(Context, DeviceId, OtherDeviceDocs, OnPurgeSuccess) end,
+    case OtherDeviceId of
+        DeviceId ->
+            %% Skipping purging the one we are planning to update, it's a waste and causes conflicts
+            OnSuccess();
+        _ -> purge_subscriptions(Context, OtherDeviceId, OtherDeviceDoc, OnSuccess)
+    end.
+
+-spec purge_subscriptions(cb_context:context(), kz_term:ne_binary(), kzd_devices:doc(), on_purge_success_callback()) ->
+          cb_context:context().
+purge_subscriptions(Context, OtherDeviceId, OtherDeviceDoc, OnSuccess) ->
+    lager:debug("purging existing subscriptions in other device ~s", [OtherDeviceId]),
+    OtherDeviceDoc1 = delete_subscriptions(OtherDeviceDoc),
+    case kz_datamgr:save_doc(cb_context:account_db(Context), OtherDeviceDoc1) of
+        {'ok', _} -> OnSuccess();
+        {'error', Error} -> crossbar_doc:handle_datamgr_errors(Error, OtherDeviceId, Context)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Normalizes the results of a view
+%% @end
+%%------------------------------------------------------------------------------
+-spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
+normalize_view_results(JObj, Acc) ->
+    [kz_json:get_json_value(<<"value">>, JObj)|Acc].
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether a push notification subscription exists for the specified
