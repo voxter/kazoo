@@ -20,6 +20,7 @@
 
 -include("crossbar.hrl").
 
+-define(PUSH_KEY, <<"push">>).
 -define(PUSH_NOTIFICATION_SUBSCRIPTIONS, <<"push_notification_subscriptions">>).
 
 -define(BY_MOBILE_DEVICE, <<"push_notification_subscriptions/by_mobile_device">>).
@@ -189,7 +190,50 @@ on_successful_validation(App, DeviceContext, Context) ->
     NewDoc = kz_json:set_value(<<"app_name">>, App, cb_context:doc(Context)),
     lager:debug("set push notification subscriptions app_name: ~p", [NewDoc]),
     DeviceDoc = kz_json:set_value(?PUSH_NOTIFICATION_SUBSCRIPTIONS, NewDoc, cb_context:doc(DeviceContext)),
-    cb_context:set_doc(DeviceContext, DeviceDoc).
+    cb_context:set_doc(DeviceContext, update_pusher_props(DeviceDoc)).
+
+%%------------------------------------------------------------------------------
+%% @doc Shims the behaviour originally handled by
+%% `pusher_listener:handle_reg_success/2' - that is, push token information is
+%% set on the device so that it will be treated as a push endpoint by
+%% `kz_endpoint'. This is in place because pusher _cannot_ be run alongside
+%% navi.
+%% @end
+%%------------------------------------------------------------------------------
+-spec update_pusher_props(kzd_devices:doc()) -> kzd_devices:doc().
+update_pusher_props(DeviceDoc) ->
+    case pusher_params_compat(subscriptions(DeviceDoc)) of
+        [] -> kz_json:delete_key(?PUSH_KEY, DeviceDoc);
+        Params ->
+            Push = kz_json:set_values(Params, kz_json:new()),
+            kz_json:set_value(?PUSH_KEY, Push, DeviceDoc)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Uses a subscription for `incoming_call', if present, to produce push
+%% params in a format that is compatible with `pusher_listener:build_push/4'.
+%% @end
+%%------------------------------------------------------------------------------
+-spec pusher_params_compat(kz_json:object()) -> kz_term:proplist().
+pusher_params_compat(Subscriptions) ->
+    AppName = kz_json:get_ne_binary_value(<<"app_name">>, Subscriptions),
+    NotifRegs = kz_json:get_json_value(<<"notification_registration_ids">>, Subscriptions),
+    pusher_params_compat_fold(AppName, kz_json:get_values(NotifRegs)).
+
+-spec pusher_params_compat_fold(kz_term:ne_binary(), {kz_json:json_terms(), kz_json:keys()}) ->
+          kz_term:proplist().
+pusher_params_compat_fold(_, {[], []}) -> [];
+pusher_params_compat_fold(AppName, {[Subscription|Subscriptions], [RegId|RegIds]}) ->
+    NotifPrefs = kz_json:get_list_value(<<"notification_preferences">>, Subscription),
+    NotifType = kz_json:get_ne_binary_value(<<"notification_type">>, Subscription),
+    case lists:member(<<"incoming_call">>, NotifPrefs) of
+        'true' ->
+            [{<<"Token-App">>, AppName}
+            ,{<<"Token-ID">>, RegId}
+            ,{<<"Token-Type">>, NotifType}
+            ];
+        'false' -> pusher_params_compat_fold(AppName, {Subscriptions, RegIds})
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Saves new push notification subscriptions into the device doc.
@@ -290,12 +334,17 @@ subscriptions(DeviceDoc) ->
     kz_json:get_json_value(?PUSH_NOTIFICATION_SUBSCRIPTIONS, DeviceDoc).
 
 %%------------------------------------------------------------------------------
-%% @doc Delete subscriptions from a device doc.
+%% @doc Delete subscriptions from a device doc. Also deletes the pusher config
+%% to keep it in sync with the subscriptions.
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_subscriptions(kzd_devices:doc()) -> kzd_devices:doc().
 delete_subscriptions(DeviceDoc) ->
-    kz_json:delete_key(?PUSH_NOTIFICATION_SUBSCRIPTIONS, DeviceDoc).
+    kz_json:delete_keys([?PUSH_KEY
+                        ,?PUSH_NOTIFICATION_SUBSCRIPTIONS
+                        ]
+                       ,DeviceDoc
+                       ).
 
 %%------------------------------------------------------------------------------
 %% @doc Format response for requests that return subscription data

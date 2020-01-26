@@ -22,6 +22,9 @@
         ,code_change/3
         ]).
 
+%% Exported for use by navi app
+-export([build_push/4]).
+
 -include("pusher.hrl").
 -include_lib("kazoo_sip/include/kzsip_uri.hrl").
 
