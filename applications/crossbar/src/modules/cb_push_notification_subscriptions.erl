@@ -112,7 +112,7 @@ put(Context, App, DeviceId) ->
 %%------------------------------------------------------------------------------
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, _App, DeviceId) ->
-    OnPurgeSuccess = fun() -> save_subscriptions(Context, fun subs_response/1) end,
+    OnPurgeSuccess = fun() -> maybe_save_subscriptions(Context, fun subs_response/1) end,
     purge_existing_subscriptions_for_mobile_device(Context, DeviceId, OnPurgeSuccess).
 
 %%------------------------------------------------------------------------------
@@ -176,21 +176,105 @@ read_doc_for_subscriptions(Context, DeviceId) ->
 %%------------------------------------------------------------------------------
 -spec validate_push_notification_subscriptions(cb_context:context(), kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
 validate_push_notification_subscriptions(Context, App, DeviceContext) ->
-    OnSuccess = fun(C) -> on_successful_validation(App, DeviceContext, C) end,
-    cb_context:validate_request_data(?PUSH_NOTIFICATION_SUBSCRIPTIONS, Context, OnSuccess).
+    %% Set values that came from path
+    ReqData = kz_json:set_value(<<"app_name">>, App, cb_context:req_data(Context)),
+    lager:debug("set push notification subscriptions app_name: ~p", [ReqData]),
+    Context1 = cb_context:set_req_data(Context, ReqData),
+    OnSuccess = fun(C) -> on_successful_validation(DeviceContext, C) end,
+    cb_context:validate_request_data(?PUSH_NOTIFICATION_SUBSCRIPTIONS, Context1, OnSuccess).
 
 %%------------------------------------------------------------------------------
-%% @doc Called when request has validated successfully, prepares document for saving in db
+%% @doc Called when request data has validated against the schema successfully.
+%% Performs additional validation not possible in JSON schema.
 %% @end
 %%------------------------------------------------------------------------------
--spec on_successful_validation(kz_term:ne_binary(), cb_context:context(), cb_context:context()) -> cb_context:context().
-on_successful_validation(App, DeviceContext, Context) ->
-    %% Set values that came from path
-    lager:debug("new push notification subscriptions validated successfully"),
-    NewDoc = kz_json:set_value(<<"app_name">>, App, cb_context:doc(Context)),
-    lager:debug("set push notification subscriptions app_name: ~p", [NewDoc]),
-    DeviceDoc = kz_json:set_value(?PUSH_NOTIFICATION_SUBSCRIPTIONS, NewDoc, cb_context:doc(DeviceContext)),
-    cb_context:set_doc(DeviceContext, update_pusher_props(DeviceDoc)).
+-spec on_successful_validation(cb_context:context(), cb_context:context()) -> cb_context:context().
+on_successful_validation(DeviceContext, Context) ->
+    Validators = [fun validate_notification_preference_uniqueness/1
+                 ,fun validate_ios_incoming_call_is_apns/1
+                 ],
+    Context1 = cb_context:validators(Context, Validators),
+    case cb_context:has_errors(Context1) of
+        'true' -> Context1;
+        'false' ->
+            lager:debug("new push notification subscriptions validated successfully"),
+            DeviceDoc = kz_json:set_value(?PUSH_NOTIFICATION_SUBSCRIPTIONS, cb_context:doc(Context), cb_context:doc(DeviceContext)),
+            cb_context:set_doc(DeviceContext, update_pusher_props(DeviceDoc))
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Validates that there are no duplicate notification preferences specified
+%% across more than one subscription.
+%% @end
+%%------------------------------------------------------------------------------
+-spec validate_notification_preference_uniqueness(cb_context:context()) -> cb_context:context().
+validate_notification_preference_uniqueness(Context) ->
+    ReqData = cb_context:req_data(Context),
+    Subscriptions = kz_json:values(kz_json:get_json_value(<<"notification_registration_ids">>, ReqData)),
+    validate_notification_preference_uniqueness_fold(Context, Subscriptions).
+
+-spec validate_notification_preference_uniqueness_fold(cb_context:context(), kz_json:object()) -> cb_context:context().
+validate_notification_preference_uniqueness_fold(Context, Subscriptions) ->
+    validate_notification_preference_uniqueness_fold(Context, Subscriptions, sets:new(), sets:new()).
+
+-spec validate_notification_preference_uniqueness_fold(cb_context:context(), kz_json:object(), sets:set(kz_term:ne_binary()), sets:set(kz_term:ne_binary())) ->
+          cb_context:context().
+validate_notification_preference_uniqueness_fold(Context, [], _, Dupes) ->
+    case sets:size(Dupes) of
+        0 -> Context;
+        _ ->
+            Msg = <<"Each notification preference can only appear once across all notification registration ids in the subscription">>,
+            ValidationError = kz_json:from_list([{<<"message">>, Msg}
+                                                ,{<<"duplicates">>, sets:to_list(Dupes)}
+                                                ]),
+            Data = kz_json:set_value([<<"notification_preferences">>, <<"invalid">>], ValidationError, kz_json:new()),
+            crossbar_util:response_invalid_data(Data, Context)
+    end;
+validate_notification_preference_uniqueness_fold(Context, [Subscription|Subscriptions], ExistingPrefs, Dupes) ->
+    NotifPrefs = kz_json:get_list_value(<<"notification_preferences">>, Subscription),
+    {ExistingPrefs1, Dupes1} = lists:foldl(fun existing_prefs_fold/2, {ExistingPrefs, Dupes}, NotifPrefs),
+    validate_notification_preference_uniqueness_fold(Context, Subscriptions, ExistingPrefs1, Dupes1).
+
+-type existing_prefs_fold_acc() :: {sets:set(kz_term:ne_binary()), sets:set(kz_term:ne_binary())}.
+
+-spec existing_prefs_fold(kz_term:ne_binary(), existing_prefs_fold_acc()) -> existing_prefs_fold_acc().
+existing_prefs_fold(NotifPref, {ExistingPrefs, Dupes}) ->
+    case sets:is_element(NotifPref, ExistingPrefs) of
+        'true' -> {ExistingPrefs, sets:add_element(NotifPref, Dupes)};
+        'false' -> {sets:add_element(NotifPref, ExistingPrefs), Dupes}
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Validates that the incoming_call notification preference is not
+%% configured to use FCM when on iOS.
+%% Assumes that the `validate_notification_preference_uniqueness' check occurs
+%% first in order to avoid ambiguity of which subscription triggers this
+%% validation.
+%% @end
+%%------------------------------------------------------------------------------
+validate_ios_incoming_call_is_apns(Context) ->
+    ReqData = cb_context:req_data(Context),
+    case kz_json:get_ne_binary_value(<<"platform">>, ReqData) of
+        <<"ios">> ->
+            Subscriptions = kz_json:values(kz_json:get_json_value(<<"notification_registration_ids">>, ReqData)),
+            validate_ios_incoming_call_is_apns_fold(Context, Subscriptions);
+        _ -> Context
+    end.
+
+validate_ios_incoming_call_is_apns_fold(Context, []) -> Context;
+validate_ios_incoming_call_is_apns_fold(Context, [Subscription|Subscriptions]) ->
+    NotifPrefs = kz_json:get_list_value(<<"notification_preferences">>, Subscription),
+    NotifType = kz_json:get_ne_binary_value(<<"notification_type">>, Subscription),
+    case {lists:member(<<"incoming_call">>, NotifPrefs), NotifType =:= <<"apns">>} of
+        {'true', 'false'} ->
+            Msg = <<"The incoming_call notification preference is only supported under notification_type \"apns\" on iOS">>,
+            ValidationError = kz_json:from_list([{<<"message">>, Msg}
+                                                ,{<<"notification_type">>, NotifType}
+                                                ]),
+            Data = kz_json:set_value([<<"notification_preferences">>, <<"invalid">>], ValidationError, kz_json:new()),
+            crossbar_util:response_invalid_data(Data, Context);
+        _ -> validate_ios_incoming_call_is_apns_fold(Context, Subscriptions)
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Shims the behaviour originally handled by
@@ -217,30 +301,48 @@ update_pusher_props(DeviceDoc) ->
 -spec pusher_params_compat(kz_json:object()) -> kz_term:proplist().
 pusher_params_compat(Subscriptions) ->
     AppName = kz_json:get_ne_binary_value(<<"app_name">>, Subscriptions),
+    SIPProxyServer = kz_json:get_ne_binary_value(<<"sip_proxy_server">>, Subscriptions),
     NotifRegs = kz_json:get_json_value(<<"notification_registration_ids">>, Subscriptions),
-    pusher_params_compat_fold(AppName, kz_json:get_values(NotifRegs)).
+    pusher_params_compat_fold(AppName, SIPProxyServer, kz_json:get_values(NotifRegs)).
 
--spec pusher_params_compat_fold(kz_term:ne_binary(), {kz_json:json_terms(), kz_json:keys()}) ->
+-spec pusher_params_compat_fold(kz_term:ne_binary(), kz_term:ne_binary(), {kz_json:json_terms(), kz_json:keys()}) ->
           kz_term:proplist().
-pusher_params_compat_fold(_, {[], []}) -> [];
-pusher_params_compat_fold(AppName, {[Subscription|Subscriptions], [RegId|RegIds]}) ->
+pusher_params_compat_fold(_, _, {[], []}) -> [];
+pusher_params_compat_fold(AppName, SIPProxyServer, {[Subscription|Subscriptions], [RegId|RegIds]}) ->
     NotifPrefs = kz_json:get_list_value(<<"notification_preferences">>, Subscription),
     NotifType = kz_json:get_ne_binary_value(<<"notification_type">>, Subscription),
     case lists:member(<<"incoming_call">>, NotifPrefs) of
         'true' ->
             [{<<"Token-App">>, AppName}
             ,{<<"Token-ID">>, RegId}
+            ,{<<"Token-Proxy">>, <<"sip:", SIPProxyServer/binary>>}
             ,{<<"Token-Type">>, NotifType}
             ];
-        'false' -> pusher_params_compat_fold(AppName, {Subscriptions, RegIds})
+        'false' -> pusher_params_compat_fold(AppName, SIPProxyServer, {Subscriptions, RegIds})
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Saves new push notification subscriptions into the device doc if they
+%% have changed.
+%% @end
+%%------------------------------------------------------------------------------
+-type on_save_success_callback() :: fun((cb_context:context()) -> cb_context:context()).
+
+-spec maybe_save_subscriptions(cb_context:context(), on_save_success_callback()) -> cb_context:context().
+maybe_save_subscriptions(DeviceContext, OnSaveSuccess) ->
+    DeviceDoc = cb_context:doc(DeviceContext),
+    OldDeviceDoc = cb_context:fetch(DeviceContext, 'db_doc'),
+    case kz_json:are_equal(DeviceDoc, OldDeviceDoc) of
+        'true' ->
+            DeviceContext1 = crossbar_doc:handle_datamgr_success(DeviceDoc, DeviceContext),
+            OnSaveSuccess(DeviceContext1);
+        'false' -> save_subscriptions(DeviceContext, OnSaveSuccess)
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Saves new push notification subscriptions into the device doc.
 %% @end
 %%------------------------------------------------------------------------------
--type on_save_success_callback() :: fun((cb_context:context()) -> cb_context:context()).
-
 -spec save_subscriptions(cb_context:context(), on_save_success_callback()) -> cb_context:context().
 save_subscriptions(DeviceContext, OnSaveSuccess) ->
     DeviceContext1 = crossbar_doc:save(DeviceContext),

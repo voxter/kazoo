@@ -28461,12 +28461,18 @@
                         "ios"
                     ],
                     "type": "string"
+                },
+                "sip_proxy_server": {
+                    "description": "The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification",
+                    "type": "string"
                 }
             },
             "required": [
+                "app_name",
                 "mobile_device_id",
                 "notification_registration_ids",
-                "platform"
+                "platform",
+                "sip_proxy_server"
             ],
             "type": "object"
         },

@@ -10,6 +10,7 @@
 -export([mobile_device_id/1, mobile_device_id/2, set_mobile_device_id/2]).
 -export([notification_registration_ids/1, notification_registration_ids/2, set_notification_registration_ids/2]).
 -export([platform/1, platform/2, set_platform/2]).
+-export([sip_proxy_server/1, sip_proxy_server/2, set_sip_proxy_server/2]).
 
 
 -include("kz_documents.hrl").
@@ -70,3 +71,15 @@ platform(Doc, Default) ->
 -spec set_platform(doc(), binary()) -> doc().
 set_platform(Doc, Platform) ->
     kz_json:set_value([<<"platform">>], Platform, Doc).
+
+-spec sip_proxy_server(doc()) -> kz_term:api_binary().
+sip_proxy_server(Doc) ->
+    sip_proxy_server(Doc, 'undefined').
+
+-spec sip_proxy_server(doc(), Default) -> binary() | Default.
+sip_proxy_server(Doc, Default) ->
+    kz_json:get_binary_value([<<"sip_proxy_server">>], Doc, Default).
+
+-spec set_sip_proxy_server(doc(), binary()) -> doc().
+set_sip_proxy_server(Doc, SipProxyServer) ->
+    kz_json:set_value([<<"sip_proxy_server">>], SipProxyServer, Doc).
