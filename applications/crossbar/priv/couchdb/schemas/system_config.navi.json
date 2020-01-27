@@ -58,11 +58,6 @@
                                 "enum": [
                                     "apns"
                                 ]
-                            },
-                            "pushkit": {
-                                "default": false,
-                                "description": "Is this app using pushkit notifications?",
-                                "type": "boolean"
                             }
                         },
                         "required": [

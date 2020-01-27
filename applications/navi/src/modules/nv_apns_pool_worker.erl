@@ -23,38 +23,28 @@
 
 -record(state, {default_topic  :: kz_term:ne_binary()
                ,apns_pid       :: pid()
-               ,pushkit        :: boolean()
                }).
 -type state() :: #state{}.
 
--type apns_notification_payload() :: #{'alert' => binary()
-                                      ,'badge' => integer()
-                                      ,'sound' => binary()
-                                      ,'content-available' => 1
-                                      ,'category' => binary()
-                                      ,'thread-id' => binary()
-                                      }.
--type apns_payload() :: #{'aps' => apns_notification_payload()
-                         ,'metadata' => kz_term:proplist()
-                         }.
+-type apns_notification_payload() :: #{binary() => binary() | integer()}.
+-type apns_payload() :: #{binary() => apns_notification_payload()}.
 
 -spec start_link(kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Args) ->
     PoolName = props:get_value('pool_name', Args),
     Connection = props:get_value('connection', Args),
     DefaultTopic = props:get_value('default_topic', Args),
-    IsPushkit = props:get_value('pushkit', Args),
 
     lager:debug("starting apns notification worker for supervisor: ~s", [PoolName]),
-    gen_server:start_link(?MODULE, [PoolName, Connection, DefaultTopic, IsPushkit], []).
+    gen_server:start_link(?MODULE, [PoolName, Connection, DefaultTopic], []).
 
 -spec init(any()) -> {'ok', state()}.
-init([PoolName, Connection, DefaultTopic, IsPushkit]) ->
+init([PoolName, Connection, DefaultTopic]) ->
     process_flag('trap_exit', 'true'),
     kz_util:put_callid(<<(kz_term:to_binary(PoolName))/binary, "_worker">>),
 
     {'ok', Pid} = apns:connect(Connection),
-    {'ok', #state{default_topic=DefaultTopic, apns_pid=Pid, pushkit=IsPushkit}}.
+    {'ok', #state{default_topic=DefaultTopic, apns_pid=Pid}}.
 
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
@@ -69,13 +59,13 @@ handle_cast({'push', {RegistrationId, Message, ExtraParams}}, #state{default_top
 
     Headers = #{'apns_topic' => TrueTopic},
 
-    BaseNotification = #{'aps' => #{'alert' => Message}
-                        ,'metadata' => kz_json:to_map(props:get_value(<<"metadata">>, ExtraParams, []))
+    BaseNotification = #{<<"aps">> => #{<<"alert">> => Message}
+                        ,<<"metadata">> => kz_json:to_map(props:get_value(<<"metadata">>, ExtraParams, []))
                         },
     SoundNotification = set_sound_value(BaseNotification, ExtraParams),
 
     case apns:push_notification(Pid, RegistrationId, SoundNotification, Headers) of
-        {'timeout', _StreamId} ->
+        'timeout' ->
             lager:debug("apns notification timed out in connection. This will happen every time, so this is no cause for worry"),
             {'noreply', State};
         {200, _, _} ->
@@ -114,6 +104,6 @@ set_sound_value(Notification, ExtraParams) ->
     case props:get_value(<<"soundless">>, ExtraParams, 'false') of
         'true' -> Notification;
         'false' ->
-            NewAps = maps:put('sound', props:get_value(<<"sound">>, ExtraParams, <<"default">>), maps:get('aps', Notification)),
-            maps:put('aps', NewAps, Notification)
+            NewAps = maps:put(<<"sound">>, props:get_value(<<"sound">>, ExtraParams, <<"default">>), maps:get(<<"aps">>, Notification)),
+            maps:put(<<"aps">>, NewAps, Notification)
     end.

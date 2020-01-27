@@ -11,6 +11,7 @@
 
 %% API
 -export([start_link/0
+        ,start_server/1
         ,get_living_children/0
         ,push/3
         ]).
@@ -33,6 +34,15 @@
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
+
+%%------------------------------------------------------------------------------
+%% @doc Starts a new push server process for the given notification server
+%% configuration.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_server(kz_json:object()) -> kz_types:sup_startchild_ret().
+start_server(ServerConfig) ->
+    supervisor:start_child(?SERVER, process_server_config(ServerConfig)).
 
 %%------------------------------------------------------------------------------
 %% @doc gets the supervisor's children. Can be used to determine

@@ -8,16 +8,12 @@
 
 -include("navi.hrl").
 
--export([add_apns_app/5, add_apns_app/6, add_fcm_app/3]).
+-export([add_apns_app/5, add_fcm_app/3]).
+-export([start_server/1]).
 
--spec add_apns_app(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:object()} | {{'error', any()}, kz_term:ne_binary()}.
+-spec add_apns_app(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
+          'ok' | {{'error', any()}, kz_term:ne_binary()}.
 add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile) ->
-    add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, 'false').
-
--spec add_apns_app(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary() | boolean()) -> {'ok', kz_json:object()} | {{'error', any()}, kz_term:ne_binary()}.
-add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, IsPushkit) when is_binary(IsPushkit) ->
-    add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, kz_term:is_true(IsPushkit));
-add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, IsPushkit) ->
     case {file:read_file(CertificateFile), file:read_file(KeyFile)} of
         {{'ok', CertificateBin}, {'ok', KeyBin}} ->
             NewApp = kz_json:from_list([{<<"app_name">>, Name}
@@ -25,7 +21,6 @@ add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, IsPushkit) ->
                                        ,{<<"default_topic">>, Topic}
                                        ,{<<"environment">>, Environment}
                                        ,{<<"key">>, KeyBin}
-                                       ,{<<"pushkit">>, IsPushkit}
                                        ,{<<"notification_type">>, <<"apns">>}
                                        ]),
             validate_and_set_app(NewApp);
@@ -33,7 +28,7 @@ add_apns_app(Name, Topic, Environment, CertificateFile, KeyFile, IsPushkit) ->
         {_, {'error', _} = Error} -> {Error, <<"Error reading key file">>}
     end.
 
--spec add_fcm_app(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> {'ok', kz_json:object()} | {{'error', any()}, kz_term:ne_binary()}.
+-spec add_fcm_app(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok' | {{'error', any()}, kz_term:ne_binary()}.
 add_fcm_app(Name, Platform, ApiKey) ->
     NewApp = kz_json:from_list([{<<"app_name">>, Name}
                                ,{<<"api_key">>, ApiKey}
@@ -42,7 +37,7 @@ add_fcm_app(Name, Platform, ApiKey) ->
                                ]),
     validate_and_set_app(NewApp).
 
--spec validate_and_set_app(kz_json:object()) -> {'ok', kz_json:object()} | {{'error', any()}, kz_term:ne_binary()}.
+-spec validate_and_set_app(kz_json:object()) -> 'ok' | {{'error', any()}, kz_term:ne_binary()}.
 validate_and_set_app(NewApp) ->
     {'ok', Config} = kapps_config:get_category(?CONFIG_CAT),
     Apps = kz_json:get_value(<<"notification_servers">>, kz_json:get_value(<<"default">>, Config)),
@@ -50,8 +45,27 @@ validate_and_set_app(NewApp) ->
     case kz_json_schema:validate(<<"system_config.navi">>, NewConfig) of
         {'ok', _} ->
             lager:error("Did validate"),
-            kapps_config:set(?CONFIG_CAT, <<"notification_servers">>, [NewApp|Apps]);
+            ConfigSetResult = kapps_config:set(?CONFIG_CAT, <<"notification_servers">>, [NewApp|Apps]),
+            io:format("~p~n", [ConfigSetResult]),
+            start_server(NewApp);
         Error ->
             lager:error("Did not validate"),
             {{'error', Error}, <<"Error validating app">>}
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Starts a new push server process for the given notification server
+%% configuration.
+%% @end
+%%------------------------------------------------------------------------------
+-spec start_server(kz_json:object()) -> 'ok' | {{'error', any()}, kz_term:ne_binary()}.
+start_server(ServerConfig) ->
+    case navi_module_sup:start_server(ServerConfig) of
+        {'ok', Pid} -> start_server_success(Pid);
+        {'ok', Pid, _} -> start_server_success(Pid);
+        {'error', _}=E -> {E, <<"Unable to start push server process">>}
+    end.
+
+-spec start_server_success(pid()) -> 'ok'.
+start_server_success(Pid) ->
+    io:format("Push server started under PID ~s~n", [pid_to_list(Pid)]).
