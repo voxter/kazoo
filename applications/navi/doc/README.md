@@ -1,6 +1,8 @@
 # Overview
 The Navi application is used for listening to notifications through amqp and using them to create push notifications for iOS and Android devices.
 
+While Navi depends on the `kz_endpoint` module and `pusher_role` Kamailio functionality of the `pusher` app, the `pusher` app **must not** actually be running in Navi is used. Navi's API will ensure compatibility with the expectations of both those dependencies, by setting the `push` property on Kazoo devices for which push notification subscriptions are registered.
+
 ## Architectural Overview
 Navi functionality is implemented across several modules:
 * cb\_push\_notification\_subscriptions
@@ -12,12 +14,21 @@ Navi functionality is implemented across several modules:
 
 ### cb\_push\_notification\_subscriptions.erl
 This is the crossbar module where users can register for push notifications. See the schema for a push notification subscription for the necessary data. A couple fields of note:
-* app\_name: this field determines that app that will deliver the notification to the user. There should be a corresponding app in the system\_config.navi 
+* `APP`: URL param determining which app will deliver the notification to the user. There should be a corresponding app in the system_config.navi
 document with a certificate and key (for iOS apps) or an api-key (for Android apps).
-* notification\_registration\_id: this is the device token for the device to receive the push notification. It must be sent from the app that will deliver the
-push notification to kazoo via the crossbar module.
+* `DEVICE_ID`: URL param specifying the Kazoo device for which push notification subscriptions are being registered
+* `mobile_device_id`: An identifier provided by the mobile device. Should not change for the lifetime of the app install.
+* `notification_registration_ids`: one or more device tokens for the device to receive the push notifications. Associated with a list of `notification_preferences` and a `notification_type`.
+* `notification_preferences`: requested types of notifications associated with a device token
+* `notification_type`: notification platform provider, such as "apns" or "fcm"
+* `platform`: device platform ("ios" or "android")
+* `sip_proxy_server`: The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification. This must be correct in order to ensure that the media server dispatches the call to the correct SBC. Ideally `sip_proxy_server` would not be needed in the future. The SIP dialog and call state would need to move from whichever SBC the media server rang for the endpoint to the one that the mobile device registered to upon waking from the push notification.
 
-These documents will be used by navi\_listener to determine which device(s) a user wants to receive push notifications on.
+These documents will be used by navi_listener to determine which device(s) a user wants to receive push notifications on.
+
+A single Kazoo device may only be registered for push notifications to a single mobile device. The schema will enforce this based on the `mobile_device_id` property. As well, a single mobile device can only register for push notifications for a single Kazoo device. The schema will not reject requests to associate the mobile device with a different Kazoo device. However, the module will automatically remove registrations from other Kazoo devices with `mobile_device_id` matching the submitted `mobile_device_id`. This could later be changed to support multiple Kazoo device registrations on a single mobile device.
+
+`push_notification_subscriptions` are a property on device docs, rather than a standalone document type. The benefit of this approach is that there is a single point of update when setting the subscriptions and the `push` property on device docs, avoiding an entire class of atomicity issues. It also simplifies the logic for limiting push registrations for a Kazoo device to a single mobile device.
 
 ### navi\_listener.erl
 This module is responsible for listening to events on amqp and extracting the data included in the corresponding push notification. To listen to an event
@@ -26,7 +37,7 @@ and create a notification for it you need to do three things:
 2. Create a handler function which processes the event and collates the data for the notification.
 3. Use the cb\_push\_notification\_subscriptions documents to determine the device to send the notification to.
 4. Call navi\_module\_sup:push/4, which will begin the process of sending the push notification (Encapsulated in navi\_listener:do\_notifications/3)
-	* do\_notifications takes three arguments. 
+	* do\_notifications takes three arguments.
 		* A list of push\_notification\_subscription documents representing the registrations for each device that should receive this notification
 		* The message to appear in the body of the push notification
 		* A proplist containing any extra parameters you want to be sent in the notification (You may need to modify nv_apns and nv_fcm so it formats your custom data in the notification payload how you want).
@@ -57,19 +68,34 @@ custom data to your notifications.
 
 ## Adding Apps
 The navi\_maintenance module exports two functions that allow you to easily add apps to system\_config.navi through a sup command.
-*To add an iOS app:*
-``sup navi_maintenance add_apns_app <app_name> <topic> <environment> <path to certificate file> <path to key file>``
+
+### To add an iOS app
+``sup navi_maintenance add_apns_app <app_name> <topic> <environment> <path to certificate file> <path to private key file>``
+
 where:
 * app\_name is an identifier for the app
 * topic is the "app bundle" or "app ID" which you can get from xcode (usually of the form com.company.app-name
 * environment is either "prod" or "dev" (quotations excluded), you must make sure you use the corresponding certificate and key for the environment.
-* the path to the certificate and key files must be absolute paths, and the files must be in .pem format. Follow the instructions in the Apple developer portal for
-getting a certificate for either development or production push notifications.
+* the path to the certificate and key files must be absolute paths, and the files must be in .pem format.
 
 Additionally the app will need to be configured to allow push notifications in its capabilities. Follow the Apple documentation for adding push notifications to your app.
 
-*To add an Android app:*
+#### Certificates and Private Keys
+
+1. Create a new _Apple Push Services_ certificate at [https://developer.apple.com/account/resources/certificates/list](https://developer.apple.com/account/resources/certificates/list). The certificate type should be _Apple Push Notification service SSL (Sandbox & Production)_ under _Services_.
+2. Add the certificate to Keychain by double-clicking it.
+3. Open _Keychain Access_.
+4. View the _login_ keychain, and set the _Category_ on the bottom-left of the window to _Certificates_. The view should list certificates, including the one imported from Apple. It should have the private key from the certificate signing request nested beneath it.
+5. Right-click the certificate and choose _Export "${certificateName}"..._.
+6. Save as .p12 format.
+7. Execute `openssl pkcs12 -in ${CERT_NAME}.p12 -out ${CERT_NAME}.crt.pem -clcerts -nokeys` to export the certificate as a .pem file.
+8. Execute `openssl pkcs12 -in ${CERT_NAME}.p12 -out ${CERT_NAME}.key.pem -nocerts -nodes` to export the private key as a .pem file.
+9. In an editor, remove everything before the `-----BEGIN` lines from both files.
+10. Run the [command to add an iOS app](#to-add-an-ios-app).
+
+### To add an Android app
 ``sup navi_maintenance add_fcm_app <app_name> <platform> <api-key>``
+
 where:
 * app\_name is the same as above
 * platform is android or ios
