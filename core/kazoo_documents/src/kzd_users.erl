@@ -39,6 +39,7 @@
 -export([hotdesk_require_pin/1, hotdesk_require_pin/2, set_hotdesk_require_pin/2]).
 -export([language/1, language/2, set_language/2]).
 -export([last_name/1, last_name/2, set_last_name/2]).
+-export([location/1, location/2, set_location/2]).
 -export([media/1, media/2, set_media/2]).
 -export([metaflows/1, metaflows/2, set_metaflows/2]).
 -export([music_on_hold/1, music_on_hold/2, set_music_on_hold/2]).
@@ -481,6 +482,18 @@ last_name(Doc, Default) ->
 -spec set_last_name(doc(), kz_term:ne_binary()) -> doc().
 set_last_name(Doc, LastName) ->
     kz_json:set_value([<<"last_name">>], LastName, Doc).
+
+-spec location(doc()) -> kz_term:api_binary().
+location(Doc) ->
+    location(Doc, 'undefined').
+
+-spec location(doc(), Default) -> binary() | Default.
+location(Doc, Default) ->
+    kz_json:get_binary_value([<<"location">>], Doc, Default).
+
+-spec set_location(doc(), binary()) -> doc().
+set_location(Doc, Location) ->
+    kz_json:set_value([<<"location">>], Location, Doc).
 
 -spec media(doc()) -> kz_term:api_object().
 media(Doc) ->

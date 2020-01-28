@@ -21,6 +21,43 @@
             "description": "accounts default timezone",
             "type": "string"
         },
+        "locations": {
+            "description": "All locations",
+            "properties": {
+                "default_location": {
+                    "description": "Data for the default user location",
+                    "properties": {
+                        "display_name": {
+                            "description": "The name of the location to display",
+                            "type": "string"
+                        },
+                        "id": {
+                            "description": "The ID of this location",
+                            "type": "string"
+                        },
+                        "street_address": {
+                            "description": "The actual street address associated with this location",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "display_name",
+                        "id",
+                        "street_address"
+                    ],
+                    "type": "object"
+                },
+                "location_list": {
+                    "default": [],
+                    "description": "list of location objects",
+                    "type": "array"
+                }
+            },
+            "required": [
+                "default_location"
+            ],
+            "type": "object"
+        },
         "master_account_id": {
             "description": "accounts master account id",
             "type": "string"

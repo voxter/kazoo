@@ -221,6 +221,10 @@
             "support_level": "supported",
             "type": "string"
         },
+        "location": {
+            "description": "ID of user's location",
+            "type": "string"
+        },
         "media": {
             "$ref": "endpoint.media",
             "description": "Configure audio/video/etc media options for this user"

@@ -51,6 +51,7 @@ Key | Description | Type | Default | Required | Support Level
 `hotdesk` | The user hotdesk parameters | `object()` | `{}` | `false` |  
 `language` | The language for this user | `string()` |   | `false` | `supported`
 `last_name` | The last name of the user | `string(1..128)` |   | `true` | `supported`
+`location` | ID of user's location | `string()` |   | `false` |  
 `media` | Configure audio/video/etc media options for this user | [#/definitions/endpoint.media](#endpointmedia) |   | `false` |  
 `metaflows` | The device metaflow parameters | [#/definitions/metaflows](#metaflows) |   | `false` |  
 `music_on_hold.media_id` | The ID of a media object that should be used as the music on hold | `string(0..128)` |   | `false` |  
