@@ -187,7 +187,8 @@ handle_pusher_request(JObj, _Props) ->
     lager:debug("Navi received pusher request ~s", [kz_json:encode(JObj)]),
     %% Token-App may need to also contain platform - will be in format "AppName-Platform" if this is the case
     {AppName, Platform} = decode_token_app(kz_json:get_value(<<"Token-App">>, JObj)),
-    Registration = kz_json:from_list([{<<"notification_type">>, kz_json:get_value(<<"Token-Type">>, JObj)}
+    PushNotificationType = pusher_notification_type(kz_json:get_ne_binary_value(<<"Token-Type">>, JObj)),
+    Registration = kz_json:from_list([{<<"notification_type">>, PushNotificationType}
                                      ,{<<"notification_registration_id">>, kz_json:get_value(<<"Token-ID">>, JObj)}
                                      ,{<<"app_name">>, AppName}
                                      ,{<<"platform">>, Platform}
@@ -275,3 +276,12 @@ decode_token_app(TokenApp) ->
         [App] -> {App, 'undefined'};
         [App, Platform] -> {App, Platform}
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc Adds compatibility with pusher token types.
+%% @end
+%%------------------------------------------------------------------------------
+-spec pusher_notification_type(kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
+pusher_notification_type(<<"apple">>) -> <<"apns">>;
+pusher_notification_type(<<"firebase">>) -> <<"fcm">>;
+pusher_notification_type(NotificationType) -> NotificationType.
