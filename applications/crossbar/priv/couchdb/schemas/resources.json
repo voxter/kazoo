@@ -3,6 +3,10 @@
     "_id": "resources",
     "description": "Schema for resources",
     "properties": {
+        "carrier_id": {
+            "description": "Temporary hack for BluLogix billing, A UUID value to identify the carrier used. This value will be passed through to the CDR",
+            "type": "string"
+        },
         "emergency": {
             "default": false,
             "description": "Determines if the resource represents emergency services",

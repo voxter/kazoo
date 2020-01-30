@@ -153,6 +153,7 @@
                ,privacy_hide_number = 'false' :: boolean()
                ,classifier = 'undefined' :: kz_term:api_binary()
                ,classifier_enable = 'true' :: boolean()
+               ,carrier_id :: kz_term:api_binary()
                }).
 
 -type resource() :: #resrc{}.
@@ -220,6 +221,7 @@ resource_to_props(#resrc{}=Resource) ->
       ,{<<"Privacy-Method">>,  Resource#resrc.privacy_method}
       ,{<<"Privacy-Hide-Name">>, Resource#resrc.privacy_hide_name}
       ,{<<"Privacy-Hide-Number">>, Resource#resrc.privacy_hide_number}
+      ,{<<"Carrier-ID">>, Resource#resrc.carrier_id}
       ]).
 
 -spec sort_resources(resources()) -> resources().
@@ -530,6 +532,7 @@ maybe_resource_to_endpoints(#resrc{id=Id
                                   ,weight=Weight
                                   ,proxies=Proxies
                                   ,classifier=Classifier
+                                  ,carrier_id=CarrierId
                                   }
                            ,Number
                            ,OffnetJObj
@@ -549,6 +552,7 @@ maybe_resource_to_endpoints(#resrc{id=Id
             lager:debug("building resource ~s endpoints (classifier ~s)", [Id, _MaybeClassifier]),
             CCVUpdates = [{<<"Global-Resource">>, kz_term:to_binary(Global)}
                          ,{<<"Resource-ID">>, Id}
+                         ,{<<"Carrier-ID">>, CarrierId}
                          ,{<<"E164-Destination">>, Number}
                          ,{<<"DID-Classifier">>, knm_converters:classify(Number)}
                          ,{<<"Original-Number">>, kapi_offnet_resource:to_did(OffnetJObj)}
@@ -1090,6 +1094,7 @@ resource_from_jobj(JObj) ->
                      ,privacy_hide_number=kz_privacy:should_hide_number(JObj)
                      ,classifier=kz_json:get_ne_value(<<"classifier">>, JObj)
                      ,classifier_enable=kz_json:is_true(<<"classifier_enable">>, JObj, 'true')
+                     ,carrier_id=kz_json:get_value(<<"carrier_id">>, JObj)
                      },
     Gateways = gateways_from_jobjs(kz_json:get_value(<<"gateways">>, JObj, [])
                                   ,Resource

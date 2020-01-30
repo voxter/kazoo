@@ -28,6 +28,7 @@ Schema for resources
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
+`carrier_id` | Temporary hack for BluLogix billing, A UUID value to identify the carrier used. This value will be passed through to the CDR | `string()` |   | `false` |  
 `emergency` | Determines if the resource represents emergency services | `boolean()` | `false` | `false` |  
 `enabled` | Determines if the resource is currently enabled | `boolean()` | `true` | `false` |  
 `flags.[]` |   | `string()` |   | `false` |  

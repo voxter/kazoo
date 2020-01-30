@@ -6,6 +6,7 @@
 -module(kzd_resources).
 
 -export([new/0]).
+-export([carrier_id/1, carrier_id/2, set_carrier_id/2]).
 -export([emergency/1, emergency/2, set_emergency/2]).
 -export([enabled/1, enabled/2, set_enabled/2]).
 -export([flags/1, flags/2, set_flags/2]).
@@ -34,6 +35,18 @@
 -spec new() -> doc().
 new() ->
     kz_json_schema:default_object(?SCHEMA).
+
+-spec carrier_id(doc()) -> kz_term:api_binary().
+carrier_id(Doc) ->
+    carrier_id(Doc, 'undefined').
+
+-spec carrier_id(doc(), Default) -> binary() | Default.
+carrier_id(Doc, Default) ->
+    kz_json:get_binary_value([<<"carrier_id">>], Doc, Default).
+
+-spec set_carrier_id(doc(), binary()) -> doc().
+set_carrier_id(Doc, CarrierId) ->
+    kz_json:set_value([<<"carrier_id">>], CarrierId, Doc).
 
 -spec emergency(doc()) -> boolean().
 emergency(Doc) ->
