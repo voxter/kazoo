@@ -1,7 +1,7 @@
 {application,navi,
              [{applications,[apns,fcm,kazoo,kazoo_amqp,kazoo_apps,kazoo_data,
                              kazoo_documents,kazoo_schemas,kazoo_stdlib,
-                             kernel,lager,poolboy,public_key,stdlib]},
+                             kernel,lager,poolboy,public_key,pusher,stdlib]},
               {description,"Navi - An application for listening to events in kazoo and preparing push notifications"},
               {vsn,"4.0.0"},
               {modules,[]},

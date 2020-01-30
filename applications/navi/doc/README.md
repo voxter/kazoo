@@ -1,7 +1,7 @@
 # Overview
 The Navi application is used for listening to notifications through amqp and using them to create push notifications for iOS and Android devices.
 
-While Navi depends on the `kz_endpoint` module and `pusher_role` Kamailio functionality of the `pusher` app, the `pusher` app **must not** actually be running in Navi is used. Navi's API will ensure compatibility with the expectations of both those dependencies, by setting the `push` property on Kazoo devices for which push notification subscriptions are registered.
+Navi depends on `pusher` to handle `incoming_call` notifications. Proper User-Agent configuration must be set in `pusher`, but the push app in `pusher` must be disabled, so that both push application do not compete for sending the push. As well, the name of the `pusher` push app must match the name of the `navi` push app.
 
 ## Architectural Overview
 Navi functionality is implemented across several modules:
@@ -18,17 +18,14 @@ This is the crossbar module where users can register for push notifications. See
 document with a certificate and key (for iOS apps) or an api-key (for Android apps).
 * `DEVICE_ID`: URL param specifying the Kazoo device for which push notification subscriptions are being registered
 * `mobile_device_id`: An identifier provided by the mobile device. Should not change for the lifetime of the app install.
-* `notification_registration_ids`: one or more device tokens for the device to receive the push notifications. Associated with a list of `notification_preferences` and a `notification_type`.
 * `notification_preferences`: requested types of notifications associated with a device token
+* `notification_registration_id`: this is the device token for the device to receive the push notification. It must be sent from the app that will deliver the push notification to kazoo via the crossbar module.
 * `notification_type`: notification platform provider, such as "apns" or "fcm"
 * `platform`: device platform ("ios" or "android")
-* `sip_proxy_server`: The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification. This must be correct in order to ensure that the media server dispatches the call to the correct SBC. Ideally `sip_proxy_server` would not be needed in the future. The SIP dialog and call state would need to move from whichever SBC the media server rang for the endpoint to the one that the mobile device registered to upon waking from the push notification.
 
 These documents will be used by navi_listener to determine which device(s) a user wants to receive push notifications on.
 
-A single Kazoo device may only be registered for push notifications to a single mobile device. The schema will enforce this based on the `mobile_device_id` property. As well, a single mobile device can only register for push notifications for a single Kazoo device. The schema will not reject requests to associate the mobile device with a different Kazoo device. However, the module will automatically remove registrations from other Kazoo devices with `mobile_device_id` matching the submitted `mobile_device_id`. This could later be changed to support multiple Kazoo device registrations on a single mobile device.
-
-`push_notification_subscriptions` are a property on device docs, rather than a standalone document type. The benefit of this approach is that there is a single point of update when setting the subscriptions and the `push` property on device docs, avoiding an entire class of atomicity issues. It also simplifies the logic for limiting push registrations for a Kazoo device to a single mobile device.
+A single Kazoo device may only be registered for push notifications to a single mobile device. The schema will enforce this based on the `device_id` property. As well, a single mobile device can only register for push notifications for a single Kazoo device. The schema will not reject requests to associate the mobile device with a different Kazoo device. However, the module will automatically remove registrations from other Kazoo devices with `mobile_device_id` matching the submitted `mobile_device_id`. This could later be changed to support multiple Kazoo device registrations on a single mobile device.
 
 ### navi\_listener.erl
 This module is responsible for listening to events on amqp and extracting the data included in the corresponding push notification. To listen to an event

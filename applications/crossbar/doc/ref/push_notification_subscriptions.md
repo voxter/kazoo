@@ -4,17 +4,19 @@
 
 #### Schema
 
-Schema for push notification subscriptions
+Schema for a push notification subscription
 
 
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `app_name` | The identifier for the app that will be sending push notifications | `string()` |   | `true` |  
+`device_id` | The ID of the Kazoo device for which push notifications are being registered | `string()` |   | `true` |  
 `mobile_device_id` | An identifier provided by the mobile device | `string()` |   | `true` |  
-`notification_registration_ids` | Notification configuration per push notification registration id | `object()` |   | `true` |  
-`platform` | The platform that the push notification subscriptions are for | `string('android' | 'ios')` |   | `true` |  
-`sip_proxy_server` | The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification | `string()` |   | `true` |  
+`notification_preferences.[]` |   | `string('chat' | 'new_unowned_voicemail' | 'new_voicemail')` |   | `true` |  
+`notification_preferences` | The types of notifications that the user wants to receive | `array(string('chat' | 'new_unowned_voicemail' | 'new_voicemail'))` | `["chat", "new_voicemail"]` | `true` |  
+`notification_registration_id` | The registration id for the mobile device | `string()` |   | `true` |  
+`notification_type` | The type of notification service to use | `string('apns' | 'fcm')` |   | `true` |  
 
 
 

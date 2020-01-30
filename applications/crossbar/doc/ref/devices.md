@@ -58,7 +58,6 @@ Key | Description | Type | Default | Required | Support Level
 `provision.feature_keys./^[0-9]+$/` | Device provisioner Combo/Feature Key | [#/definitions/devices.combo_key](#devicescombo_key) |   | `false` |  
 `provision.feature_keys` |   | `object()` |   | `false` |  
 `provision` | Provision data | `object()` |   | `false` |  
-`push_notification_subscriptions` | Active push notification subscriptions for the device | [#/definitions/push_notification_subscriptions](#push_notification_subscriptions) |   | `false` |  
 `register_overwrite_notify` | When true enables overwrite notifications | `boolean()` | `false` | `false` |  
 `ringtones.external` | The alert info SIP header added when the call is from internal sources | `string(0..256)` |   | `false` |  
 `ringtones.internal` | The alert info SIP header added when the call is from external sources | `string(0..256)` |   | `false` |  
@@ -245,19 +244,6 @@ Key | Description | Type | Default | Required | Support Level
 `numbers` | A list of static numbers with their flows | `object()` |   | `false` |  
 `patterns./.+/` | A metaflow node defines a module to execute, data to provide to that module, and one or more children to branch to | [#/definitions/metaflow](#metaflow) |   | `false` |  
 `patterns` | A list of patterns with their flows | `object()` |   | `false` |  
-
-### push_notification_subscriptions
-
-Schema for push notification subscriptions
-
-
-Key | Description | Type | Default | Required | Support Level
---- | ----------- | ---- | ------- | -------- | -------------
-`app_name` | The identifier for the app that will be sending push notifications | `string()` |   | `true` |  
-`mobile_device_id` | An identifier provided by the mobile device | `string()` |   | `true` |  
-`notification_registration_ids` | Notification configuration per push notification registration id | `object()` |   | `true` |  
-`platform` | The platform that the push notification subscriptions are for | `string('android' | 'ios')` |   | `true` |  
-`sip_proxy_server` | The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification | `string()` |   | `true` |  
 
 
 

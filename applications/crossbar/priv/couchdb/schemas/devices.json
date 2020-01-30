@@ -288,10 +288,6 @@
             },
             "type": "object"
         },
-        "push_notification_subscriptions": {
-            "$ref": "push_notification_subscriptions",
-            "description": "Active push notification subscriptions for the device"
-        },
         "register_overwrite_notify": {
             "default": false,
             "description": "When true enables overwrite notifications",

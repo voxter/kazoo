@@ -4,34 +4,35 @@
 
 This is the crossbar module where users can register for push notifications.
 
-A single Kazoo device may only be registered for push notifications to a single mobile device. The schema will enforce this based on the `mobile_device_id` property. As well, a single mobile device can only register for push notifications for a single Kazoo device. The schema will not reject requests to associate the mobile device with a different Kazoo device. However, the module will automatically remove registrations from other Kazoo devices with `mobile_device_id` matching the submitted `mobile_device_id`. This could later be changed to support multiple Kazoo device registrations on a single mobile device.
+A single Kazoo device may only be registered for push notifications to a single mobile device. The schema will enforce this based on the `device_id` property. As well, a single mobile device can only register for push notifications for a single Kazoo device. The schema will not reject requests to associate the mobile device with a different Kazoo device. However, the module will automatically remove registrations from other Kazoo devices with `mobile_device_id` matching the submitted `mobile_device_id`. This could later be changed to support multiple Kazoo device registrations on a single mobile device.
 
 #### Schema
 
-Schema for push notification subscriptions
+Schema for a push notification subscription
 
 
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
 `app_name` | The identifier for the app that will be sending push notifications | `string()` |   | `true` |  
+`device_id` | The ID of the Kazoo device for which push notifications are being registered | `string()` |   | `true` |  
 `mobile_device_id` | An identifier provided by the mobile device | `string()` |   | `true` |  
-`notification_registration_ids` | Notification configuration per push notification registration id | `object()` |   | `true` |  
-`platform` | The platform that the push notification subscriptions are for | `string('android' | 'ios')` |   | `true` |  
-`sip_proxy_server` | The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification | `string()` |   | `true` |  
+`notification_preferences.[]` |   | `string('chat' | 'new_unowned_voicemail' | 'new_voicemail')` |   | `true` |  
+`notification_preferences` | The types of notifications that the user wants to receive | `array(string('chat' | 'new_unowned_voicemail' | 'new_voicemail'))` | `["chat", "new_voicemail"]` | `true` |  
+`notification_registration_id` | The registration id for the mobile device | `string()` |   | `true` |  
+`notification_type` | The type of notification service to use | `string('apns' | 'fcm')` |   | `true` |  
 
 
 
-#### Additional schema properties
+#### Other schema properties
 
-The following properties are `additionalProperties`, so need to be separated from the auto-generated schema above.
+The following properties are dynamic, so need to be separated from the auto-generated schema above.
 
 
 
 Key | Description | Type | Default | Required | Support Level
 --- | ----------- | ---- | ------- | -------- | -------------
-`notification_registration_ids./.*/.notification_preferences` | The types of notifications that the user wants to receive. The values must be unique amongst all notification registration ids in the subscription | `array(string('chat' | 'incoming_call' | 'new_unowned_voicemail' | 'new_voicemail'))` |   | `true` |  
-`notification_registration_ids./.*/.notification_type` | The type of notification service to use | `string('apns' | 'fcm')` |   | `true` |  
+`platform` | The platform that the push notification subscription is for. Used only by fcm | `string('android' | 'ios')` | `'android'` | `true` |  
 
 
 
@@ -47,25 +48,17 @@ curl -v -X GET \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
+        "app_name": "{APP}",
+        "device_id": "{DEVICE_ID}",
+        "id": "{SUBSCRIPTION_ID}",
         "mobile_device_id": "{MOBILE_DEVICE_ID}",
-        "notification_registration_ids": {
-            "{APNS_TOKEN}": {
-                "notification_preferences": [
-                    "incoming_call"
-                ],
-                "notification_type": "apns"
-            },
-            "{FCM_TOKEN}": {
-                "notification_preferences": [
-                    "chat",
-                    "new_voicemail"
-                ],
-                "notification_type": "fcm"
-            }
-        },
-        "platform": "{PLATFORM}",
-        "sip_proxy_server": "{KAMAILIO_IP}",
-        "app_name": "{APP}"
+        "notification_preferences": [
+            "chat",
+            "new_voicemail"
+        ],
+        "notification_registration_id": "{TOKEN}",
+        "notification_type": "{NOTIFICATION_TYPE}",
+        "platform": "{PLATFORM}"
     },
     "node": "{NODE}",
     "request_id": "{REQUEST_ID}",
@@ -85,30 +78,22 @@ Creates a push notification registration for the supplied device for the supplie
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d '{"data":{"mobile_device_id":"{MOBILE_DEVICE_ID}", "notification_registration_ids":{"{APNS_TOKEN}":{"notification_preferences":["incoming_call"], "notification_type":"apns"}, "{FCM_TOKEN}":{"notification_preferences":["chat", "new_voicemail"], "notification_type":"fcm"}}, "platform":"{PLATFORM}", "sip_proxy_server":"{KAMAILIO_IP}"}}' \
+    -d '{"data":{"mobile_device_id":"{MOBILE_DEVICE_ID}", "notification_preferences":["chat", "new_voicemail"], "notification_registration_id":"{TOKEN}", "notification_type":"{NOTIFICATION_TYPE}", "platform":"{PLATFORM}"}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
+        "app_name": "{APP}",
+        "device_id": "{DEVICE_ID}",
+        "id": "{SUBSCRIPTION_ID}",
         "mobile_device_id": "{MOBILE_DEVICE_ID}",
-        "notification_registration_ids": {
-            "{APNS_TOKEN}": {
-                "notification_preferences": [
-                    "incoming_call"
-                ],
-                "notification_type": "apns"
-            },
-            "{FCM_TOKEN}": {
-                "notification_preferences": [
-                    "chat",
-                    "new_voicemail"
-                ],
-                "notification_type": "fcm"
-            }
-        },
-        "platform": "{PLATFORM}",
-        "sip_proxy_server": "{KAMAILIO_IP}",
-        "app_name": "{APP}"
+        "notification_preferences": [
+            "chat",
+            "new_voicemail"
+        ],
+        "notification_registration_id": "{TOKEN}",
+        "notification_type": "{NOTIFICATION_TYPE}",
+        "platform": "{PLATFORM}"
     },
     "node": "{NODE}",
     "request_id": "{REQUEST_ID}",
@@ -129,30 +114,22 @@ or updating the device token.
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d '{"data":{"mobile_device_id":"{MOBILE_DEVICE_ID}", "notification_registration_ids":{"{APNS_TOKEN}":{"notification_preferences":["incoming_call"], "notification_type":"apns"}, "{FCM_TOKEN}":{"notification_preferences":["chat", "new_voicemail"], "notification_type":"fcm"}}, "platform":"{PLATFORM}", "sip_proxy_server":"{KAMAILIO_IP}"}}' \
+    -d '{"data":{"mobile_device_id":"{MOBILE_DEVICE_ID}", "notification_preferences":["chat", "new_voicemail"], "notification_registration_id":"{TOKEN}", "notification_type":"{NOTIFICATION_TYPE}", "platform":"{PLATFORM}"}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/push_notification_subscriptions/{APP}/{DEVICE_ID}
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
+        "app_name": "{APP}",
+        "device_id": "{DEVICE_ID}",
+        "id": "{SUBSCRIPTION_ID}",
         "mobile_device_id": "{MOBILE_DEVICE_ID}",
-        "notification_registration_ids": {
-            "{APNS_TOKEN}": {
-                "notification_preferences": [
-                    "incoming_call"
-                ],
-                "notification_type": "apns"
-            },
-            "{FCM_TOKEN}": {
-                "notification_preferences": [
-                    "chat",
-                    "new_voicemail"
-                ],
-                "notification_type": "fcm"
-            }
-        },
-        "platform": "{PLATFORM}",
-        "sip_proxy_server": "{KAMAILIO_IP}",
-        "app_name": "{APP}"
+        "notification_preferences": [
+            "chat",
+            "new_voicemail"
+        ],
+        "notification_registration_id": "{TOKEN}",
+        "notification_type": "{NOTIFICATION_TYPE}",
+        "platform": "{PLATFORM}"
     },
     "node": "{NODE}",
     "request_id": "{REQUEST_ID}",
@@ -175,7 +152,17 @@ curl -v -X DELETE \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "id": "{DEVICE_ID}",
+        "app_name": "{APP}",
+        "device_id": "{DEVICE_ID}",
+        "id": "{SUBSCRIPTION_ID}",
+        "mobile_device_id": "{MOBILE_DEVICE_ID}",
+        "notification_preferences": [
+            "chat",
+            "new_voicemail"
+        ],
+        "notification_registration_id": "{TOKEN}",
+        "notification_type": "{NOTIFICATION_TYPE}",
+        "platform": "{PLATFORM}",
         "_read_only": {
             "deleted": true
         }

@@ -9,12 +9,19 @@
     },
     "language": "javascript",
     "views": {
+        "by_device": {
+            "map": [
+                "function(doc) {",
+                "  if (doc.pvt_type != 'push_notification_subscription' || doc.pvt_deleted) return;",
+                "  emit(doc.device_id, doc);",
+                "}"
+            ]
+        },
         "by_mobile_device": {
             "map": [
                 "function(doc) {",
-                "  var subscriptions = doc.push_notification_subscriptions;",
-                "  if (doc.pvt_type != 'device' || doc.pvt_deleted || !subscriptions) return;",
-                "  emit(subscriptions.mobile_device_id, doc);",
+                "  if (doc.pvt_type != 'push_notification_subscription' || doc.pvt_deleted) return;",
+                "  emit(doc.mobile_device_id, doc);",
                 "}"
             ]
         },

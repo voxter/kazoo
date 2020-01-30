@@ -1,75 +1,89 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
     "_id": "push_notification_subscriptions",
-    "description": "Schema for push notification subscriptions",
+    "description": "Schema for a push notification subscription",
+    "oneOf": [
+        {
+            "properties": {
+                "notification_type": {
+                    "enum": [
+                        "apns"
+                    ]
+                }
+            }
+        },
+        {
+            "properties": {
+                "notification_type": {
+                    "enum": [
+                        "fcm"
+                    ]
+                },
+                "platform": {
+                    "default": "android",
+                    "description": "The platform that the push notification subscription is for. Used only by fcm",
+                    "enum": [
+                        "android",
+                        "ios"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "platform"
+            ]
+        }
+    ],
     "properties": {
         "app_name": {
             "description": "The identifier for the app that will be sending push notifications",
+            "type": "string"
+        },
+        "device_id": {
+            "description": "The ID of the Kazoo device for which push notifications are being registered",
             "type": "string"
         },
         "mobile_device_id": {
             "description": "An identifier provided by the mobile device",
             "type": "string"
         },
-        "notification_registration_ids": {
-            "additionalProperties": {
-                "description": "Each property key is the registration id for the mobile device",
-                "properties": {
-                    "notification_preferences": {
-                        "default": [
-                            "chat",
-                            "incoming_call",
-                            "new_voicemail"
-                        ],
-                        "description": "The types of notifications that the user wants to receive. The values must be unique amongst all notification registration ids in the subscription",
-                        "items": {
-                            "enum": [
-                                "chat",
-                                "incoming_call",
-                                "new_unowned_voicemail",
-                                "new_voicemail"
-                            ],
-                            "type": "string"
-                        },
-                        "type": "array"
-                    },
-                    "notification_type": {
-                        "description": "The type of notification service to use",
-                        "enum": [
-                            "apns",
-                            "fcm"
-                        ],
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "notification_preferences",
-                    "notification_type"
-                ],
-                "type": "object"
-            },
-            "description": "Notification configuration per push notification registration id",
-            "type": "object"
-        },
-        "platform": {
-            "description": "The platform that the push notification subscriptions are for",
-            "enum": [
-                "android",
-                "ios"
+        "notification_preferences": {
+            "default": [
+                "chat",
+                "new_voicemail"
             ],
+            "description": "The types of notifications that the user wants to receive",
+            "items": {
+                "enum": [
+                    "chat",
+                    "new_unowned_voicemail",
+                    "new_voicemail"
+                ],
+                "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+        },
+        "notification_registration_id": {
+            "description": "The registration id for the mobile device",
             "type": "string"
         },
-        "sip_proxy_server": {
-            "description": "The hostname or IP address of the SIP registrar the app will register to upon waking from a push notification",
+        "notification_type": {
+            "description": "The type of notification service to use",
+            "enum": [
+                "apns",
+                "fcm"
+            ],
             "type": "string"
         }
     },
     "required": [
         "app_name",
+        "device_id",
         "mobile_device_id",
-        "notification_registration_ids",
-        "platform",
-        "sip_proxy_server"
+        "notification_preferences",
+        "notification_registration_id",
+        "notification_type"
     ],
     "type": "object"
 }

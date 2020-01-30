@@ -7,10 +7,11 @@
 
 -export([new/0]).
 -export([app_name/1, app_name/2, set_app_name/2]).
+-export([device_id/1, device_id/2, set_device_id/2]).
 -export([mobile_device_id/1, mobile_device_id/2, set_mobile_device_id/2]).
--export([notification_registration_ids/1, notification_registration_ids/2, set_notification_registration_ids/2]).
--export([platform/1, platform/2, set_platform/2]).
--export([sip_proxy_server/1, sip_proxy_server/2, set_sip_proxy_server/2]).
+-export([notification_preferences/1, notification_preferences/2, set_notification_preferences/2]).
+-export([notification_registration_id/1, notification_registration_id/2, set_notification_registration_id/2]).
+-export([notification_type/1, notification_type/2, set_notification_type/2]).
 
 
 -include("kz_documents.hrl").
@@ -36,6 +37,18 @@ app_name(Doc, Default) ->
 set_app_name(Doc, AppName) ->
     kz_json:set_value([<<"app_name">>], AppName, Doc).
 
+-spec device_id(doc()) -> kz_term:api_binary().
+device_id(Doc) ->
+    device_id(Doc, 'undefined').
+
+-spec device_id(doc(), Default) -> binary() | Default.
+device_id(Doc, Default) ->
+    kz_json:get_binary_value([<<"device_id">>], Doc, Default).
+
+-spec set_device_id(doc(), binary()) -> doc().
+set_device_id(Doc, DeviceId) ->
+    kz_json:set_value([<<"device_id">>], DeviceId, Doc).
+
 -spec mobile_device_id(doc()) -> kz_term:api_binary().
 mobile_device_id(Doc) ->
     mobile_device_id(Doc, 'undefined').
@@ -48,38 +61,38 @@ mobile_device_id(Doc, Default) ->
 set_mobile_device_id(Doc, MobileDeviceId) ->
     kz_json:set_value([<<"mobile_device_id">>], MobileDeviceId, Doc).
 
--spec notification_registration_ids(doc()) -> kz_term:api_object().
-notification_registration_ids(Doc) ->
-    notification_registration_ids(Doc, 'undefined').
+-spec notification_preferences(doc()) -> kz_term:ne_binaries().
+notification_preferences(Doc) ->
+    notification_preferences(Doc, [<<"chat">>, <<"new_voicemail">>]).
 
--spec notification_registration_ids(doc(), Default) -> kz_json:object() | Default.
-notification_registration_ids(Doc, Default) ->
-    kz_json:get_json_value([<<"notification_registration_ids">>], Doc, Default).
+-spec notification_preferences(doc(), Default) -> kz_term:ne_binaries() | Default.
+notification_preferences(Doc, Default) ->
+    kz_json:get_list_value([<<"notification_preferences">>], Doc, Default).
 
--spec set_notification_registration_ids(doc(), kz_json:object()) -> doc().
-set_notification_registration_ids(Doc, NotificationRegistrationIds) ->
-    kz_json:set_value([<<"notification_registration_ids">>], NotificationRegistrationIds, Doc).
+-spec set_notification_preferences(doc(), kz_term:ne_binaries()) -> doc().
+set_notification_preferences(Doc, NotificationPreferences) ->
+    kz_json:set_value([<<"notification_preferences">>], NotificationPreferences, Doc).
 
--spec platform(doc()) -> kz_term:api_binary().
-platform(Doc) ->
-    platform(Doc, 'undefined').
+-spec notification_registration_id(doc()) -> kz_term:api_binary().
+notification_registration_id(Doc) ->
+    notification_registration_id(Doc, 'undefined').
 
--spec platform(doc(), Default) -> binary() | Default.
-platform(Doc, Default) ->
-    kz_json:get_binary_value([<<"platform">>], Doc, Default).
+-spec notification_registration_id(doc(), Default) -> binary() | Default.
+notification_registration_id(Doc, Default) ->
+    kz_json:get_binary_value([<<"notification_registration_id">>], Doc, Default).
 
--spec set_platform(doc(), binary()) -> doc().
-set_platform(Doc, Platform) ->
-    kz_json:set_value([<<"platform">>], Platform, Doc).
+-spec set_notification_registration_id(doc(), binary()) -> doc().
+set_notification_registration_id(Doc, NotificationRegistrationId) ->
+    kz_json:set_value([<<"notification_registration_id">>], NotificationRegistrationId, Doc).
 
--spec sip_proxy_server(doc()) -> kz_term:api_binary().
-sip_proxy_server(Doc) ->
-    sip_proxy_server(Doc, 'undefined').
+-spec notification_type(doc()) -> kz_term:api_binary().
+notification_type(Doc) ->
+    notification_type(Doc, 'undefined').
 
--spec sip_proxy_server(doc(), Default) -> binary() | Default.
-sip_proxy_server(Doc, Default) ->
-    kz_json:get_binary_value([<<"sip_proxy_server">>], Doc, Default).
+-spec notification_type(doc(), Default) -> binary() | Default.
+notification_type(Doc, Default) ->
+    kz_json:get_binary_value([<<"notification_type">>], Doc, Default).
 
--spec set_sip_proxy_server(doc(), binary()) -> doc().
-set_sip_proxy_server(Doc, SipProxyServer) ->
-    kz_json:set_value([<<"sip_proxy_server">>], SipProxyServer, Doc).
+-spec set_notification_type(doc(), binary()) -> doc().
+set_notification_type(Doc, NotificationType) ->
+    kz_json:set_value([<<"notification_type">>], NotificationType, Doc).
