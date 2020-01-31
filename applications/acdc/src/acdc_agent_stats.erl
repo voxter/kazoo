@@ -510,8 +510,8 @@ maybe_archive_status_data(Srv, Match) ->
             _ = [kz_datamgr:save_docs(acdc_stats_util:db_name(Acct), Docs)
                  || {Acct, Docs} <- dict:to_list(ToSave)
                 ],
-            _ = [gen_listener:cast(Srv, {'update_status', Id, [{#status_stat.is_archived, 'true'}]})
-                 || #status_stat{id=Id} <- Stats
+            _ = [gen_listener:cast(Srv, {'update_status', Id, Key, [{#status_stat.is_archived, 'true'}]})
+                 || #status_stat{id=Id, key=Key} <- Stats
                 ],
             'ok'
     end.
