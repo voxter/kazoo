@@ -3,6 +3,10 @@
 set -x
 set -e
 
+# Required to regenerate .app files in ebin directories
+echo "--- :broom: Cleaning build"
+make clean
+
 echo "--- :construction: Running make"
 make
 
