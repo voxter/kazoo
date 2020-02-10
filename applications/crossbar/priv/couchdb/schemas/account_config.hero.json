@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "account_config.hero",
+    "description": "Schema for hero account_config",
+    "properties": {
+        "default_zone": {
+            "description": "Hero will use this zone as the default (instead of the app's default) for users of the account",
+            "type": "string"
+        }
+    },
+    "type": "object"
+}
