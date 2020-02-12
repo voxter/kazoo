@@ -183,7 +183,7 @@ maybe_match(Call, State) ->
         [] ->
             lager:info("no users left matching DTMF string"),
             _ = play_no_users_found(Call),
-            directory_start(Call, clear_dtmf(State), users(State));
+            directory_start(Call, clear_dtmf(State));
         [User] ->
             lager:info("one user found: ~s", [full_name(User)]),
             case maybe_confirm_match(Call, User, confirm_match(State)) of
@@ -207,7 +207,7 @@ matches_menu(Call, State, Users) ->
 maybe_match_users(Call, State, [], _) ->
     lager:info("failed to match any users, back to the beginning"),
     _ = play_no_users(Call),
-    directory_start(Call, clear_dtmf(State), users(State));
+    directory_start(Call, clear_dtmf(State));
 maybe_match_users(Call, State, [U|Us], MatchNum) ->
     case maybe_match_user(Call, U, MatchNum, 3) of
         'route' ->
