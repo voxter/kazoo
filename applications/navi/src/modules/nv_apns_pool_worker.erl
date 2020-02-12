@@ -70,6 +70,10 @@ handle_cast({'push', {RegistrationId, Message, ExtraParams}}, #state{default_top
             {'noreply', State};
         {200, _, _} ->
             lager:debug("apns notification sent successfully"),
+            {'noreply', State};
+        {Status, _, Body} ->
+            Reason = props:get_value(<<"reason">>, Body),
+            lager:error("failed to send push notification: ~b ~s", [Status, Reason]),
             {'noreply', State}
     end;
 handle_cast('stop', State) ->
