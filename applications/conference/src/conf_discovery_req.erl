@@ -295,7 +295,7 @@ handle_search_error(Conference, Call, Srv) ->
         'ok' ->
             lager:debug("initial participant creating conference on switch nodename '~s'", [kapps_call:switch_hostname(Call)]),
             conf_participant:set_conference(Conference, Srv),
-            play_participants_count(Call, 0),
+            play_participants_count(Call, 0, 'force_numeric'),
             maybe_play_name(Conference, Call, Srv),
             conf_participant:join_local(Srv),
             wait_for_creation(Conference)
@@ -305,22 +305,23 @@ handle_search_error(Conference, Call, Srv) ->
             handle_resource_locked(Conference, Call, Srv)
     end.
 
--spec play_participants_count(kapps_call:call(), non_neg_integer() | kz_json:object()) -> 'ok'.
-play_participants_count(Call, 0) ->
+-spec play_participants_count(kapps_call:call(), non_neg_integer()) -> 'ok'.
+play_participants_count(Call, Count) ->
+    play_participants_count(Call, Count, 'undefined').
+
+-spec play_participants_count(kapps_call:call(), non_neg_integer(), 'force_numeric' | 'undefined') -> 'ok'.
+play_participants_count(Call, 0, 'undefined') ->
     kapps_call_command:prompt(<<"conf-alone">>, Call),
     'ok';
-play_participants_count(Call, 1) ->
+play_participants_count(Call, 1, _) ->
     kapps_call_command:prompt(<<"conf-single">>, Call),
     'ok';
-play_participants_count(Call, Count) when is_integer(Count)
-                                          andalso Count > 0 ->
+play_participants_count(Call, Count, _) ->
     kapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
                                    ,{'say', kz_term:to_binary(Count), <<"number">>}
                                    ,{'prompt', <<"conf-other_participants">>}
                                    ], Call),
-    'ok';
-play_participants_count(Call, JObj) ->
-    play_participants_count(Call, length(kz_json:get_value(<<"Participants">>, JObj, []))).
+    'ok'.
 
 -spec handle_resource_locked(kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 handle_resource_locked(Conference, Call, Srv) ->
