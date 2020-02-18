@@ -69,9 +69,6 @@ existing_schema(Name) ->
     case kz_json_schema:fload(Name) of
         {'ok', JObj} -> JObj;
         {'error', 'not_found'} ->
-            kz_json:new();
-        {'error', _E} ->
-            io:format("failed to find ~s: ~p~n", [Name, _E]),
             kz_json:new()
     end.
 
