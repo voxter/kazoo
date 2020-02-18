@@ -35,6 +35,7 @@ render_test_() ->
               %% ,test_rendering(teletype_missed_call)
              ,test_rendering(teletype_new_account)
              ,test_rendering(teletype_new_user)
+              %% ,test_rendering(teletype_number_feature_manual_action)
               %% ,test_rendering(teletype_password_recovery)
               %% ,test_rendering(teletype_port_cancel)
               %% ,test_rendering(teletype_port_comment)
