@@ -29,6 +29,9 @@
 -type apns_notification_payload() :: #{binary() => binary() | integer()}.
 -type apns_payload() :: #{binary() => apns_notification_payload()}.
 
+-define(DEFAULT_EXPIRATION, 0).
+-define(DEFAULT_PRIORITY, 10).
+
 -spec start_link(kz_term:proplist()) -> kz_types:startlink_ret().
 start_link(Args) ->
     PoolName = props:get_value('pool_name', Args),
@@ -57,7 +60,12 @@ handle_cast({'push', {RegistrationId, Message, ExtraParams}}, #state{default_top
     TrueTopic = get_true_topic(Topic, ExtraParams),
     lager:debug("using topic ~p", [TrueTopic]),
 
-    Headers = #{'apns_topic' => TrueTopic},
+    TopicExtension = props:get_ne_binary_value(<<"topic_extension">>, ExtraParams),
+    Headers = #{'apns_expiration' => get_expiration(TopicExtension)
+               ,'apns_priority' => get_priority(TopicExtension)
+               ,'apns_push_type' => get_push_type(TopicExtension)
+               ,'apns_topic' => TrueTopic
+               },
 
     BaseNotification = #{<<"aps">> => #{<<"alert">> => Message}
                         ,<<"metadata">> => kz_json:to_map(props:get_value(<<"metadata">>, ExtraParams, []))
@@ -78,6 +86,18 @@ handle_cast({'push', {RegistrationId, Message, ExtraParams}}, #state{default_top
     end;
 handle_cast('stop', State) ->
     {'stop', 'normal', State}.
+
+-spec get_expiration(kz_term:api_ne_binary()) -> binary().
+get_expiration(<<"voip">>) -> <<"0">>;
+get_expiration(_) -> kz_term:to_binary(?DEFAULT_EXPIRATION).
+
+-spec get_priority(kz_term:api_ne_binary()) -> binary().
+get_priority(<<"voip">>) -> <<"10">>;
+get_priority(_) -> kz_term:to_binary(?DEFAULT_PRIORITY).
+
+-spec get_push_type(kz_term:api_ne_binary()) -> binary().
+get_push_type(<<"voip">>) -> <<"voip">>;
+get_push_type(_) -> <<"alert">>.
 
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info(_, State) ->
