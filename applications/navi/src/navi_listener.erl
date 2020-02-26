@@ -193,7 +193,7 @@ handle_pusher_request(JObj, _Props) ->
                                      ,{<<"app_name">>, AppName}
                                      ,{<<"platform">>, Platform}
                                      ]),
-    ExtraParameters = [{<<"metadata">>, kz_json:new()}
+    ExtraParameters = [{<<"metadata">>, kz_json:get_json_value(<<"Payload">>, JObj, kz_json:new())}
                       ,{<<"topic_extension">>, <<"voip">>}
                       ],
     send_notification_to_device(Registration, <<"incoming_call">>, ExtraParameters).
