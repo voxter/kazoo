@@ -34,6 +34,10 @@
         "list_by_username": {
             "map": "function(doc) { if(doc.pvt_type != 'user' || !doc.username || doc.pvt_deleted) return; emit(doc.username, null); }"
         },
+        "location_and_seat_type_listing": {
+            "map": "function(doc) { if(doc.pvt_type != 'user' || doc.pvt_deleted) return; emit({'location': doc.location, 'seat_type': doc.seat_type}, 1); }",
+            "reduce": "_sum"
+        },
         "mattermost_listing": {
             "map": "function(doc) { if(doc.pvt_type != 'user' || doc.pvt_deleted) return; emit(doc._id, {'_id': doc._id, 'pvt_mattermost_id': doc.pvt_mattermost_id, 'pvt_mattermost_team_id': doc.pvt_mattermost_team_id}); }"
         }

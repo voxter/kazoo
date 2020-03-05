@@ -77,6 +77,7 @@ pages:
     - 'applications/crossbar/doc/push_notification_subscriptions.md'
     - 'applications/crossbar/doc/quickcall.md'
     - 'applications/crossbar/doc/recordings.md'
+    - 'applications/crossbar/doc/seat_count.md'
     - 'applications/crossbar/doc/sms.md'
     - 'applications/crossbar/doc/temporal_rules.md'
     - 'applications/crossbar/doc/temporal_rules_sets.md'

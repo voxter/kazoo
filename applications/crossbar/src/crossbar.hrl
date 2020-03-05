@@ -110,6 +110,7 @@
                          ,'cb_resources'
                          ,'cb_schemas'
                          ,'cb_search'
+                         ,'cb_seat_count'
                          ,'cb_security'
                          ,'cb_services'
                          ,'cb_simple_authz'
