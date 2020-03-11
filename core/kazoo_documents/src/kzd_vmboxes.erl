@@ -1,6 +1,6 @@
 %%%-----------------------------------------------------------------------------
 %%% @copyright (C) 2010-2020, 2600Hz
-%%% @doc
+%%% @doc Accessors for `vmboxes' document.
 %%% @end
 %%%-----------------------------------------------------------------------------
 -module(kzd_vmboxes).
@@ -9,6 +9,9 @@
 -export([check_if_owner/1, check_if_owner/2, set_check_if_owner/2]).
 -export([delete_after_notify/1, delete_after_notify/2, set_delete_after_notify/2]).
 -export([flags/1, flags/2, set_flags/2]).
+-export([hunt/1, hunt/2, set_hunt/2]).
+-export([hunt_allow/1, hunt_allow/2, set_hunt_allow/2]).
+-export([hunt_deny/1, hunt_deny/2, set_hunt_deny/2]).
 -export([is_setup/1, is_setup/2, set_is_setup/2]).
 -export([mailbox/1, mailbox/2, set_mailbox/2]).
 -export([media/1, media/2, set_media/2]).
@@ -19,6 +22,7 @@
 -export([notify/1, notify/2, set_notify/2]).
 -export([notify_callback/1, notify_callback/2, set_notify_callback/2]).
 -export([notify_email_addresses/1, notify_email_addresses/2, set_notify_email_addresses/2]).
+-export([numbers/1, numbers/2, set_numbers/2]).
 -export([oldest_message_first/1, oldest_message_first/2, set_oldest_message_first/2]).
 -export([operator_number/1, operator_number/2, set_operator_number/2]).
 -export([owner_id/1, owner_id/2, set_owner_id/2]).
@@ -29,6 +33,7 @@
 -export([skip_greeting/1, skip_greeting/2, set_skip_greeting/2]).
 -export([skip_instructions/1, skip_instructions/2, set_skip_instructions/2]).
 -export([timezone/1, timezone/2, set_timezone/2]).
+-export([transcribe/1, transcribe/2, set_transcribe/2]).
 
 
 -include("kz_documents.hrl").
@@ -77,6 +82,42 @@ flags(Doc, Default) ->
 -spec set_flags(doc(), kz_term:ne_binaries()) -> doc().
 set_flags(Doc, Flags) ->
     kz_json:set_value([<<"flags">>], Flags, Doc).
+
+-spec hunt(doc()) -> boolean().
+hunt(Doc) ->
+    hunt(Doc, true).
+
+-spec hunt(doc(), Default) -> boolean() | Default.
+hunt(Doc, Default) ->
+    kz_json:get_boolean_value([<<"hunt">>], Doc, Default).
+
+-spec set_hunt(doc(), boolean()) -> doc().
+set_hunt(Doc, Hunt) ->
+    kz_json:set_value([<<"hunt">>], Hunt, Doc).
+
+-spec hunt_allow(doc()) -> kz_term:api_ne_binary().
+hunt_allow(Doc) ->
+    hunt_allow(Doc, 'undefined').
+
+-spec hunt_allow(doc(), Default) -> kz_term:ne_binary() | Default.
+hunt_allow(Doc, Default) ->
+    kz_json:get_ne_binary_value([<<"hunt_allow">>], Doc, Default).
+
+-spec set_hunt_allow(doc(), kz_term:ne_binary()) -> doc().
+set_hunt_allow(Doc, HuntAllow) ->
+    kz_json:set_value([<<"hunt_allow">>], HuntAllow, Doc).
+
+-spec hunt_deny(doc()) -> kz_term:api_ne_binary().
+hunt_deny(Doc) ->
+    hunt_deny(Doc, 'undefined').
+
+-spec hunt_deny(doc(), Default) -> kz_term:ne_binary() | Default.
+hunt_deny(Doc, Default) ->
+    kz_json:get_ne_binary_value([<<"hunt_deny">>], Doc, Default).
+
+-spec set_hunt_deny(doc(), kz_term:ne_binary()) -> doc().
+set_hunt_deny(Doc, HuntDeny) ->
+    kz_json:set_value([<<"hunt_deny">>], HuntDeny, Doc).
 
 -spec is_setup(doc()) -> boolean().
 is_setup(Doc) ->
@@ -198,6 +239,18 @@ notify_email_addresses(Doc, Default) ->
 set_notify_email_addresses(Doc, NotifyEmailAddresses) ->
     kz_json:set_value([<<"notify_email_addresses">>], NotifyEmailAddresses, Doc).
 
+-spec numbers(doc()) -> kz_term:ne_binaries().
+numbers(Doc) ->
+    numbers(Doc, []).
+
+-spec numbers(doc(), Default) -> kz_term:ne_binaries() | Default.
+numbers(Doc, Default) ->
+    kz_json:get_list_value([<<"numbers">>], Doc, Default).
+
+-spec set_numbers(doc(), kz_term:ne_binaries()) -> doc().
+set_numbers(Doc, Numbers) ->
+    kz_json:set_value([<<"numbers">>], Numbers, Doc).
+
 -spec oldest_message_first(doc()) -> boolean().
 oldest_message_first(Doc) ->
     oldest_message_first(Doc, false).
@@ -317,3 +370,15 @@ timezone(Doc, Default) ->
 -spec set_timezone(doc(), kz_term:ne_binary()) -> doc().
 set_timezone(Doc, Timezone) ->
     kz_json:set_value([<<"timezone">>], Timezone, Doc).
+
+-spec transcribe(doc()) -> boolean().
+transcribe(Doc) ->
+    transcribe(Doc, false).
+
+-spec transcribe(doc(), Default) -> boolean() | Default.
+transcribe(Doc, Default) ->
+    kz_json:get_boolean_value([<<"transcribe">>], Doc, Default).
+
+-spec set_transcribe(doc(), boolean()) -> doc().
+set_transcribe(Doc, Transcribe) ->
+    kz_json:set_value([<<"transcribe">>], Transcribe, Doc).
