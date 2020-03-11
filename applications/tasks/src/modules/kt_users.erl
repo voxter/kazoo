@@ -186,7 +186,7 @@ verify_email(Cell) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec import(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 import(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     import(ExtraArgs, IterValue, Args);
@@ -207,7 +207,7 @@ import(#{account_id := Account
     {Row, sets:add_element(AccountId, AccountIds)}.
 
 -spec delete(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 delete(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     delete(ExtraArgs, IterValue, Args);
