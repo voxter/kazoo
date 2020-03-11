@@ -93,6 +93,7 @@ mandatory_import_fields() ->
 -spec optional_import_fields() -> kz_type:proplist().
 optional_import_fields() ->
     [<<"timezone">>
+    ,<<"vm_to_email_enabled">>
     ].
 
 -spec mandatory_delete_fields() -> kz_type:proplist().
@@ -405,7 +406,7 @@ doc_public_fields(Args) ->
        ,{<<"priv_level">>, <<"user">>}
        ,{<<"require_password_update">>, <<"false">>}
        ,{<<"verified">>, <<"false">>}
-       ,{<<"vm_to_email_enabled">>, <<"true">>}
+       ,{<<"vm_to_email_enabled">>, maps:get(<<"vm_to_email_enabled">>, Args, <<"true">>)}
        ,{<<"fax_to_email_enabled">>, <<"true">>}
        ])
     ,apps(
