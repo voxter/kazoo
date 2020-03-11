@@ -9,6 +9,9 @@
 -export([check_if_owner/1, check_if_owner/2, set_check_if_owner/2]).
 -export([delete_after_notify/1, delete_after_notify/2, set_delete_after_notify/2]).
 -export([flags/1, flags/2, set_flags/2]).
+-export([hunt/1, hunt/2, set_hunt/2]).
+-export([hunt_allow/1, hunt_allow/2, set_hunt_allow/2]).
+-export([hunt_deny/1, hunt_deny/2, set_hunt_deny/2]).
 -export([is_setup/1, is_setup/2, set_is_setup/2]).
 -export([mailbox/1, mailbox/2, set_mailbox/2]).
 -export([media/1, media/2, set_media/2]).
@@ -77,6 +80,42 @@ flags(Doc, Default) ->
 -spec set_flags(doc(), kz_term:ne_binaries()) -> doc().
 set_flags(Doc, Flags) ->
     kz_json:set_value([<<"flags">>], Flags, Doc).
+
+-spec hunt(doc()) -> boolean().
+hunt(Doc) ->
+    hunt(Doc, true).
+
+-spec hunt(doc(), Default) -> boolean() | Default.
+hunt(Doc, Default) ->
+    kz_json:get_boolean_value([<<"hunt">>], Doc, Default).
+
+-spec set_hunt(doc(), boolean()) -> doc().
+set_hunt(Doc, Hunt) ->
+    kz_json:set_value([<<"hunt">>], Hunt, Doc).
+
+-spec hunt_allow(doc()) -> kz_term:api_ne_binary().
+hunt_allow(Doc) ->
+    hunt_allow(Doc, 'undefined').
+
+-spec hunt_allow(doc(), Default) -> kz_term:ne_binary() | Default.
+hunt_allow(Doc, Default) ->
+    kz_json:get_ne_binary_value([<<"hunt_allow">>], Doc, Default).
+
+-spec set_hunt_allow(doc(), kz_term:ne_binary()) -> doc().
+set_hunt_allow(Doc, HuntAllow) ->
+    kz_json:set_value([<<"hunt_allow">>], HuntAllow, Doc).
+
+-spec hunt_deny(doc()) -> kz_term:api_ne_binary().
+hunt_deny(Doc) ->
+    hunt_deny(Doc, 'undefined').
+
+-spec hunt_deny(doc(), Default) -> kz_term:ne_binary() | Default.
+hunt_deny(Doc, Default) ->
+    kz_json:get_ne_binary_value([<<"hunt_deny">>], Doc, Default).
+
+-spec set_hunt_deny(doc(), kz_term:ne_binary()) -> doc().
+set_hunt_deny(Doc, HuntDeny) ->
+    kz_json:set_value([<<"hunt_deny">>], HuntDeny, Doc).
 
 -spec is_setup(doc()) -> boolean().
 is_setup(Doc) ->
