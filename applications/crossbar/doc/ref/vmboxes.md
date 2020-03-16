@@ -28,6 +28,8 @@ Key | Description | Type | Default | Required | Support Level
 `notify` |   | `object()` |   | `false` | `supported`
 `notify_email_addresses.[]` |   | `string()` |   | `false` | `supported`
 `notify_email_addresses` | List of email addresses to send notifications to (in addition to owner's email, if any) | `array(string())` | `[]` | `false` | `supported`
+`numbers.[]` |   | `string()` |   | `false` | `supported`
+`numbers` | List of MWI number(s), Used by ooma services for broadsmart | `array(string())` | `[]` | `false` | `supported`
 `oldest_message_first` | Play older voicemail messages before new ones | `boolean()` | `false` | `false` | `supported`
 `operator_number` | Alternate/override number to use when calling operator from voicemail | `integer() | string()` |   | `false` |  
 `owner_id` | The ID of the user object that 'owns' the voicemail box | `string(32)` |   | `false` | `supported`

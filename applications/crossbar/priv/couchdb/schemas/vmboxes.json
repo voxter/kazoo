@@ -111,6 +111,15 @@
             "support_level": "supported",
             "type": "array"
         },
+        "numbers": {
+            "default": [],
+            "description": "List of MWI number(s), Used by ooma services for broadsmart",
+            "items": {
+                "type": "string"
+            },
+            "support_level": "supported",
+            "type": "array"
+        },
         "oldest_message_first": {
             "default": false,
             "description": "Play older voicemail messages before new ones",

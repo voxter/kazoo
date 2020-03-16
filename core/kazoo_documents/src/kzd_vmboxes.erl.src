@@ -22,6 +22,7 @@
 -export([notify/1, notify/2, set_notify/2]).
 -export([notify_callback/1, notify_callback/2, set_notify_callback/2]).
 -export([notify_email_addresses/1, notify_email_addresses/2, set_notify_email_addresses/2]).
+-export([numbers/1, numbers/2, set_numbers/2]).
 -export([oldest_message_first/1, oldest_message_first/2, set_oldest_message_first/2]).
 -export([operator_number/1, operator_number/2, set_operator_number/2]).
 -export([owner_id/1, owner_id/2, set_owner_id/2]).
@@ -237,6 +238,18 @@ notify_email_addresses(Doc, Default) ->
 -spec set_notify_email_addresses(doc(), kz_term:ne_binaries()) -> doc().
 set_notify_email_addresses(Doc, NotifyEmailAddresses) ->
     kz_json:set_value([<<"notify_email_addresses">>], NotifyEmailAddresses, Doc).
+
+-spec numbers(doc()) -> kz_term:ne_binaries().
+numbers(Doc) ->
+    numbers(Doc, []).
+
+-spec numbers(doc(), Default) -> kz_term:ne_binaries() | Default.
+numbers(Doc, Default) ->
+    kz_json:get_list_value([<<"numbers">>], Doc, Default).
+
+-spec set_numbers(doc(), kz_term:ne_binaries()) -> doc().
+set_numbers(Doc, Numbers) ->
+    kz_json:set_value([<<"numbers">>], Numbers, Doc).
 
 -spec oldest_message_first(doc()) -> boolean().
 oldest_message_first(Doc) ->
