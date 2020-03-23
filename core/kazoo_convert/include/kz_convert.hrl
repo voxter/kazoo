@@ -21,5 +21,7 @@
 -define(TMP_DIR
        ,kapps_config:get_binary(?CONFIG_CAT, <<"file_cache_path">>, <<"/tmp/">>)).
 
+-define(CONVERT_COMMAND_TIMEOUT, 60 * ?MILLISECONDS_IN_SECOND).
+
 -define(KZ_CONVERT_HRL, 'true').
 -endif.

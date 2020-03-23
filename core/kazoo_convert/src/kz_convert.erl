@@ -87,7 +87,10 @@ build_and_run(From, To, Dimensions) ->
 -spec run_command(kz_term:ne_binary(), kz_term:proplist()) -> {'ok', kz_term:api_binary()} | {'error', atom()}.
 run_command(Command, Args) ->
     lager:debug("running convert command ~p with args ~p", [Command, Args]),
-    case kz_os:cmd(Command, Args, []) of
+    case kz_os:cmd(Command, Args, [{<<"absolute_timeout">>, ?CONVERT_COMMAND_TIMEOUT}
+                                  ,{<<"timeout">>, ?CONVERT_COMMAND_TIMEOUT}
+                                  ])
+    of
         {'ok', _Result} -> file:read_file(proplists:get_value(<<"TO">>, Args));
         {'error', _, Reason} ->  {'error', Reason}
     end.
