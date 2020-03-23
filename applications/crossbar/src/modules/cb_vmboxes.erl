@@ -677,7 +677,7 @@ validate_unique_vmbox(VMBoxId, Context, _AccountDb) ->
 check_vmbox_schema(VMBoxId, Context) ->
     Context1 = maybe_migrate_notification_emails(Context),
     OnSuccess = fun(C) -> validate_media_extension(VMBoxId, C) end,
-    update_user_creds(Context),
+    update_user_creds(VMBoxId, Context),
     CheckMinLength = kapps_config:get_is_true(<<"voicemail">>, <<"enforce_min_length">>, 'false') and is_mailbox_changed(VMBoxId, Context), % and check if should check min length by sys admin config
     check_vmbox_schema(Context1, CheckMinLength, OnSuccess).
 
@@ -696,34 +696,35 @@ check_vmbox_schema(Context, 'true', OnSuccess) ->
     end.
 
 %% Update voicemail PIN at the same time as a password update
--spec update_user_creds(cb_context:context()) -> 'ok'.
-update_user_creds(Context) ->
-    case cb_context:req_value(Context, <<"owner_id">>) of
-        'undefined' -> lager:debug("no owner, no creds to update");
-        OwnerId ->
-            PIN = cb_context:req_value(Context, <<"pin">>),
-            update_user_creds(OwnerId, PIN, Context)
-    end.
-
--spec update_user_creds(kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) -> 'ok'.
-update_user_creds(UserId, PIN, Context) ->
+-spec update_user_creds(kz_term:api_binary(), cb_context:context()) -> 'ok'.
+update_user_creds(VMBoxId, Context) ->
+    OwnerId = cb_context:req_value(Context, <<"owner_id">>),
+    PIN = cb_context:req_value(Context, <<"pin">>),
+    AccountId = cb_context:account_id(Context),
     AccountDb = cb_context:account_db(Context),
-    case kz_datamgr:open_doc(AccountDb, UserId) of
-        {'ok', Doc} ->
-            Username = kz_json:get_value(<<"username">>, Doc),
-            AccountId = cb_context:account_id(Context),
-            case cb_modules_util:should_update_voicemail_creds(Username, AccountId) of
-                'true' ->
-                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
-                    Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
-                                              ,{<<"pvt_sha1_auth">>, SHA1}]
-                                             ,Doc),
-                    Doc2 = kz_auth_identity:reset_doc_secret(Doc1),
-                    _ = kz_datamgr:save_doc(AccountDb, Doc2),
-                    'ok';
-                'false' -> 'ok'
-            end;
-        {'error', E} -> lager:error("could not find owner doc (~p)", [E])
+
+    VMBox = case kz_datamgr:open_cache_doc(AccountDb, VMBoxId) of
+                {'ok', VMBox0} -> VMBox0;
+                _ -> 'undefined'
+            end,
+
+    User = case kz_datamgr:open_cache_doc(AccountDb, OwnerId) of
+               {'ok', User0} -> User0;
+               _ -> 'undefined'
+           end,
+
+    case cb_modules_util:should_sync_pin_pass(VMBox, User, PIN, AccountId) of
+        'true' ->
+            Username = kzd_users:username(User),
+            {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
+            User1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
+                                       ,{<<"pvt_sha1_auth">>, SHA1}
+                                       ]
+                                      ,User),
+            User2 = kz_auth_identity:reset_doc_secret(User1),
+            _ = kz_datamgr:save_doc(AccountDb, User2),
+            'ok';
+        'false' -> 'ok'
     end.
 
 %%------------------------------------------------------------------------------

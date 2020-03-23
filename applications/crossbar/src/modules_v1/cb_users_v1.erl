@@ -691,7 +691,7 @@ rehash_creds(UserId, Username, Password, Context) ->
                                ,{<<"pvt_sha1_auth">>, SHA1}
                                ], cb_context:doc(Context)),
 
-    cb_modules_util:update_voicemail_creds(UserId, Username, Password, Context),
+    cb_modules_util:maybe_update_voicemail_creds(UserId, Username, Password, Context),
 
     crossbar_auth:reset_identity_secret(
       cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1))

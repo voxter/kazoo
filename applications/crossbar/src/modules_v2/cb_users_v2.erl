@@ -834,7 +834,7 @@ rehash_creds(Username, Password, Context) ->
 
             UserId = kz_doc:id(JObj),
             UserId =/= 'undefined'
-                andalso cb_modules_util:update_voicemail_creds(UserId, Username, Password, Context),
+                andalso cb_modules_util:maybe_update_voicemail_creds(UserId, Username, Password, Context),
 
             crossbar_auth:reset_identity_secret(
               cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj))

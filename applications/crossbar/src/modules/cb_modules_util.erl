@@ -28,8 +28,8 @@
 
         ,normalize_media_upload/5
 
-        ,update_voicemail_creds/4
-        ,should_update_voicemail_creds/2
+        ,maybe_update_voicemail_creds/4
+        ,should_sync_pin_pass/4
 
         ,get_request_action/1
         ,normalize_alphanum_name/1
@@ -401,32 +401,55 @@ get_request_action(Context) ->
                 ).
 
 %% Update voicemail PIN at the same time as a password update
--spec update_voicemail_creds(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) ->
+-spec maybe_update_voicemail_creds(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) ->
           'ok'.
-update_voicemail_creds(UserId, Username, Password, Context) ->
+maybe_update_voicemail_creds(UserId, Username, Password, Context) ->
+    AccountDb = cb_context:account_db(Context),
+
+    User = case kz_datamgr:open_cache_doc(AccountDb, UserId) of
+               {'ok', User0} -> User0;
+               _ -> 'undefined'
+           end,
+
+    case maybe_matching_vmbox(AccountDb, UserId, Username) of
+        'undefined' -> 'ok';
+        VMBox -> maybe_update_voicemail_creds2(User, VMBox, Password, Context)
+    end.
+
+-spec maybe_update_voicemail_creds2(kzd_users:doc() | 'undefined', kzd_vmboxes:doc(), kz_term:ne_binary(), cb_context:context()) ->
+          'ok'.
+maybe_update_voicemail_creds2(User, VMBox, Password, Context) ->
     AccountId = cb_context:account_id(Context),
-    case should_update_voicemail_creds(Username, AccountId) of
+    case should_sync_pin_pass(VMBox, User, Password, AccountId) of
         'true' ->
             AccountDb = cb_context:account_db(Context),
-            case maybe_matching_vmbox(AccountDb, UserId, Username) of
-                'undefined' -> 'ok';
-                Doc ->
-                    Doc1 = kz_json:set_value(<<"pin">>, Password, Doc),
-                    kz_datamgr:save_doc(AccountDb, Doc1),
-                    'ok'
-            end;
+            VMBox1 = kzd_vmboxes:set_pin(VMBox, Password),
+            kz_datamgr:save_doc(AccountDb, VMBox1),
+            'ok';
         'false' -> 'ok'
     end.
 
--spec should_update_voicemail_creds(kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
-should_update_voicemail_creds(Username, AccountId) ->
-    case ?PIN_PASS_SYNC(AccountId) of
-        'true' -> is_username_integer(Username);
-        'false' -> 'false'
-    end.
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the PIN and password of the supplied user and vmbox
+%% should be synchronized.
+%% @end
+%%------------------------------------------------------------------------------
+-spec should_sync_pin_pass(kzd_vmboxes:doc() | 'undefined', kzd_users:doc() | 'undefined', kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
+should_sync_pin_pass(VMBox, User, PIN, AccountId) ->
+    User =/= 'undefined'
+        andalso ?PIN_PASS_SYNC(AccountId)
+        andalso user_has_integer_username(User)
+        andalso (vmbox_pin_changed(VMBox, PIN)
+                 orelse vmbox_owner_changed(VMBox, User)).
 
--spec is_username_integer(kz_term:ne_binary()) -> boolean().
-is_username_integer(Username) ->
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the supplied user has a username that can be coerced
+%% into an integer.
+%% @end
+%%------------------------------------------------------------------------------
+-spec user_has_integer_username(kzd_users:doc()) -> boolean().
+user_has_integer_username(User) ->
+    Username = kzd_users:username(User),
     case catch kz_term:to_integer(Username) of
         {'EXIT', _} ->
             lager:debug("username is not integer-convertible, not updating creds"),
@@ -434,15 +457,44 @@ is_username_integer(Username) ->
         _ -> 'true'
     end.
 
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the vmbox PIN should be considered changed.
+%% @end
+%%------------------------------------------------------------------------------
+-spec vmbox_pin_changed(kzd_vmboxes:doc() | 'undefined', kz_term:ne_binary()) -> boolean().
+vmbox_pin_changed('undefined', _) ->
+    %% 'undefined' VMBox -> new vmbox
+    'true';
+vmbox_pin_changed(VMBox, PIN) ->
+    %% Existing vmbox, updated
+    kzd_vmboxes:pin(VMBox) =/= PIN.
+
+%%------------------------------------------------------------------------------
+%% @doc Returns true if the vmbox owner should be considered changed.
+%% @end
+%%------------------------------------------------------------------------------
+-spec vmbox_owner_changed(kzd_vmboxes:doc() | 'undefined', kzd_users:doc()) -> boolean().
+vmbox_owner_changed('undefined', _) ->
+    %% 'undefined' VMBox -> new vmbox
+    'true';
+vmbox_owner_changed(VMBox, User) ->
+    kzd_vmboxes:owner_id(VMBox) =/= kz_doc:id(User).
+
+%%------------------------------------------------------------------------------
+%% @doc Find a vmbox for which its mailbox number and owner_id match the
+%% supplied values. Returns one if it exists, otherwise returns `'undefined''.
+%% @end
+%%------------------------------------------------------------------------------
 -spec maybe_matching_vmbox(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:api_object().
 maybe_matching_vmbox(AccountDb, UserId, Username) ->
-    case kz_datamgr:get_results(AccountDb
-                               ,<<"vmboxes/listing_by_mailbox">>
-                               ,[{'key', kz_term:to_integer(Username)}]
-                               ) of
+    try kz_datamgr:get_results(AccountDb
+                              ,<<"vmboxes/listing_by_mailbox">>
+                              ,[{'key', kz_term:to_integer(Username)}
+                               ,'include_docs'
+                               ]
+                              ) of
         {'ok', [JObj]} ->
-            {'ok', Doc} = kz_datamgr:open_doc(AccountDb
-                                             ,kz_json:get_value(<<"id">>, JObj)),
+            Doc = kz_json:get_json_value(<<"doc">>, JObj),
             case kz_json:get_value(<<"owner_id">>, Doc) of
                 UserId -> Doc;
                 _ ->
@@ -454,6 +506,10 @@ maybe_matching_vmbox(AccountDb, UserId, Username) ->
             'undefined';
         {'error', E} ->
             lager:debug("error (~p) when getting listing_by_mailbox", [E]),
+            'undefined'
+    catch
+        error:badarg ->
+            %% non-integer username
             'undefined'
     end.
 
