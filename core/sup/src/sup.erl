@@ -55,7 +55,12 @@ main(CommandLineArgs, Loops) ->
                     'undefined' -> print_invalid_cli_args();
                     F -> list_to_atom(F)
                 end,
-            Arguments = [list_to_binary(Arg) || Arg <- Args],
+
+            %% If erl_term_args is set then parse the args as erlang terms, else just convert to binary
+            Arguments = case erl_term_args(Options) of
+                            'true' -> parse_erl_terms_from_args(Args);
+                            'false' -> [list_to_binary(Arg) || Arg <- Args]
+                        end,
             Timeout = case props:get_value('timeout', Options) of 0 -> 'infinity'; T -> T * 1000 end,
             IsVerbose
                 andalso stdout("Running ~s:~s(~s)", [Module, Function, string:join(Args, ", ")]),
@@ -90,6 +95,24 @@ main(CommandLineArgs, Loops) ->
     end.
 
 %%% Internals
+
+%%------------------------------------------------------------------------------
+%% @doc Parse script args into erlang terms or halt and print help if fails to parse an arg.
+%% @end
+%%------------------------------------------------------------------------------
+-spec parse_erl_terms_from_args(list(list())) -> term() | no_return().
+parse_erl_terms_from_args(Args) -> lists:map(fun(Arg) -> parse_erl_terms_from_arg(Arg) end, Args).
+
+-spec parse_erl_terms_from_arg(list()) -> term() | no_return().
+parse_erl_terms_from_arg(Arg) ->
+    {'ok', Tokens, _} = erl_scan:string(Arg++"."),
+    case erl_parse:parse_term(Tokens) of
+        {'ok', ParsedArg} ->
+            ParsedArg;
+        Failed ->
+            stderr("Failed to parse term ~p, error ~p", [Arg, Failed]),
+            print_erl_term_args_help()
+    end.
 
 -spec in_kazoo(atom(), module(), atom(), kz_term:binaries()) -> no_return().
 in_kazoo(SUPName, M, F, As) ->
@@ -201,8 +224,6 @@ parse_args(CommandLineArgs) ->
     case getopt:parse(option_spec_list(), CommandLineArgs) of
         {'ok', {Options, Args}} when is_list(Options) ->
             {'ok', Options, Args};
-        {'ok', {_, _}} ->
-            print_help();
         {'error', {_, _}} ->
             print_help()
     end.
@@ -236,6 +257,20 @@ print_help() ->
     getopt:usage(option_spec_list(), "sup", "[args ...]"),
     halt(1).
 
+%%------------------------------------------------------------------------------
+%% @doc Print help for erl_term_args flag and halt.
+%% @end
+%%------------------------------------------------------------------------------
+-spec print_erl_term_args_help() -> no_return().
+print_erl_term_args_help() ->
+    stdout("Erlang term arguments must be correctly wrapped / formated as below:", []),
+    stdout("  * Atom: atom", []),
+    stdout("  * String: \"this is a string\"", []),
+    stdout("  * Binary: \"<<\\\"Etc/UTC\\\">>\"", []),
+    stdout("  * Tuple: \"{{2020, 01, 01}, {01, 20, 30}}\"", []),
+    stdout("  * List: \"[1,2,3,4]\"", []),
+    halt(1).
+
 -spec stdout(string(), list()) -> 'ok'.
 stdout(Format, Things) ->
     io:format('standard_io', Format++"\n", Things).
@@ -254,6 +289,7 @@ option_spec_list() ->
     ,{'module', 'undefined', 'undefined', 'string', "The name of the remote module"}
     ,{'function', 'undefined', 'undefined', 'string', "The name of the remote module's function"}
     ,{'use_short', $s, "use_short", {'boolean', 'undefined'}, "Force using shortnames"}
+    ,{'erl_term_args', $e, "erl_term_args", {'boolean', 'false'}, "Parse function args to erlang terms"}
     ].
 
 -spec from_env(list(), list()) -> list().
@@ -266,5 +302,13 @@ from_env(Name, Default) ->
 -spec use_short(kz_term:proplist()) -> kz_term:api_boolean().
 use_short(Options) ->
     props:get_value('use_short', Options).
+
+%%------------------------------------------------------------------------------
+%% @doc Return true if the erl_term_args flag is passed by the user, else false
+%% @end
+%%------------------------------------------------------------------------------
+-spec erl_term_args(kz_term:proplist()) -> kz_term:api_boolean().
+erl_term_args(Options) ->
+    props:get_value('erl_term_args', Options).
 
 %%% End of Module
