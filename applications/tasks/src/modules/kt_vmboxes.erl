@@ -86,7 +86,12 @@ mandatory_import_fields() ->
     ].
 -spec optional_import_fields() -> kz_type:proplist().
 optional_import_fields() ->
-    [<<"timezone">>].
+    [<<"timezone">>
+    ,<<"numbers">>
+    ,<<"transcribe">>
+    ,<<"require_pin">>
+    ,<<"hunt">>
+    ].
 
 -spec mandatory_delete_fields() -> kz_type:proplist().
 mandatory_delete_fields() ->
@@ -170,7 +175,7 @@ verify_owner_id(_) -> 'false'.
 %% @end
 %%------------------------------------------------------------------------------
 -spec import(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 import(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     import(ExtraArgs, IterValue, Args);
@@ -191,7 +196,7 @@ import(#{account_id := Account
     {Row, sets:add_element(AccountId, AccountIds)}.
 
 -spec delete(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 delete(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     delete(ExtraArgs, IterValue, Args);
@@ -404,11 +409,14 @@ is_mailbox_number_unique(AccountId, MailboxNumber) ->
 %%------------------------------------------------------------------------------
 -spec generate_vmbox_doc(kz_type:ne_binary(), kz_tasks:args()) -> kz_doc:object().
 generate_vmbox_doc(AccountId, Args) ->
-    DocFuns = [{fun kzd_vmboxes:set_name/2, maps:get(<<"name">>, Args)}
-              ,{fun kzd_vmboxes:set_mailbox/2, maps:get(<<"mailbox">>, Args)}
-              ,{fun kzd_vmboxes:set_owner_id/2, maps:get(<<"owner_id">>, Args)}
-              ,{fun kzd_vmboxes:set_timezone/2, maps:get(<<"timezone">>, Args)}
-              ,{fun kzd_vmboxes:set_pin/2, maps:get(<<"pin">>, Args)}
+    DocFuns = [{fun kzd_vmboxes:set_name/2, maps:get(<<"name">>, Args, 'undefined')}
+              ,{fun kzd_vmboxes:set_mailbox/2, maps:get(<<"mailbox">>, Args, 'undefined')}
+              ,{fun kzd_vmboxes:set_owner_id/2, maps:get(<<"owner_id">>, Args, 'undefined')}
+              ,{fun kzd_vmboxes:set_timezone/2, maps:get(<<"timezone">>, Args, 'undefined')}
+              ,{fun kzd_vmboxes:set_pin/2, maps:get(<<"pin">>, Args, 'undefined')}
+              ,{fun kzd_vmboxes:set_require_pin/2, maps:get(<<"require_pin">>, Args, 'false')}
+              ,{fun kzd_vmboxes:set_hunt/2, maps:get(<<"transcribe">>, Args, 'true')}
+              ,{fun kzd_vmboxes:set_transcribe/2, maps:get(<<"transcribe">>, Args, 'false')}
               ,{fun kzd_vmboxes:set_check_if_owner/2, 'true'}
               ,{fun kzd_vmboxes:set_delete_after_notify/2, 'false'}
               ,{fun kzd_vmboxes:set_is_setup/2, 'false'}
@@ -416,7 +424,6 @@ generate_vmbox_doc(AccountId, Args) ->
               ,{fun kzd_vmboxes:set_media_extension/2, <<"mp3">>}
               ,{fun kzd_vmboxes:set_not_configurable/2, 'false'}
               ,{fun kzd_vmboxes:set_notify_email_addresses/2, []}
-              ,{fun kzd_vmboxes:set_require_pin/2, 'false'}
               ,{fun kzd_vmboxes:set_save_after_notify/2, 'false'}
               ,{fun kzd_vmboxes:set_skip_envelope/2, 'false'}
               ,{fun kzd_vmboxes:set_skip_greeting/2, 'false'}
@@ -427,11 +434,7 @@ generate_vmbox_doc(AccountId, Args) ->
                          end
                         ,kzd_vmboxes:new()
                         ,DocFuns),
-
-    %% Values not exposed in kzd_vmboxes
-    OtherPubValues = [{<<"hunt">>, 'true'}],
-    UpdatedPubDoc = kz_json:set_values(OtherPubValues, PubDoc),
-    add_private_fields(AccountId, UpdatedPubDoc, Args).
+    add_private_fields(AccountId, PubDoc, Args).
 
 %%------------------------------------------------------------------------------
 %% @doc Add private doc fields from CSV args

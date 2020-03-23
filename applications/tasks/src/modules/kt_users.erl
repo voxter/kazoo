@@ -93,6 +93,7 @@ mandatory_import_fields() ->
 -spec optional_import_fields() -> kz_type:proplist().
 optional_import_fields() ->
     [<<"timezone">>
+    ,<<"vm_to_email_enabled">>
     ].
 
 -spec mandatory_delete_fields() -> kz_type:proplist().
@@ -185,7 +186,7 @@ verify_email(Cell) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec import(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 import(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     import(ExtraArgs, IterValue, Args);
@@ -206,7 +207,7 @@ import(#{account_id := Account
     {Row, sets:add_element(AccountId, AccountIds)}.
 
 -spec delete(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) ->
-                    {kz_tasks:return(), sets:set()}.
+          {kz_tasks:return(), sets:set()}.
 delete(ExtraArgs, 'init', Args) ->
     IterValue = sets:new(),
     delete(ExtraArgs, IterValue, Args);
@@ -405,7 +406,7 @@ doc_public_fields(Args) ->
        ,{<<"priv_level">>, <<"user">>}
        ,{<<"require_password_update">>, <<"false">>}
        ,{<<"verified">>, <<"false">>}
-       ,{<<"vm_to_email_enabled">>, <<"true">>}
+       ,{<<"vm_to_email_enabled">>, maps:get(<<"vm_to_email_enabled">>, Args, <<"true">>)}
        ,{<<"fax_to_email_enabled">>, <<"true">>}
        ])
     ,apps(
