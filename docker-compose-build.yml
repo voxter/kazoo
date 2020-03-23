@@ -1,7 +1,7 @@
 version: '3'
 services:
   couchdb:
-    image: couchdb
+    image: couchdb:2
   rabbitmq:
     image: rabbitmq
   build:
