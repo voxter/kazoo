@@ -142,6 +142,7 @@ maybe_find_resource(_, JObj) ->
         {'ok', ResourceProps} ->
             Routines = [fun add_resource_id/2
                        ,fun maybe_add_t38_settings/2
+                       ,fun maybe_add_carrier_id/2
                        ],
             lists:foldl(fun(F, J) ->  F(J, ResourceProps) end
                        ,JObj
@@ -178,6 +179,17 @@ maybe_add_t38_settings(JObj, ResourceProps) ->
                              ,JObj
                              );
         _ -> JObj
+    end.
+
+-spec maybe_add_carrier_id(kz_json:object(), kz_term:proplist()) -> kz_json:object().
+maybe_add_carrier_id(JObj, ResourceProps) ->
+    case props:get_value('carrier_id', ResourceProps) of
+        'undefined' -> JObj;
+        CarrierId ->
+            kz_json:set_value(?CCV(<<"Carrier-ID">>)
+                             ,CarrierId
+                             ,JObj
+                             )
     end.
 
 -spec maybe_format_destination(knm_number_options:extra_options(), kz_json:object()) ->
