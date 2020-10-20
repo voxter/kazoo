@@ -69,6 +69,7 @@ filter_for_erlang_files(Files) ->
             not is_test(Arg)
                 andalso (
                   is_ebin_dir(Arg)
+                  orelse is_ebin_dir(ebin_subdir(Arg))
                   orelse is_beam(Arg)
                   orelse is_erl(Arg)
                  )
@@ -157,10 +158,10 @@ maybe_fix_path(Path, BPs, GoHard) ->
         {'false', 'false'} when GoHard ->
             lists:foldl(fun(F, Acc) -> maybe_fix_path(F, Acc, GoHard) end
                        ,BPs
-                       ,filelib:wildcard(filename:join(Path, "*.beam"))
+                       ,filelib:wildcard(filename:join(ebin_subdir(Path), "*.beam"))
                        );
         {'false', 'false'} ->
-            [{'app', filelib:wildcard(filename:join(Path, "*.beam"))} | BPs]
+            [{'app', filelib:wildcard(filename:join(ebin_subdir(Path), "*.beam"))} | BPs]
     end.
 
 fix_path(Path) ->
@@ -172,6 +173,19 @@ fix_path(Path, CWD) ->
     case re:run(Path, CWD) of
         'nomatch' -> filename:join([CWD, Path]);
         _ -> Path
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Return the "ebin" subdir of `Path', if it exists, otherwise return
+%% `Path'.
+%% @end
+%%------------------------------------------------------------------------------
+-spec ebin_subdir(file:filename()) -> file:filename().
+ebin_subdir(Path) ->
+    EbinSubdir = filename:join(Path, "ebin"),
+    case file_exists(EbinSubdir) of
+        'true' -> EbinSubdir;
+        'false' -> Path
     end.
 
 do_warn(PLT, Paths, InBulk) ->

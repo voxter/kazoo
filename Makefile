@@ -189,7 +189,7 @@ dialyze-hard: export CHECK_DIALYZER_OPTS = --hard
 dialyze-hard: dialyze-it-changed
 
 dialyze-it: $(PLT)
-	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE)))
+	@ERL_LIBS=deps:core:applications $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(TO_DIALYZE))
 
 dialyze-it-changed: export TO_DIALYZE = $(CHANGED)
 dialyze-it-changed: $(PLT)
